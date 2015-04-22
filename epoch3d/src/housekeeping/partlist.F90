@@ -30,6 +30,9 @@ CONTAINS
 #if !defined(PER_SPECIES_WEIGHT) || defined(PHOTONS)
     nvar = nvar+1
 #endif
+#ifdef DELTAF_METHOD
+    nvar = nvar+1
+#endif
 #ifdef PER_PARTICLE_CHARGE_MASS
     nvar = nvar+2
 #endif
@@ -361,6 +364,10 @@ CONTAINS
     array(cpos) = a_particle%weight
     cpos = cpos+1
 #endif
+#ifdef DELTAF_METHOD
+    array(cpos) = a_particle%pvol
+    cpos = cpos+1
+#endif
 #ifdef PER_PARTICLE_CHARGE_MASS
     array(cpos) = a_particle%charge
     array(cpos+1) = a_particle%mass
@@ -406,6 +413,10 @@ CONTAINS
     cpos = cpos+3
 #if !defined(PER_SPECIES_WEIGHT) || defined(PHOTONS)
     a_particle%weight = array(cpos)
+    cpos = cpos+1
+#endif
+#ifdef DELTAF_METHOD
+    a_particle%pvol = array(cpos)
     cpos = cpos+1
 #endif
 #ifdef PER_PARTICLE_CHARGE_MASS
