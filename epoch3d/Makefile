@@ -158,7 +158,6 @@ DEFINES := $(DEFINE)
 # Set every pseudoparticle in a species to represent the same number of
 # real particles.
 #DEFINES += $(D)PER_SPECIES_WEIGHT
-DEFINES += $(D)DELTAF_METHOD
 
 # Don't enable support for tracer particles (in order to make the particle
 # push slightly faster).
@@ -215,6 +214,8 @@ DEFINES += $(D)DELTAF_METHOD
 # are enabled.
 #DEFINES += $(D)PARSER_CHECKING
 
+# Compile the delta-f version of EPOCH
+DEFINES += $(D)DELTAF_METHOD
 
 # If you are having trouble compiling the encoded_source module or
 # don't want embedded source code in restart dumps, uncomment the
@@ -413,7 +414,7 @@ fields.o: fields.f90 boundary.o
 finish.o: finish.f90 collisions.o deck.o diagnostics.o dist_fn.o ionise.o \
   laser.o partlist.o setup.o shared_data.o shunt.o window.o
 helper.o: helper.F90 boundary.o calc_df.o partlist.o strings.o
-ic_module.o: ic_module.F90 helper.o shared_data.o particles.o
+ic_module.o: ic_module.F90 helper.o particles.o shared_data.o
 ionise.o: ionise.F90 numerics.o partlist.o random_generator.o
 iterators.o: iterators.F90 particle_pointer_advance.o partlist.o
 laser.o: laser.f90 custom_laser.o evaluate.o
