@@ -55,10 +55,11 @@ endif
 # gfortran
 # ========
 ifeq ($(strip $(COMPILER)),gfortran)
-  FFLAGS = -O3
+  FFLAGS = -O3 -fno-range-check
   ifeq ($(strip $(MODE)),debug)
     FFLAGS = -O0 -g -Wall -Wextra -pedantic -fbounds-check \
-             -ffpe-trap=invalid,zero,overflow -Wno-unused-parameter
+             -ffpe-trap=invalid,zero,overflow -Wno-unused-parameter \
+             -fno-range-check
     #FFLAGS += -ffpe-trap=underflow,denormal
 
     GNUVER := $(shell gfortran -dumpversion | head -1 \
@@ -90,6 +91,16 @@ ifeq ($(strip $(COMPILER)),gfortran)
   MODULEFLAG = -I/usr/include -I$(OBJDIR) -J$(OBJDIR)
   INFO_FLAGS = -Wno-conversion -fno-range-check
 endif
+
+# mpif90 using gfortran
+# ========
+ifeq ($(strip $(COMPILER)),MPIgfortran)
+   MPIF90 = mpif90
+   FFLAGS += -frecord-marker=4 
+   MODULEFLAG = -I/usr/include -I$(OBJDIR) -J$(OBJDIR)
+   FFLAGS += -fno-range-check
+endif
+
 
 # g95
 # ========
@@ -214,6 +225,11 @@ DEFINES := $(DEFINE)
 # are enabled.
 #DEFINES += $(D)PARSER_CHECKING
 
+# Compile the delta-f version of EPOCH
+DEFINES += $(D)DELTAF_METHOD
+
+# Debugging option for delta-f
+#DEFINES += $(D)DELTAF_DEBUG
 
 # If you are having trouble compiling the encoded_source module or
 # don't want embedded source code in restart dumps, uncomment the
@@ -253,7 +269,7 @@ SRCFILES = balance.F90 boundary.f90 calc_df.F90 collisions.F90 \
   deck_laser_block.f90 deck_particle_probe_block.F90 deck_qed_block.F90 \
   deck_species_block.F90 deck_subset_block.f90 deck_window_block.f90 \
   diagnostics.F90 dist_fn.F90 epoch1d.F90 evaluate.F90 evaluator_blocks.F90 \
-  fields.f90 finish.f90 helper.F90 ic_module.f90 ionise.F90 iterators.F90 \
+  fields.f90 finish.f90 helper.F90 ic_module.F90 ionise.F90 iterators.F90 \
   laser.f90 mpi_routines.F90 mpi_subtype_control.f90 numerics.f90 \
   particle_migration.F90 particle_pointer_advance.f90 particle_temperature.F90 \
   particles.F90 partlist.F90 photons.F90 prefetch.F90 probes.F90 \
@@ -400,7 +416,7 @@ deck_window_block.o: deck_window_block.f90 strings_advanced.o
 diagnostics.o: diagnostics.F90 calc_df.o deck.o dist_fn.o iterators.o probes.o \
   random_generator.o setup.o shared_data.o strings.o timer.o version_data.o \
   window.o $(SDFMOD) $(ENCODED_SOURCE)
-dist_fn.o: dist_fn.F90 mpi_subtype_control.o
+dist_fn.o: dist_fn.F90 particles.o mpi_subtype_control.o
 epoch1d.o: epoch1d.F90 balance.o collisions.o deck.o diagnostics.o fields.o \
   finish.o helper.o ic_module.o ionise.o mpi_routines.o particle_migration.o \
   particles.o photons.o setup.o split_particle.o welcome.o window.o
@@ -412,7 +428,7 @@ fields.o: fields.f90 boundary.o
 finish.o: finish.f90 collisions.o deck.o diagnostics.o dist_fn.o ionise.o \
   laser.o partlist.o setup.o shared_data.o shunt.o window.o
 helper.o: helper.F90 boundary.o calc_df.o partlist.o strings.o
-ic_module.o: ic_module.f90 helper.o shared_data.o
+ic_module.o: ic_module.F90 helper.o particles.o shared_data.o
 ionise.o: ionise.F90 numerics.o partlist.o random_generator.o
 iterators.o: iterators.F90 particle_pointer_advance.o partlist.o
 laser.o: laser.f90 custom_laser.o evaluate.o
