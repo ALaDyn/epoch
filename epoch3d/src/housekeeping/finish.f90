@@ -1,3 +1,18 @@
+! Copyright (C) 2014-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE finish
 
   USE shared_data
@@ -35,9 +50,9 @@ CONTAINS
 
     INTEGER :: i, n, stat
 
-    DEALLOCATE(x, x_global, xb_global, xb_offset_global)
-    DEALLOCATE(y, y_global, yb_global, yb_offset_global)
-    DEALLOCATE(z, z_global, zb_global, zb_offset_global)
+    DEALLOCATE(x, xb, x_global, xb_global, xb_offset_global)
+    DEALLOCATE(y, yb, y_global, yb_global, yb_offset_global)
+    DEALLOCATE(z, zb, z_global, zb_global, zb_offset_global)
     DEALLOCATE(ex, ey, ez, bx, by, bz, jx, jy, jz)
 
     DEALLOCATE(npart_each_rank)
@@ -94,6 +109,7 @@ CONTAINS
     CALL deallocate_dist_fns
     CALL deallocate_ionisation
     CALL deallocate_partlists
+    CALL deallocate_eval_stack
 
     CALL MPI_COMM_FREE(comm, errcode)
 

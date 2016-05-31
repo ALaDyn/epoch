@@ -1,3 +1,19 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2010 Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE mpi_routines
 
   USE helper
@@ -28,7 +44,7 @@ CONTAINS
   SUBROUTINE setup_communicator
 
     INTEGER, PARAMETER :: ndims = 2
-    INTEGER :: dims(ndims), idim, old_comm, ierr
+    INTEGER :: dims(ndims), idim, old_comm
     LOGICAL :: periods(ndims), reorder, op, reset
     INTEGER :: test_coords(ndims)
     INTEGER :: ix, iy
@@ -36,6 +52,7 @@ CONTAINS
     INTEGER :: area, minarea
     INTEGER :: ranges(3,1), nproc_orig, oldgroup, newgroup
     CHARACTER(LEN=11) :: str
+    CHARACTER(LEN=1) :: dir
 
     nproc_orig = nproc
 
@@ -47,17 +64,36 @@ CONTAINS
         PRINT*,'There must be at least ' // TRIM(str) // &
             ' cells in each direction.'
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_setup, ierr)
+      CALL abort_code(c_err_bad_setup)
     ENDIF
 
     reset = .FALSE.
     IF (MAX(nprocx,1) * MAX(nprocy,1) > nproc) THEN
       reset = .TRUE.
-    ELSE IF (nprocx * nprocy > 0) THEN
+      IF (rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*,'Requested domain split exceeds CPUs. Ignoring'
+      ENDIF
+    ELSE IF (nprocx > 0 .OR. nprocy > 0) THEN
       ! Sanity check
+      IF (nprocx == 0) nprocx = nproc / nprocy
+      IF (nprocy == 0) nprocy = nproc / nprocx
+      nproc = nprocx * nprocy
       nxsplit = nx_global / nprocx
       nysplit = ny_global / nprocy
-      IF (nxsplit < ng .OR. nysplit < ng) reset = .TRUE.
+      IF (nxsplit < ng .OR. nysplit < ng) THEN
+        reset = .TRUE.
+        IF (rank == 0) THEN
+          IF (nxsplit < ng) THEN
+            dir = 'x'
+          ELSE IF (nysplit < ng) THEN
+            dir = 'y'
+          ENDIF
+          PRINT*,'*** WARNING ***'
+          PRINT'('' Requested domain split gives less than '', I1, &
+              &  '' cells in the '', A, ''-direction. Ignoring'')', ng, dir
+        ENDIF
+      ENDIF
     ENDIF
 
     IF (reset) THEN
@@ -110,7 +146,7 @@ CONTAINS
           PRINT*,'Cannot split the domain using the requested number of CPUs.'
           PRINT*,'Try reducing the number of CPUs to ',TRIM(str)
         ENDIF
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_setup, ierr)
+        CALL abort_code(c_err_bad_setup)
         STOP
       ENDIF
       IF (rank == 0) THEN
@@ -296,13 +332,15 @@ CONTAINS
     subtype_field = 0
 
     DEALLOCATE(x, y)
+    DEALLOCATE(xb, yb)
     ALLOCATE(x(1-ng:nx+ng), y(1-ng:ny+ng))
+    ALLOCATE(xb(1-ng:nx+ng), yb(1-ng:ny+ng))
     ALLOCATE(x_global(1-ng:nx_global+ng))
     ALLOCATE(y_global(1-ng:ny_global+ng))
-    ALLOCATE(xb_global(nx_global+1))
-    ALLOCATE(yb_global(ny_global+1))
-    ALLOCATE(xb_offset_global(nx_global+1))
-    ALLOCATE(yb_offset_global(ny_global+1))
+    ALLOCATE(xb_global(1-ng:nx_global+ng))
+    ALLOCATE(yb_global(1-ng:ny_global+ng))
+    ALLOCATE(xb_offset_global(1-ng:nx_global+ng))
+    ALLOCATE(yb_offset_global(1-ng:ny_global+ng))
     ALLOCATE(ex(1-ng:nx+ng, 1-ng:ny+ng))
     ALLOCATE(ey(1-ng:nx+ng, 1-ng:ny+ng))
     ALLOCATE(ez(1-ng:nx+ng, 1-ng:ny+ng))

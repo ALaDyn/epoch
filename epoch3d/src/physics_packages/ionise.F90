@@ -1,9 +1,29 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2012      Alistair Lawrence-Douglas <a.a.lawrence-douglas@warwick.ac.uk>
+! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE ionise
 
   USE numerics
   USE random_generator
   USE partlist
   USE mpi
+  USE utilities
+  USE boundary
+  USE current_smooth
 
   IMPLICIT NONE
 
@@ -34,7 +54,7 @@ CONTAINS
 
   SUBROUTINE initialise_ionisation
 
-    INTEGER :: i, io, iu, ierr, bessel_error, err_laser
+    INTEGER :: i, io, iu, bessel_error, err_laser
     LOGICAL :: laser_set
     TYPE(laser_block), POINTER :: current_laser
 
@@ -158,7 +178,7 @@ CONTAINS
               WRITE(io,*) 'the boundaries. Please adjust your input deck.'
             ENDDO
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_setup, ierr)
+          CALL abort_code(c_err_bad_setup)
         CASE (2)
           IF (rank == 0) THEN
             DO iu = 1, nio_units ! Print to stdout and to file
@@ -169,7 +189,7 @@ CONTAINS
                   'deck'
             ENDDO
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_setup, ierr)
+          CALL abort_code(c_err_bad_setup)
         CASE DEFAULT
       END SELECT
     ENDIF
@@ -392,6 +412,11 @@ CONTAINS
         ! Soviet Physics JETP 1986 Vol. 64 Pg. 1191-1194
       ENDIF
     ENDIF
+
+    CALL current_bcs
+    CALL particle_bcs
+
+    IF (smooth_currents) CALL smooth_current()
 
   END SUBROUTINE ionise_particles
 

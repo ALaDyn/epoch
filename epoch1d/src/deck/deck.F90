@@ -1,3 +1,19 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE deck
 
   ! Basic operations
@@ -27,6 +43,7 @@ MODULE deck
 #endif
   ! Custom blocks
   USE custom_deck
+  USE utilities
   USE version_data
   USE sdf
 
@@ -350,7 +367,7 @@ CONTAINS
     ! This subroutine simply cycles round until it finds a free lun between
     ! min_lun and max_lun
     INTEGER :: get_free_lun
-    INTEGER :: lun, ierr
+    INTEGER :: lun
     INTEGER, PARAMETER :: min_lun = 10, max_lun = 20
     LOGICAL :: is_open
 
@@ -366,7 +383,7 @@ CONTAINS
           WRITE(*,*) '*** ERROR ***'
           WRITE(*,*) 'Unable to open lun for input deck read'
         ENDIF
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+        CALL abort_code(c_err_io_error)
       ENDIF
     ENDDO
 
@@ -390,7 +407,7 @@ CONTAINS
     CHARACTER(LEN=string_length) :: len_string
     LOGICAL :: terminate = .FALSE.
     LOGICAL :: exists
-    INTEGER :: errcode_deck, ierr, i, io, iu, rank_check
+    INTEGER :: errcode_deck, i, io, iu, rank_check
     CHARACTER(LEN=buffer_size), DIMENSION(:), ALLOCATABLE :: tmp_buffer
     TYPE(file_buffer), POINTER :: fbuf
     LOGICAL :: already_parsed, got_eor, got_eof
@@ -462,7 +479,7 @@ CONTAINS
         PRINT *, 'Input deck file "' // TRIM(deck_filename) &
             // '" does not exist.'
         PRINT *, 'Create the file and rerun the code.'
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+        CALL abort_code(c_err_io_error)
       ENDIF
 
       ! Get a free lun. Don't use a constant lun to allow for recursion
@@ -623,7 +640,7 @@ CONTAINS
                   'of "string_length" in ','shared_data.F90 to be at least ', &
                   TRIM(len_string)
             ENDDO
-            CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+            CALL abort_code(c_err_io_error)
           ENDIF
           elements = elements+1
           flip = 1
@@ -710,7 +727,7 @@ CONTAINS
     IF (first_call) CLOSE(du)
 #endif
 
-    IF (terminate) CALL MPI_ABORT(MPI_COMM_WORLD, c_err_generic_error, ierr)
+    IF (terminate) CALL abort_code(c_err_generic_error)
 
     CALL MPI_BARRIER(comm, errcode)
 

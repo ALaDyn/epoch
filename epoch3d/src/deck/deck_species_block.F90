@@ -1,3 +1,20 @@
+! Copyright (C) 2010-2016 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE deck_species_block
 
   USE strings_advanced
@@ -61,7 +78,7 @@ CONTAINS
 
     INTEGER :: i, j, io, iu, nlevels, nrelease
     CHARACTER(LEN=8) :: string
-    INTEGER :: errcode, ierr
+    INTEGER :: errcode
     TYPE(primitive_stack) :: stack
 
     IF (deck_state == c_ds_first) THEN
@@ -179,7 +196,7 @@ CONTAINS
                 // '" must have a positive mass.'
           ENDDO
         ENDIF
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_value, ierr)
+        CALL abort_code(c_err_bad_value)
       ENDDO
 
       IF (track_ejected_particles) THEN
@@ -388,7 +405,7 @@ CONTAINS
     IF (str_cmp(element, 'frac') .OR. str_cmp(element, 'fraction')) THEN
       IF (npart_global >= 0) THEN
         species_list(species_id)%count = &
-            INT(as_real_print(value, element, errcode) * npart_global)
+            INT(as_real_print(value, element, errcode) * npart_global, i8)
       ELSE
         species_list(species_id)%count = 0
       ENDIF
@@ -733,7 +750,7 @@ CONTAINS
 
     CHARACTER(*), INTENT(IN) :: name
     INTEGER :: create_species_number_from_name
-    INTEGER :: i, io, iu, ierr
+    INTEGER :: i, io, iu
     TYPE(stack_element) :: block
 
     DO i = 1, n_species
@@ -756,7 +773,7 @@ CONTAINS
           WRITE(io,*) 'Please choose a different name and try again.'
         ENDDO
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_value, ierr)
+      CALL abort_code(c_err_bad_value)
     ENDIF
 
     n_species = n_species + 1
@@ -877,7 +894,7 @@ CONTAINS
     LOGICAL, INTENT(IN) :: got_file
     TYPE(stack_element) :: block
     TYPE(primitive_stack) :: stack
-    INTEGER :: io, iu, ix, iy, iz, ierr
+    INTEGER :: io, iu, ix, iy, iz
 
     CALL initialise_stack(stack)
     IF (got_file) THEN
@@ -915,7 +932,7 @@ CONTAINS
             WRITE(io,*) 'Unable to parse input deck.'
           ENDDO
         ENDIF
-        CALL MPI_ABORT(MPI_COMM_WORLD, errcode, ierr)
+        CALL abort_code(errcode)
       ENDIF
 
       DO iz = -2, nz+3
@@ -967,12 +984,14 @@ CONTAINS
 #ifndef PHOTONS
     extended_error_string = 'Cannot identify species "' &
         // TRIM(species_list(species_id)%name) // '" as "' // TRIM(value) &
-        // '" because compiler option -DPHOTONS has not been set.'
+        // '" because' // CHAR(10) &
+        // ' compiler option -DPHOTONS has not been set.'
 #else
 #ifndef TRIDENT_PHOTONS
     extended_error_string = 'Cannot identify species "' &
         // TRIM(species_list(species_id)%name) // '" as "' // TRIM(value) &
-        // '" because compiler option -DTRIDENT_PHOTONS has not been set.'
+        // '" because' // CHAR(10) &
+        // ' compiler option -DTRIDENT_PHOTONS has not been set.'
 #endif
 #endif
 

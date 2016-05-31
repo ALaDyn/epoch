@@ -1,3 +1,20 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE setup
 
   USE fields
@@ -10,6 +27,7 @@ MODULE setup
   USE window
   USE timer
   USE helper
+  USE sdf
 
   IMPLICIT NONE
 
@@ -32,7 +50,6 @@ CONTAINS
     INTEGER, PARAMETER :: r4  = SELECTED_REAL_KIND(r=30)
     INTEGER, PARAMETER :: r8  = SELECTED_REAL_KIND(r=300)
     INTEGER, PARAMETER :: r16 = SELECTED_REAL_KIND(r=3000)
-    INTEGER :: ierr
 
     IF (num == r4) THEN
       ! Should use MPI_SIZEOF() but this breaks on scalimpi
@@ -46,7 +63,7 @@ CONTAINS
         PRINT*, '*** ERROR ***'
         PRINT*, 'Cannot determine size of real'
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_terminate, ierr)
+      CALL abort_code(c_err_terminate)
       STOP
     ENDIF
 
@@ -112,10 +129,19 @@ CONTAINS
     stagger(c_dir_y,c_stagger_by) = .FALSE.
     stagger(c_dir_z,c_stagger_bz) = .FALSE.
 
+    CALL set_tokenizer_stagger(c_stagger_centre)
+
     ALLOCATE(x(1), y(1), z(1))
     x = 0.0_num
     y = 0.0_num
     z = 0.0_num
+
+    ALLOCATE(xb(1), yb(1), zb(1))
+    xb = 0.0_num
+    yb = 0.0_num
+    zb = 0.0_num
+
+    CALL eval_stack_init
 
   END SUBROUTINE minimal_init
 
@@ -166,22 +192,16 @@ CONTAINS
     ! Setup global grid
     DO ix = -2, nx_global + 3
       x_global(ix) = x_grid_min + (ix - 1) * dx
-    ENDDO
-    DO ix = 1, nx_global + 1
       xb_global(ix) = xb_min + (ix - 1) * dx
       xb_offset_global(ix) = xb_global(ix)
     ENDDO
     DO iy = -2, ny_global + 3
       y_global(iy) = y_grid_min + (iy - 1) * dy
-    ENDDO
-    DO iy = 1, ny_global + 1
       yb_global(iy) = yb_min + (iy - 1) * dy
       yb_offset_global(iy) = yb_global(iy)
     ENDDO
     DO iz = -2, nz_global + 3
       z_global(iz) = z_grid_min + (iz - 1) * dz
-    ENDDO
-    DO iz = 1, nz_global + 1
       zb_global(iz) = zb_min + (iz - 1) * dz
       zb_offset_global(iz) = zb_global(iz)
     ENDDO
@@ -214,15 +234,13 @@ CONTAINS
     z_max_local = z_grid_max_local - (cpml_z_max_offset - 0.5_num) * dz
 
     ! Setup local grid
-    DO ix = -2, nx + 3
-      x(ix) = x_global(nx_global_min+ix-1)
-    ENDDO
-    DO iy = -2, ny + 3
-      y(iy) = y_global(ny_global_min+iy-1)
-    ENDDO
-    DO iz = -2, nz + 3
-      z(iz) = z_global(nz_global_min+iz-1)
-    ENDDO
+    x(-2:nx+3) = x_global(nx_global_min-3:nx_global_max+3)
+    y(-2:ny+3) = y_global(ny_global_min-3:ny_global_max+3)
+    z(-2:nz+3) = z_global(nz_global_min-3:nz_global_max+3)
+
+    xb(-2:nx+3) = xb_global(nx_global_min-3:nx_global_max+3)
+    yb(-2:ny+3) = yb_global(ny_global_min-3:ny_global_max+3)
+    zb(-2:nz+3) = zb_global(nz_global_min-3:nz_global_max+3)
 
   END SUBROUTINE setup_grid
 
@@ -492,7 +510,7 @@ CONTAINS
 #ifdef NO_IO
     RETURN
 #else
-    INTEGER :: errcode, ierr
+    INTEGER :: errcode
     LOGICAL :: exists
 
     IF (rank == 0) THEN
@@ -513,7 +531,7 @@ CONTAINS
         PRINT*, 'Cannot create "epoch3d.dat" output file. The most common ' &
             // 'cause of this problem '
         PRINT*, 'is that the ouput directory does not exist'
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+        CALL abort_code(c_err_io_error)
         STOP
       ENDIF
       IF (ic_from_restart) THEN
@@ -775,7 +793,7 @@ CONTAINS
     CHARACTER(LEN=c_id_length) :: species_id
     CHARACTER(LEN=c_max_string_length) :: name, len_string
     INTEGER :: blocktype, datatype, code_io_version, string_len, ispecies
-    INTEGER :: ierr, i, is, iblock, nblocks, ndims, geometry
+    INTEGER :: i, is, iblock, nblocks, ndims, geometry
     INTEGER(i8) :: npart, npart_local
     INTEGER(i8), ALLOCATABLE :: nparts(:), npart_locals(:), npart_proc(:)
     INTEGER, DIMENSION(4) :: dims
@@ -804,9 +822,10 @@ CONTAINS
     IF (.NOT. restart_flag) THEN
       IF (rank == 0) THEN
         PRINT*, '*** ERROR ***'
-        PRINT*, 'SDF file is not a restart dump. Unable to continue.'
+        PRINT*, 'SDF file ', TRIM(full_restart_filename), &
+            ' is not a restart dump. Unable to continue.'
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+      CALL abort_code(c_err_io_error)
       STOP
     ENDIF
 
@@ -816,7 +835,7 @@ CONTAINS
         PRINT*, 'SDF restart file was not generated by Epoch3d. Unable to ', &
             'continue.'
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+      CALL abort_code(c_err_io_error)
       STOP
     ENDIF
 
@@ -828,12 +847,17 @@ CONTAINS
         PRINT*, 'Please increase the size of "c_max_string_length" in ', &
             'shared_data.F90 to ','be at least ',TRIM(len_string)
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+      CALL abort_code(c_err_io_error)
       STOP
     ENDIF
 
     ! Reset io_block parameters
     DO i = 1, n_io_blocks
+      IF (io_block_list(i)%dump_first_after_restart) THEN
+        io_block_list(i)%dump_first = .TRUE.
+      ELSE
+        io_block_list(i)%dump_first = .FALSE.
+      ENDIF
       IF (io_block_list(i)%dt_snapshot > 0.0_num) THEN
         io_block_list(i)%time_prev = time
       ELSE
@@ -1076,7 +1100,7 @@ CONTAINS
             PRINT*, 'Restart dump grid: ', TRIM(str1), ',', TRIM(str2), &
                 ',', TRIM(str3)
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_setup, ierr)
+          CALL abort_code(c_err_bad_setup)
           STOP
         ENDIF
 
@@ -1180,7 +1204,7 @@ CONTAINS
             PRINT*, 'Malformed restart dump. Number of particle variables', &
                 ' does not match grid.'
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+          CALL abort_code(c_err_io_error)
           STOP
         ENDIF
 
@@ -1230,7 +1254,7 @@ CONTAINS
             PRINT*, 'Cannot load dump file with per particle weight.'
             PRINT*, 'Please recompile without the -DPER_SPECIES_WEIGHT option.'
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_pp_options_missing, ierr)
+          CALL abort_code(c_err_pp_options_missing)
           STOP
 #endif
 
@@ -1244,7 +1268,7 @@ CONTAINS
             PRINT*, 'Cannot load dump file with optical depths.'
             PRINT*, 'Please recompile with the -DPHOTONS option.'
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_pp_options_missing, ierr)
+          CALL abort_code(c_err_pp_options_missing)
           STOP
 #endif
 
@@ -1258,7 +1282,7 @@ CONTAINS
             PRINT*, 'Cannot load dump file with QED energies.'
             PRINT*, 'Please recompile with the -DPHOTONS option.'
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_pp_options_missing, ierr)
+          CALL abort_code(c_err_pp_options_missing)
           STOP
 #endif
 
@@ -1272,7 +1296,7 @@ CONTAINS
             PRINT*, 'Cannot load dump file with Trident optical depths.'
             PRINT*, 'Please recompile with the -DTRIDENT_PHOTONS option.'
           ENDIF
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_pp_options_missing, ierr)
+          CALL abort_code(c_err_pp_options_missing)
           STOP
 #endif
         ENDIF
@@ -1296,7 +1320,7 @@ CONTAINS
 
     CHARACTER(LEN=c_id_length) :: code_name, block_id
     CHARACTER(LEN=c_max_string_length) :: name
-    INTEGER :: ierr, step, code_io_version, string_len, nblocks, ndims
+    INTEGER :: step, code_io_version, string_len, nblocks, ndims
     INTEGER :: blocktype, datatype, geometry, iblock, npx, npy, npz
     INTEGER, DIMENSION(4) :: dims
     LOGICAL :: restart_flag
@@ -1310,9 +1334,10 @@ CONTAINS
     IF (.NOT. restart_flag) THEN
       IF (rank == 0) THEN
         PRINT*, '*** ERROR ***'
-        PRINT*, 'SDF file is not a restart dump. Unable to continue.'
+        PRINT*, 'SDF file ', TRIM(full_restart_filename), &
+            ' is not a restart dump. Unable to continue.'
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+      CALL abort_code(c_err_io_error)
       STOP
     ENDIF
 
@@ -1322,7 +1347,7 @@ CONTAINS
         PRINT*, 'SDF restart file was not generated by Epoch3d. Unable to ', &
             'continue.'
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_io_error, ierr)
+      CALL abort_code(c_err_io_error)
       STOP
     ENDIF
 

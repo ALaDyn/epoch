@@ -1,3 +1,20 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE particles
 
   USE current_smooth
@@ -10,6 +27,7 @@ MODULE particles
   IMPLICIT NONE
 
 CONTAINS
+
 
   SUBROUTINE push_particles
 
@@ -168,6 +186,7 @@ CONTAINS
       fcy = idtxz * part_weight
       fcz = idtxy * part_weight
 #endif
+
 #ifndef PER_PARTICLE_CHARGE_MASS
       part_q   = species_list(ispecies)%charge
       part_mc  = c * species_list(ispecies)%mass
@@ -528,13 +547,16 @@ CONTAINS
       ENDDO
     ENDDO
 
-    CALL current_bcs
-    CALL particle_bcs
+    IF (.NOT.use_field_ionisation) THEN
+      CALL current_bcs
+      CALL particle_bcs
 
-    IF (smooth_currents) CALL smooth_current()
+      IF (smooth_currents) CALL smooth_current()
+    END IF
 
   END SUBROUTINE push_particles
 
+<<<<<<< HEAD
 
 
   ! Background distribution function used for delta-f calculations.
@@ -574,6 +596,36 @@ CONTAINS
   END FUNCTION f0
 
 
+=======
+  ! Background distribution function used for delta-f calculations.
+  ! Specialise to a drifting (tri)-Maxwellian
+  ! to simplify and ensure zero density/current divergence.
+  ! Can effectively switch off deltaf method by setting zero background
+  ! density.
+  REAL(num) function f0(ispecies, mass,px,py,pz)
+    REAL(num), INTENT(IN) :: mass,px,py,pz
+    INTEGER, INTENT(IN)   :: ispecies
+    REAL(num) :: Tx,Ty,Tz,driftx,drifty,driftz,density
+    REAL(num) :: f0_exponent,norm
+    IF (initial_conditions(ispecies)%density_back/=0) THEN
+       Tx = initial_conditions(ispecies)%temp_back(1)
+       Ty = initial_conditions(ispecies)%temp_back(2)
+       Tz = initial_conditions(ispecies)%temp_back(3)
+       driftx = initial_conditions(ispecies)%drift_back(1)
+       drifty = initial_conditions(ispecies)%drift_back(2)
+       driftz = initial_conditions(ispecies)%drift_back(3)
+       density= initial_conditions(ispecies)%density_back
+       f0_exponent =      (   (px-driftx)**2/(2*kb*Tx*mass)   & 
+            &              + (py-drifty)**2/(2*kb*Ty*mass)   &
+            &              + (pz-driftz)**2/(2*kb*Tz*mass) )
+       norm = density/sqrt( (2*pi*kb*mass)**3*Tx*Ty*Tz )
+       f0 = norm * exp(-f0_exponent)
+       !WRITE (*,*) 'L',Tx,Ty,Tz,driftx,drifty,driftz,density,f0_exponent,norm
+    ELSE
+       f0 = 0.0
+    ENDIF
+  END function f0
+>>>>>>> master
 
 #ifdef PHOTONS
   SUBROUTINE push_photons(ispecies)

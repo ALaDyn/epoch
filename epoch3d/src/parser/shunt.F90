@@ -1,6 +1,24 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE shunt
 
+  USE evaluator_blocks
   USE tokenizer_blocks
+  USE utilities
 
   IMPLICIT NONE
 
@@ -419,6 +437,8 @@ CONTAINS
       ENDIF
     ENDDO
 
+    CALL stack_sanity_check(output)
+
   END SUBROUTINE tokenize
 
 
@@ -434,7 +454,7 @@ CONTAINS
     INTEGER, INTENT(INOUT) :: err
     TYPE(deck_constant) :: const
     TYPE(stack_element) :: block2
-    INTEGER :: ipoint, io, iu, ierr
+    INTEGER :: ipoint, io, iu
 
     IF (ICHAR(current(1:1)) == 0) RETURN
 
@@ -452,7 +472,7 @@ CONTAINS
           WRITE(io,*) 'Unable to parse block with text ', TRIM(current)
         ENDDO
         CALL check_deprecated(current)
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_value, ierr)
+        CALL abort_code(c_err_bad_value)
       ENDIF
       err = c_err_bad_value
       CALL deallocate_stack(stack)
@@ -577,7 +597,7 @@ CONTAINS
     TYPE(primitive_stack), INTENT(INOUT) :: stack, output
     INTEGER, INTENT(INOUT) :: err
     TYPE(deck_constant) :: const
-    INTEGER :: ipoint, io, iu, ierr
+    INTEGER :: ipoint, io, iu
 
     IF (ICHAR(current(1:1)) == 0) RETURN
 
@@ -594,7 +614,7 @@ CONTAINS
         WRITE(io,*) '*** ERROR ***'
         WRITE(io,*) 'Unable to parse block with text ', TRIM(current)
       ENDDO
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_value, ierr)
+      CALL abort_code(c_err_bad_value)
       err = c_err_bad_value
       CALL deallocate_stack(stack)
       RETURN
@@ -701,5 +721,57 @@ CONTAINS
     CALL tokenize('0', stack, errcode)
 
   END SUBROUTINE set_stack_zero
+
+
+
+  SUBROUTINE stack_sanity_check(input_stack)
+
+    TYPE(primitive_stack), INTENT(INOUT) :: input_stack
+    INTEGER :: i, err, ierr
+    TYPE(stack_element) :: block
+
+    CALL eval_reset()
+
+    DO i = 1, input_stack%stack_point
+      err = c_err_none
+      block = input_stack%entries(i)
+      IF (block%ptype == c_pt_variable) THEN
+        CALL push_on_eval(block%numerical_data)
+      ELSE IF (block%ptype == c_pt_species) THEN
+        CALL do_species(block%value, err)
+      ELSE IF (block%ptype == c_pt_operator) THEN
+        CALL do_operator(block%value, err)
+      ELSE IF (block%ptype == c_pt_constant &
+          .OR. block%ptype == c_pt_default_constant) THEN
+        CALL do_constant(block%value, .FALSE., 1, 1, 1, err)
+      ELSE IF (block%ptype == c_pt_function) THEN
+        IF (block%value == c_func_interpolate) THEN
+          CALL do_sanity_check(block%value, err)
+        ELSE
+          CALL do_functions(block%value, .FALSE., 1, 1, 1, err)
+        ENDIF
+      ELSE
+        ! Not yet implemented. Reset the stack and exit
+        CALL eval_reset()
+        RETURN
+      ENDIF
+
+      IF (err /= c_err_none) THEN
+        CALL MPI_ABORT(MPI_COMM_WORLD, err, ierr)
+        STOP
+      ENDIF
+    ENDDO
+
+  END SUBROUTINE stack_sanity_check
+
+
+
+  SUBROUTINE set_tokenizer_stagger(stagger)
+
+    INTEGER, INTENT(IN) :: stagger
+
+    tokenize_stagger = stagger
+
+  END SUBROUTINE set_tokenizer_stagger
 
 END MODULE shunt

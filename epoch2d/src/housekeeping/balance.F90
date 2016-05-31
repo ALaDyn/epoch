@@ -1,9 +1,27 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE balance
 
   USE boundary
   USE mpi_subtype_control
   USE redblack_module
   USE timer
+  USE utilities
 
   IMPLICIT NONE
 
@@ -172,6 +190,11 @@ CONTAINS
       ALLOCATE(x(-2:nx+3), y(-2:ny+3))
       x(-2:nx+3) = x_global(nx_global_min-3:nx_global_max+3)
       y(-2:ny+3) = y_global(ny_global_min-3:ny_global_max+3)
+
+      DEALLOCATE(xb, yb)
+      ALLOCATE(xb(-2:nx+3), yb(-2:ny+3))
+      xb(-2:nx+3) = xb_global(nx_global_min-3:nx_global_max+3)
+      yb(-2:ny+3) = yb_global(ny_global_min-3:ny_global_max+3)
 
       ! Recalculate x_grid_mins/maxs so that rebalancing works next time
       DO iproc = 0, nprocx - 1
@@ -1644,7 +1667,7 @@ CONTAINS
     TYPE(particle_list), DIMENSION(:), ALLOCATABLE :: pointers_send
     TYPE(particle_list), DIMENSION(:), ALLOCATABLE :: pointers_recv
     TYPE(particle), POINTER :: current, next
-    INTEGER :: part_proc, iproc, ispecies, ierr
+    INTEGER :: part_proc, iproc, ispecies
     INTEGER(i8), DIMENSION(:), ALLOCATABLE :: sendcounts, recvcounts
 
     ALLOCATE(pointers_send(0:nproc-1), pointers_recv(0:nproc-1))
@@ -1662,7 +1685,7 @@ CONTAINS
         part_proc = get_particle_processor(current)
         IF (part_proc < 0) THEN
           PRINT *, 'Unlocatable particle on processor', rank, current%part_pos
-          CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_value, ierr)
+          CALL abort_code(c_err_bad_value)
           STOP
         ENDIF
 #ifdef PARTICLE_DEBUG

@@ -1,3 +1,18 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE utilities
 
   USE constants
@@ -96,5 +111,29 @@ CONTAINS
     DEALLOCATE(tmp_array)
 
   END SUBROUTINE grow_string_array
+
+
+
+  SUBROUTINE abort_code(errcode)
+
+    USE mpi
+
+    INTEGER, INTENT(IN) :: errcode
+    INTEGER :: i, newcode, ierr
+
+    ! Translate error code bitmask into 0-255 range.
+    ! Only the lowest bit is kept
+    newcode = errcode
+    DO i = 0, 255
+      IF (newcode == 0) THEN
+        newcode = i
+        EXIT
+      ENDIF
+      newcode = newcode / 2
+    ENDDO
+
+    CALL MPI_ABORT(MPI_COMM_WORLD, newcode, ierr)
+
+  END SUBROUTINE abort_code
 
 END MODULE utilities

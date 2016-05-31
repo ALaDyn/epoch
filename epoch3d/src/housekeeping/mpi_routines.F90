@@ -1,3 +1,19 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE mpi_routines
 
   USE helper
@@ -28,14 +44,16 @@ CONTAINS
   SUBROUTINE setup_communicator
 
     INTEGER, PARAMETER :: ndims = 3
-    INTEGER :: dims(ndims), idim, old_comm, ierr
+    INTEGER :: dims(ndims), idim, old_comm
     LOGICAL :: periods(ndims), reorder, op, reset
     INTEGER :: test_coords(ndims)
     INTEGER :: ix, iy, iz
     INTEGER :: nxsplit, nysplit, nzsplit
+    INTEGER :: nproc1, nproc2, nproc3, n2_global, n3_global, n
     INTEGER :: area, minarea, nprocyz
     INTEGER :: ranges(3,1), nproc_orig, oldgroup, newgroup
     CHARACTER(LEN=11) :: str
+    CHARACTER(LEN=1) :: dir
 
     nproc_orig = nproc
 
@@ -47,19 +65,47 @@ CONTAINS
         PRINT*,'There must be at least ' // TRIM(str) // &
             ' cells in each direction.'
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_setup, ierr)
+      CALL abort_code(c_err_bad_setup)
+    ENDIF
+
+    IF (nprocx == 0) THEN
+      area = nprocy * nprocz
+      IF (area > 0) nprocx = nproc / area
+    ELSE IF (nprocy == 0) THEN
+      area = nprocx * nprocz
+      IF (area > 0) nprocy = nproc / area
+    ELSE
+      area = nprocx * nprocy
+      IF (area > 0) nprocz = nproc / area
     ENDIF
 
     reset = .FALSE.
     IF (MAX(nprocx,1) * MAX(nprocy,1) * MAX(nprocz,1) > nproc) THEN
       reset = .TRUE.
+      IF (rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*,'Requested domain split exceeds CPUs. Ignoring'
+      ENDIF
     ELSE IF (nprocx * nprocy * nprocz > 0) THEN
       ! Sanity check
       nxsplit = nx_global / nprocx
       nysplit = ny_global / nprocy
       nzsplit = nz_global / nprocz
-      IF (nxsplit < ng .OR. nysplit < ng .OR. nzsplit < ng) &
-          reset = .TRUE.
+      IF (nxsplit < ng .OR. nysplit < ng .OR. nzsplit < ng) THEN
+        reset = .TRUE.
+        IF (rank == 0) THEN
+          IF (nxsplit < ng) THEN
+            dir = 'x'
+          ELSE IF (nysplit < ng) THEN
+            dir = 'y'
+          ELSE IF (nzsplit < ng) THEN
+            dir = 'z'
+          ENDIF
+          PRINT*,'*** WARNING ***'
+          PRINT'('' Requested domain split gives less than '', I1, &
+              &  '' cells in the '', A, ''-direction. Ignoring'')', ng, dir
+        ENDIF
+      ENDIF
     ENDIF
 
     IF (reset) THEN
@@ -72,7 +118,7 @@ CONTAINS
       nprocz = 0
     ENDIF
 
-    IF (nprocx * nprocy * nprocz == 0) THEN
+    IF (nprocx == 0 .AND. nprocy == 0 .AND. nprocz == 0) THEN
       DO WHILE (nproc > 1)
         ! Find the processor split which minimizes surface area of
         ! the resulting domain
@@ -114,6 +160,75 @@ CONTAINS
 
         nproc = nproc - 1
       ENDDO
+    ELSE IF ((nprocx == 0 .AND. nprocy == 0) &
+        .OR. (nprocx == 0 .AND. nprocz == 0) &
+        .OR. (nprocy == 0 .AND. nprocz == 0)) THEN
+      IF (nprocx /= 0) THEN
+        n = 1
+        nproc1 = nprocx
+        n2_global = ny_global
+        n3_global = nz_global
+      ELSE IF (nprocy /= 0) THEN
+        n = 2
+        nproc1 = nprocy
+        n2_global = nx_global
+        n3_global = nz_global
+      ELSE
+        n = 3
+        nproc1 = nprocz
+        n2_global = nx_global
+        n3_global = ny_global
+      ENDIF
+
+      nproc = nproc_orig / nproc1
+      nproc2 = 1
+      nproc3 = 1
+
+      DO WHILE (nproc > 1)
+        ! Find the processor split which minimizes surface area of
+        ! the resulting domain
+
+        minarea = n2_global + n3_global
+
+        DO ix = 1, nproc
+          iy = nproc / ix
+          IF (ix * iy /= nproc) CYCLE
+
+          nxsplit = n2_global / ix
+          nysplit = n3_global / iy
+          ! Actual domain must be bigger than the number of ghostcells
+          IF (nxsplit < ng .OR. nysplit < ng) CYCLE
+
+          area = nxsplit + nysplit
+          IF (area < minarea) THEN
+            nproc2 = ix
+            nproc3 = iy
+            minarea = area
+          ENDIF
+        ENDDO
+
+        IF (nproc2 > 0) EXIT
+
+        ! If we get here then no suitable split could be found. Decrease the
+        ! number of processors and try again.
+
+        nproc = nproc - 1
+      ENDDO
+
+      nproc = nproc1 * nproc2 * nproc3
+      IF (n == 1) THEN
+        nprocx = nproc1
+        nprocy = nproc2
+        nprocz = nproc3
+      ELSE IF (n == 2) THEN
+        nprocy = nproc1
+        nprocx = nproc2
+        nprocz = nproc3
+      ELSE
+        nprocz = nproc1
+        nprocx = nproc2
+        nprocy = nproc3
+      ENDIF
     ENDIF
 
     IF (nproc_orig /= nproc) THEN
@@ -124,7 +239,7 @@ CONTAINS
           PRINT*,'Cannot split the domain using the requested number of CPUs.'
           PRINT*,'Try reducing the number of CPUs to ',TRIM(str)
         ENDIF
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_setup, ierr)
+        CALL abort_code(c_err_bad_setup)
         STOP
       ENDIF
       IF (rank == 0) THEN
@@ -361,16 +476,18 @@ CONTAINS
     subtype_field = 0
 
     DEALLOCATE(x, y, z)
+    DEALLOCATE(xb, yb, zb)
     ALLOCATE(x(1-ng:nx+ng), y(1-ng:ny+ng), z(1-ng:nz+ng))
+    ALLOCATE(xb(1-ng:nx+ng), yb(1-ng:ny+ng), zb(1-ng:nz+ng))
     ALLOCATE(x_global(1-ng:nx_global+ng))
     ALLOCATE(y_global(1-ng:ny_global+ng))
     ALLOCATE(z_global(1-ng:nz_global+ng))
-    ALLOCATE(xb_global(nx_global+1))
-    ALLOCATE(yb_global(ny_global+1))
-    ALLOCATE(zb_global(nz_global+1))
-    ALLOCATE(xb_offset_global(nx_global+1))
-    ALLOCATE(yb_offset_global(ny_global+1))
-    ALLOCATE(zb_offset_global(nz_global+1))
+    ALLOCATE(xb_global(1-ng:nx_global+ng))
+    ALLOCATE(yb_global(1-ng:ny_global+ng))
+    ALLOCATE(zb_global(1-ng:nz_global+ng))
+    ALLOCATE(xb_offset_global(1-ng:nx_global+ng))
+    ALLOCATE(yb_offset_global(1-ng:ny_global+ng))
+    ALLOCATE(zb_offset_global(1-ng:nz_global+ng))
     ALLOCATE(ex(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))
     ALLOCATE(ey(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))
     ALLOCATE(ez(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng))

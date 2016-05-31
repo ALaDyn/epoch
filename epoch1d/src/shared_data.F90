@@ -1,10 +1,30 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2014-2015 Stephan Kuschel <stephan.kuschel@gmail.com>
+! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 ! ****************************************************************
 ! All global variables defined here (cf F77 COMMON block).
 ! ****************************************************************
 
 MODULE constants
 
-  USE sdf
+  USE sdf, ONLY : c_stagger_edge_x, c_stagger_edge_y, c_stagger_edge_z, &
+      c_stagger_face_x, c_stagger_face_y, c_stagger_face_z, &
+      c_stagger_cell_centre, c_stagger_vertex, c_id_length
 
   IMPLICIT NONE
 
@@ -269,11 +289,11 @@ MODULE shared_parser_data
   INTEGER, PARAMETER :: c_assoc_ra = 3
 
   INTEGER, DIMENSION(c_num_ops), PARAMETER :: &
-      opcode_precedence = (/1, 1, 2, 2, 3, 4, 1, 1, 1, 2, 2, 5, 5/)
+      opcode_precedence = (/2, 2, 3, 3, 4, 4, 1, 1, 1, 0, 0, 4, 4/)
   INTEGER, DIMENSION(c_num_ops), PARAMETER :: &
       opcode_assoc = (/c_assoc_a, c_assoc_la, c_assoc_a, c_assoc_la, &
-          c_assoc_la, c_assoc_a, c_assoc_a, c_assoc_a, c_assoc_a, c_assoc_a, &
-          c_assoc_a, c_assoc_ra, c_assoc_ra/)
+          c_assoc_ra, c_assoc_ra, c_assoc_la, c_assoc_la, c_assoc_la, &
+          c_assoc_la, c_assoc_la, c_assoc_ra, c_assoc_ra/)
 
   INTEGER, PARAMETER :: c_paren_left_bracket = 1
   INTEGER, PARAMETER :: c_paren_right_bracket = 2
@@ -297,6 +317,9 @@ MODULE shared_parser_data
   INTEGER, PARAMETER :: c_const_atto = 16
 
   ! Constants refering to grid properties
+  INTEGER, PARAMETER :: c_const_xb = 22
+  INTEGER, PARAMETER :: c_const_yb = 23
+  INTEGER, PARAMETER :: c_const_zb = 24
   INTEGER, PARAMETER :: c_const_x = 25
   INTEGER, PARAMETER :: c_const_y = 26
   INTEGER, PARAMETER :: c_const_z = 27
@@ -624,7 +647,7 @@ MODULE shared_data
   LOGICAL :: force_first_to_be_restartable
   LOGICAL :: force_final_to_be_restartable
   LOGICAL :: use_offset_grid
-  INTEGER :: n_zeros = 4
+  INTEGER :: n_zeros_control, n_zeros = 4
   INTEGER, PARAMETER :: c_max_zeros = 9
   INTEGER, PARAMETER :: c_dump_part_grid         = 1
   INTEGER, PARAMETER :: c_dump_grid              = 2
@@ -700,6 +723,7 @@ MODULE shared_data
     INTEGER :: dump_cycle_first_index
     LOGICAL :: restart, dump, any_average, dump_first, dump_last
     LOGICAL :: dump_source_code, dump_input_decks, rolling_restart
+    LOGICAL :: dump_first_after_restart
     LOGICAL :: disabled
     INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
     TYPE(averaged_data_block), DIMENSION(num_vars_to_dump) :: averaged_data
@@ -841,7 +865,7 @@ MODULE shared_data
   TYPE(particle_species), DIMENSION(:), POINTER :: ejected_list
   TYPE(particle_species), DIMENSION(:), POINTER :: io_list, io_list_data
 
-  REAL(num), ALLOCATABLE, DIMENSION(:) :: x
+  REAL(num), ALLOCATABLE, DIMENSION(:) :: x, xb
 
   INTEGER, PARAMETER :: data_dir_max_length = 64
   CHARACTER(LEN=data_dir_max_length) :: data_dir, filesystem

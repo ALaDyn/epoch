@@ -1,7 +1,24 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE deck_dist_fn_block
 
   USE strings_advanced
   USE dist_fn
+  USE utilities
 
   IMPLICIT NONE
   SAVE
@@ -45,7 +62,7 @@ CONTAINS
 
   SUBROUTINE dist_fn_block_end
 
-    INTEGER :: i, dir, n, iu, io, ierr
+    INTEGER :: i, dir, n, iu, io
     REAL(num) :: r1, r2
     REAL(num), PARAMETER :: pi2 = 2.0_num * pi
 
@@ -59,7 +76,7 @@ CONTAINS
           WRITE(io,*) 'name not set for "dist_fn" block.'
         ENDDO
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_missing_elements, ierr)
+      CALL abort_code(c_err_missing_elements)
       RETURN
     ENDIF
 
@@ -72,7 +89,7 @@ CONTAINS
               // TRIM(working_block%name) // '"'
         ENDDO
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_missing_elements, ierr)
+      CALL abort_code(c_err_missing_elements)
       RETURN
     ENDIF
 
@@ -87,7 +104,7 @@ CONTAINS
               'distribution function.'
         ENDDO
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_value, ierr)
+      CALL abort_code(c_err_bad_value)
       RETURN
     ENDIF
 
@@ -209,6 +226,46 @@ CONTAINS
       IF (errcode /= c_err_none) RETURN
       working_block%use_restrictions(c_dir_pz) = .TRUE.
       working_block%restrictions(:,c_dir_pz) = (/work1, work2/)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'restrict_en')) THEN
+      CALL split_range(value, work1, work2, errcode)
+      IF (errcode /= c_err_none) RETURN
+      working_block%use_restrictions(c_dir_en) = .TRUE.
+      working_block%restrictions(:,c_dir_en) = (/work1, work2/)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'restrict_gamma_m1')) THEN
+      CALL split_range(value, work1, work2, errcode)
+      IF (errcode /= c_err_none) RETURN
+      working_block%use_restrictions(c_dir_gamma_m1) = .TRUE.
+      working_block%restrictions(:,c_dir_gamma_m1) = (/work1, work2/)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'restrict_xy_angle')) THEN
+      CALL split_range(value, work1, work2, errcode)
+      IF (errcode /= c_err_none) RETURN
+      working_block%use_restrictions(c_dir_xy_angle) = .TRUE.
+      working_block%restrictions(:,c_dir_xy_angle) = (/work1, work2/)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'restrict_yz_angle')) THEN
+      CALL split_range(value, work1, work2, errcode)
+      IF (errcode /= c_err_none) RETURN
+      working_block%use_restrictions(c_dir_yz_angle) = .TRUE.
+      working_block%restrictions(:,c_dir_yz_angle) = (/work1, work2/)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'restrict_zx_angle')) THEN
+      CALL split_range(value, work1, work2, errcode)
+      IF (errcode /= c_err_none) RETURN
+      working_block%use_restrictions(c_dir_zx_angle) = .TRUE.
+      working_block%restrictions(:,c_dir_zx_angle) = (/work1, work2/)
       RETURN
     ENDIF
 

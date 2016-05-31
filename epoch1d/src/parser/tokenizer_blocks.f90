@@ -1,3 +1,20 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2014      Stephan Kuschel <stephan.kuschel@gmail.com>
+! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE tokenizer_blocks
 
   USE strings
@@ -15,7 +32,7 @@ MODULE tokenizer_blocks
   INTEGER :: n_new_constant = 0
   TYPE(string_type), DIMENSION(c_max_new_const) :: new_constant_name
   INTEGER, DIMENSION(c_max_new_const) :: new_constant_code
-  INTEGER :: last_block_type
+  INTEGER :: last_block_type, tokenize_stagger
 
 CONTAINS
 
@@ -128,6 +145,7 @@ CONTAINS
     IF (str_cmp(name, 'atto')) as_constant = c_const_atto
     IF (str_cmp(name, 'time')) as_constant = c_const_time
     IF (str_cmp(name, 'x'))  as_constant = c_const_x
+    IF (str_cmp(name, 'xb')) as_constant = c_const_xb
     IF (str_cmp(name, 'ix')) as_constant = c_const_ix
     IF (str_cmp(name, 'nx')) as_constant = c_const_nx
     IF (str_cmp(name, 'dx')) as_constant = c_const_dx
@@ -166,6 +184,9 @@ CONTAINS
     IF (str_cmp(name, 'dir_yz_angle')) as_constant = c_const_dir_yz_angle
     IF (str_cmp(name, 'dir_zx_angle')) as_constant = c_const_dir_zx_angle
 
+    IF (as_constant == c_const_x .AND. stagger(c_dir_x,tokenize_stagger)) &
+        as_constant = c_const_xb
+
     ! User submitted constant using 'Register'
     DO i = 1, n_new_constant
       IF (str_cmp(TRIM(name), TRIM(new_constant_name(i)%value))) &
@@ -187,6 +208,8 @@ CONTAINS
 
     IF (str_cmp(name, 'y'))  as_constant = c_const_y
     IF (str_cmp(name, 'z'))  as_constant = c_const_z
+    IF (str_cmp(name, 'yb')) as_constant = c_const_yb
+    IF (str_cmp(name, 'zb')) as_constant = c_const_zb
     IF (str_cmp(name, 'iy')) as_constant = c_const_iy
     IF (str_cmp(name, 'iz')) as_constant = c_const_iz
     IF (str_cmp(name, 'ny')) as_constant = c_const_ny
@@ -213,6 +236,11 @@ CONTAINS
     IF (str_cmp(name, 'nprocz')) as_constant = c_const_nprocz
     IF (str_cmp(name, 'dir_y')) as_constant = c_const_dir_y
     IF (str_cmp(name, 'dir_z')) as_constant = c_const_dir_z
+
+    IF (as_constant == c_const_y .AND. stagger(c_dir_y,tokenize_stagger)) &
+        as_constant = c_const_yb
+    IF (as_constant == c_const_z .AND. stagger(c_dir_z,tokenize_stagger)) &
+        as_constant = c_const_zb
 
     IF (warn .AND. as_constant /= c_prc_not_this_type) THEN
       warn = .FALSE.

@@ -1,7 +1,24 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2010 Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE deck_laser_block
 
   USE strings_advanced
   USE laser
+  USE utilities
 
   IMPLICIT NONE
   SAVE
@@ -59,7 +76,7 @@ CONTAINS
     CHARACTER(*), INTENT(IN) :: element, value
     INTEGER :: errcode
     REAL(num) :: dummy
-    INTEGER :: ierr, io, iu
+    INTEGER :: io, iu
 
     errcode = c_err_none
     IF (deck_state == c_ds_first) RETURN
@@ -89,7 +106,7 @@ CONTAINS
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'Cannot set laser properties before boundary is set'
         ENDDO
-        CALL MPI_ABORT(MPI_COMM_WORLD, c_err_required_element_not_set, ierr)
+        CALL abort_code(c_err_required_element_not_set)
       ENDIF
       extended_error_string = 'boundary'
       errcode = c_err_required_element_not_set

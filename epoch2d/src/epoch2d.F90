@@ -1,3 +1,20 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 PROGRAM pic
 
   ! EPOCH2D is a Birdsall and Langdon type PIC code derived from the PSC
@@ -43,7 +60,7 @@ PROGRAM pic
   CHARACTER(LEN=64) :: deck_file = 'input.deck'
   CHARACTER(LEN=*), PARAMETER :: data_dir_file = 'USE_DATA_DIRECTORY'
   CHARACTER(LEN=64) :: timestring
-  REAL(num) :: runtime
+  REAL(num) :: runtime, dt0
 
   step = 0
   time = 0.0_num
@@ -117,13 +134,16 @@ PROGRAM pic
 
   CALL particle_bcs
   CALL efield_bcs
+
   IF (ic_from_restart) THEN
-    CALL bfield_bcs(.TRUE.)
+    dt0 = dt
+    IF (dt_from_restart .GT. 0) dt0 = dt_from_restart
+    time = time + dt0 / 2.0_num
     CALL update_eb_fields_final
     CALL moving_window
   ELSE
-    CALL bfield_final_bcs
     time = time + dt / 2.0_num
+    CALL bfield_final_bcs
   ENDIF
 
   ! Setup particle migration between species
@@ -187,10 +207,9 @@ PROGRAM pic
     step = step + 1
     time = time + dt / 2.0_num
     CALL output_routines(step)
-    time = time - dt / 2.0_num
+    time = time + dt / 2.0_num
 
     CALL update_eb_fields_final
-    time = time + dt
 
     CALL moving_window
 

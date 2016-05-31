@@ -1,7 +1,25 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2014-2015 Stephan Kuschel <stephan.kuschel@gmail.com>
+! Copyright (C) 2009-2010 Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE evaluator_blocks
 
   USE custom_parser
   USE stack
+  USE strings
 
   IMPLICIT NONE
 
@@ -161,6 +179,12 @@ CONTAINS
       RETURN
     ENDIF
 
+    IF (opcode == c_const_xb) THEN
+      CALL push_on_eval(xb(ix))
+      err = err_simplify
+      RETURN
+    ENDIF
+
     IF (opcode == c_const_ix) THEN
       CALL push_on_eval(REAL(ix, num))
       err = err_simplify
@@ -173,6 +197,12 @@ CONTAINS
       RETURN
     ENDIF
 
+    IF (opcode == c_const_yb) THEN
+      CALL push_on_eval(yb(iy))
+      err = err_simplify
+      RETURN
+    ENDIF
+
     IF (opcode == c_const_iy) THEN
       CALL push_on_eval(REAL(iy, num))
       err = err_simplify
@@ -181,6 +211,12 @@ CONTAINS
 
     IF (opcode == c_const_z) THEN
       CALL push_on_eval(z(iz))
+      err = err_simplify
+      RETURN
+    ENDIF
+
+    IF (opcode == c_const_zb) THEN
+      CALL push_on_eval(zb(iy))
       err = err_simplify
       RETURN
     ENDIF
@@ -521,10 +557,9 @@ CONTAINS
     INTEGER, INTENT(INOUT) :: err
     REAL(num), DIMENSION(4) :: values
     REAL(num) :: val
-    INTEGER :: count, ipoint, n, err_simplify
-    LOGICAL :: done
+    INTEGER :: count, ipoint, ipoint_val, n, err_simplify
     REAL(num), DIMENSION(:), ALLOCATABLE :: var_length_values
-    REAL(num) :: point, t0
+    REAL(num) :: point, t0, p0, p1, x0, x1
 
     err = c_err_none
     err_simplify = c_err_none
@@ -701,23 +736,46 @@ CONTAINS
       ! For now, not too bad for small count
 
       ! var_length_values(0) = position in domain
-      done = .FALSE.
       point = var_length_values(0)
 
-      DO ipoint = 1, count-1
-        IF (point >= var_length_values(ipoint*2-1) &
-            .AND. point <= var_length_values(ipoint*2+1)) THEN
-          val = (point-var_length_values(ipoint*2-1)) &
-              / (var_length_values(ipoint*2+1)-var_length_values(ipoint*2-1)) &
-              * (var_length_values(ipoint*2+2) - var_length_values(ipoint*2)) &
-              + var_length_values(ipoint*2)
-          done = .TRUE.
-          CALL push_on_eval(val)
-          EXIT
-        ENDIF
-      ENDDO
+      p0 = var_length_values(1)
+      p1 = var_length_values(count*2-1)
+
+      IF (point < p0) THEN
+        ipoint_val = 1
+        p1 = var_length_values(3)
+        IF (ABS(point - p0) > ABS(p1 - p0)) err = c_err_bad_value
+      ELSE IF (point > p1) THEN
+        ipoint_val = count - 1
+        p0 = var_length_values(count - 3)
+        IF (ABS(point - p1) > ABS(p1 - p0)) err = c_err_bad_value
+      ELSE
+        DO ipoint = 1, count-1
+          p0 = var_length_values(ipoint*2-1)
+          p1 = var_length_values(ipoint*2+1)
+          IF (point >= p0 .AND. point <= p1) THEN
+            ipoint_val = ipoint
+            EXIT
+          ENDIF
+        ENDDO
+      ENDIF
+
+      IF (err /= c_err_none .AND. rank == 0) THEN
+        PRINT'('' WARNING: '', g11.4, &
+            & '' not within interpolation range ('', g11.4, '','', g11.4, &
+            & '')'')', point, var_length_values(1), var_length_values(count*2-1)
+      ENDIF
+
+      err = c_err_none
+
+      p0 = var_length_values(ipoint_val*2-1)
+      x0 = var_length_values(ipoint_val*2  )
+      p1 = var_length_values(ipoint_val*2+1)
+      x1 = var_length_values(ipoint_val*2+2)
       DEALLOCATE(var_length_values)
-      IF (.NOT. done) err = c_err_bad_value
+
+      val = (point - p0) / (p1 - p0) * (x1 - x0) + x0
+      CALL push_on_eval(val)
       RETURN
     ENDIF
 
@@ -834,5 +892,36 @@ CONTAINS
     err = c_err_unknown_element
 
   END SUBROUTINE do_functions
+
+
+
+  SUBROUTINE do_sanity_check(opcode, err)
+
+    INTEGER, INTENT(IN) :: opcode
+    INTEGER, INTENT(INOUT) :: err
+    REAL(num) :: val
+    INTEGER :: stack_point, nargs
+    CHARACTER(LEN=64) :: arg1, arg2
+
+    err = c_err_none
+
+    IF (opcode == c_func_interpolate) THEN
+      CALL get_stack_point_and_value(stack_point, val)
+      nargs = 2 * NINT(val) + 2
+      IF (stack_point /= nargs) THEN
+        IF (rank == 0) THEN
+          CALL integer_as_string(stack_point, arg1)
+          CALL integer_as_string(nargs, arg2)
+          PRINT*, 'ERROR: Interpolation function has ', TRIM(arg1), &
+              ' arguments but should have ', TRIM(arg2)
+        ENDIF
+        err = c_err_bad_value
+      ENDIF
+      RETURN
+    ENDIF
+
+    err = c_err_unknown_element
+
+  END SUBROUTINE do_sanity_check
 
 END MODULE evaluator_blocks

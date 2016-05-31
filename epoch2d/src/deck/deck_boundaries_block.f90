@@ -1,6 +1,23 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 MODULE deck_boundaries_block
 
   USE strings_advanced
+  USE utilities
 
   IMPLICIT NONE
   SAVE
@@ -173,7 +190,7 @@ CONTAINS
   FUNCTION boundary_block_check() RESULT(errcode)
 
     INTEGER :: errcode
-    INTEGER :: index, io, iu, ierr
+    INTEGER :: index, io, iu
     INTEGER, PARAMETER :: nbase = boundary_block_nbase
     LOGICAL :: error
 
@@ -226,7 +243,7 @@ CONTAINS
               ' of the domain.'
         ENDDO
       ENDIF
-      CALL MPI_ABORT(MPI_COMM_WORLD, c_err_bad_value, ierr)
+      CALL abort_code(c_err_bad_value)
     ENDIF
 
   END FUNCTION boundary_block_check
