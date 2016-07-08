@@ -48,6 +48,7 @@ PROGRAM pic
   USE collisions
   USE particle_migration
   USE ionise
+  USE deltaf_setup
 #ifdef PHOTONS
   USE photons
 #endif
@@ -119,6 +120,7 @@ PROGRAM pic
     time = 0.0_num
   ENDIF
 
+  CALL load_deltaf
   CALL manual_load
   CALL initialise_window ! window.f90
   CALL set_dt

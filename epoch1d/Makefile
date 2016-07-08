@@ -273,9 +273,9 @@ SRCFILES = balance.F90 boundary.f90 calc_df.F90 collisions.F90 \
   deck_fields_block.f90 deck_io_block.F90 deck_io_global_block.F90 \
   deck_laser_block.f90 deck_particle_probe_block.F90 deck_qed_block.F90 \
   deck_species_block.F90 deck_subset_block.f90 deck_window_block.f90 \
-  diagnostics.F90 dist_fn.F90 epoch1d.F90 evaluate.F90 evaluator_blocks.F90 \
-  fields.f90 finish.f90 helper.F90 ic_module.F90 ionise.F90 iterators.F90 \
-  laser.f90 mpi_routines.F90 mpi_subtype_control.f90 numerics.f90 \
+  deltaf_setup.F90 diagnostics.F90 dist_fn.F90 epoch1d.F90 evaluate.F90 \
+  evaluator_blocks.F90 fields.f90 finish.f90 helper.F90 ic_module.F90 ionise.F90 \
+  iterators.F90 laser.f90 mpi_routines.F90 mpi_subtype_control.f90 numerics.f90 \
   particle_migration.F90 particle_pointer_advance.f90 particle_temperature.F90 \
   particles.F90 partlist.F90 photons.F90 prefetch.F90 probes.F90 \
   random_generator.f90 redblack_module.f90 setup.F90 shape_functions.F90 \
@@ -433,8 +433,8 @@ diagnostics.o: diagnostics.F90 calc_df.o deck.o dist_fn.o iterators.o probes.o \
   random_generator.o setup.o shared_data.o strings.o timer.o version_data.o \
   window.o $(SDFMOD) $(ENCODED_SOURCE)
 dist_fn.o: dist_fn.F90 particles.o mpi_subtype_control.o $(SDFMOD)
-epoch1d.o: epoch1d.F90 balance.o collisions.o deck.o diagnostics.o fields.o \
-  finish.o helper.o ic_module.o ionise.o mpi_routines.o particle_migration.o \
+epoch1d.o: epoch1d.F90 balance.o collisions.o deck.o deltaf_setup.o diagnostics.o \
+  fields.o finish.o helper.o ic_module.o ionise.o mpi_routines.o particle_migration.o \
   particles.o photons.o setup.o split_particle.o welcome.o window.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
 evaluate.o: evaluate.F90 evaluator_blocks.o shunt.o utilities.o
