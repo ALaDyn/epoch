@@ -429,6 +429,23 @@ MODULE shared_parser_data
 
   INTEGER, PARAMETER :: c_func_custom_lowbound = 4096
 
+  !This type represents parameters given to the parser.
+  !It can be extended by a developer freely
+  !It is the responsibility of the developer to ensure that a parameter is
+  !Specified when needed
+
+  !If you set the use_grid_position parameter to .FALSE. then the deck parser
+  !will evaluate position x, y, z as being at the location pack_pos(1,2,3)
+  !rather than x(pack%ix), y(pack%iy), z(pack%iz). It is essential that the
+  !ix, iy, iz, parameters are still set to match, because other functions
+  !will still use them
+  TYPE parameter_pack
+    LOGICAL :: use_grid_position = .TRUE.
+    INTEGER :: pack_ix = 1, pack_iy = 1, pack_iz = 1
+    REAL(num), DIMENSION(c_ndims) :: pack_pos = 0.0_num
+    REAL(num), DIMENSION(3) :: pack_p
+  END TYPE parameter_pack
+
   TYPE stack_element
     INTEGER :: ptype
     INTEGER :: value

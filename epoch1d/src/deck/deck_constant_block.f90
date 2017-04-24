@@ -39,6 +39,7 @@ CONTAINS
 
     INTEGER :: i, errcode
     REAL(num) :: dc
+    TYPE(parameter_pack) :: parameters
 
     IF (.NOT.print_deck_constants) RETURN
     IF (rank /= 0) RETURN
@@ -52,8 +53,7 @@ CONTAINS
 
     DO i = 1, n_deck_constants
       errcode = 0
-      dc = evaluate_at_point(deck_constant_list(i)%execution_stream, &
-          1, errcode)
+      dc = evaluate(deck_constant_list(i)%execution_stream, errcode)
       WRITE(du,'("  ", A, " = ", G18.11)') TRIM(deck_constant_list(i)%name), dc
     ENDDO
 

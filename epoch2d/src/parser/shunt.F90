@@ -729,8 +729,12 @@ CONTAINS
     TYPE(primitive_stack), INTENT(INOUT) :: input_stack
     INTEGER :: i, err, ierr
     TYPE(stack_element) :: block
+    TYPE(parameter_pack) :: parameters
 
     CALL eval_reset()
+
+    parameters%pack_ix = 1
+    parameters%pack_iy = 1
 
     DO i = 1, input_stack%stack_point
       err = c_err_none
@@ -743,12 +747,12 @@ CONTAINS
         CALL do_operator(block%value, err)
       ELSE IF (block%ptype == c_pt_constant &
           .OR. block%ptype == c_pt_default_constant) THEN
-        CALL do_constant(block%value, .FALSE., 1, 1, err)
+        CALL do_constant(block%value, .FALSE., parameters, err)
       ELSE IF (block%ptype == c_pt_function) THEN
         IF (block%value == c_func_interpolate) THEN
           CALL do_sanity_check(block%value, err)
         ELSE
-          CALL do_functions(block%value, .FALSE., 1, 1, err)
+          CALL do_functions(block%value, .FALSE., parameters, err)
         ENDIF
       ELSE
         ! Not yet implemented. Reset the stack and exit

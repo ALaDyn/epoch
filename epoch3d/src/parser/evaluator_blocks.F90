@@ -154,9 +154,10 @@ CONTAINS
 
 
 
-  SUBROUTINE do_constant(opcode, simplify, ix, iy, iz, err)
+  SUBROUTINE do_constant(opcode, simplify, parameters, err)
 
-    INTEGER, INTENT(IN) :: opcode, ix, iy, iz
+    INTEGER, INTENT(IN) :: opcode
+    TYPE(parameter_pack), INTENT(IN) :: parameters
     LOGICAL, INTENT(IN) :: simplify
     INTEGER, INTENT(INOUT) :: err
     INTEGER :: err_simplify
@@ -174,86 +175,134 @@ CONTAINS
     ENDIF
 
     IF (opcode == c_const_x) THEN
-      CALL push_on_eval(x(ix))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(ABS(x(parameters%pack_ix)))
+      ELSE
+        CALL push_on_eval(ABS(parameters%pack_pos(1)))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_xb) THEN
-      CALL push_on_eval(xb(ix))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(ABS(xb(parameters%pack_ix)))
+      ELSE
+        CALL push_on_eval(ABS(parameters%pack_pos(1)))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_ix) THEN
-      CALL push_on_eval(REAL(ix, num))
+      CALL push_on_eval(REAL(parameters%pack_ix, num))
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_y) THEN
-      CALL push_on_eval(y(iy))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(ABS(y(parameters%pack_iy)))
+      ELSE
+        CALL push_on_eval(ABS(parameters%pack_pos(2)))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_yb) THEN
-      CALL push_on_eval(yb(iy))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(ABS(yb(parameters%pack_iy)))
+      ELSE
+        CALL push_on_eval(ABS(parameters%pack_pos(2)))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_iy) THEN
-      CALL push_on_eval(REAL(iy, num))
+      CALL push_on_eval(REAL(parameters%pack_iy, num))
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_z) THEN
-      CALL push_on_eval(z(iz))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(ABS(z(parameters%pack_iz)))
+      ELSE
+        CALL push_on_eval(ABS(parameters%pack_pos(3)))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_zb) THEN
-      CALL push_on_eval(zb(iy))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(ABS(zb(parameters%pack_iz)))
+      ELSE
+        CALL push_on_eval(ABS(parameters%pack_pos(3)))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_iz) THEN
-      CALL push_on_eval(REAL(iz, num))
+      CALL push_on_eval(REAL(parameters%pack_iz, num))
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_r_xy) THEN
-      CALL push_on_eval(SQRT(x(ix)**2 + y(iy)**2))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(SQRT(x(parameters%pack_ix)**2 &
+            + y(parameters%pack_iy)**2))
+      ELSE
+        CALL push_on_eval(SQRT(parameters%pack_pos(1)**2 &
+            + parameters%pack_pos(2)**2))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_r_xz) THEN
-      CALL push_on_eval(SQRT(x(ix)**2 + z(iz)**2))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(SQRT(x(parameters%pack_ix)**2 &
+            + z(parameters%pack_iz)**2))
+      ELSE
+        CALL push_on_eval(SQRT(parameters%pack_pos(1)**2 &
+            + parameters%pack_pos(3)**2))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_r_yz) THEN
-      CALL push_on_eval(SQRT(y(iy)**2 + z(iz)**2))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(SQRT(y(parameters%pack_iy)**2 &
+            + z(parameters%pack_iz)**2))
+      ELSE
+        CALL push_on_eval(SQRT(parameters%pack_pos(2)**2 &
+            + parameters%pack_pos(3)**2))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_const_r_xyz) THEN
-      CALL push_on_eval(SQRT(x(ix)**2 + y(iy)**2 + z(iz)**2))
+      IF (parameters%use_grid_position) THEN
+        CALL push_on_eval(SQRT(x(parameters%pack_ix)**2 &
+            + y(parameters%pack_iy)**2 + z(parameters%pack_iz)**2))
+      ELSE
+        CALL push_on_eval(SQRT(parameters%pack_pos(1)**2 &
+            + parameters%pack_pos(2)**2 + parameters%pack_pos(3)**2))
+      ENDIF
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode >= c_const_custom_lowbound) THEN
       ! Check for custom constants
-      val = custom_constant(opcode, ix, iy, iz, err)
+      val = custom_constant(opcode, parameters, err)
       IF (IAND(err, c_err_unknown_element) == 0) CALL push_on_eval(val)
       err = err_simplify
       RETURN
@@ -550,9 +599,10 @@ CONTAINS
 
 
 
-  SUBROUTINE do_functions(opcode, simplify, ix, iy, iz, err)
+  SUBROUTINE do_functions(opcode, simplify, parameters, err)
 
-    INTEGER, INTENT(IN) :: opcode, ix, iy, iz
+    INTEGER, INTENT(IN) :: opcode
+    TYPE(parameter_pack), INTENT(IN) :: parameters
     LOGICAL, INTENT(IN) :: simplify
     INTEGER, INTENT(INOUT) :: err
     REAL(num), DIMENSION(4) :: values
@@ -568,28 +618,32 @@ CONTAINS
 
     IF (opcode == c_func_rho) THEN
       CALL get_values(1, values)
-      CALL push_on_eval(initial_conditions(NINT(values(1)))%density(ix, iy, iz))
+      CALL push_on_eval(initial_conditions(NINT(values(1)))%&
+          density(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz))
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_func_tempx) THEN
       CALL get_values(1, values)
-      CALL push_on_eval(initial_conditions(NINT(values(1)))%temp(ix, iy, iz, 1))
+      CALL push_on_eval(initial_conditions(NINT(values(1)))%&
+          temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 1))
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_func_tempy) THEN
       CALL get_values(1, values)
-      CALL push_on_eval(initial_conditions(NINT(values(1)))%temp(ix, iy, iz, 2))
+      CALL push_on_eval(initial_conditions(NINT(values(1)))%&
+          temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 2))
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode == c_func_tempz) THEN
       CALL get_values(1, values)
-      CALL push_on_eval(initial_conditions(NINT(values(1)))%temp(ix, iy, iz, 3))
+      CALL push_on_eval(initial_conditions(NINT(values(1)))%&
+          temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 3))
       err = err_simplify
       RETURN
     ENDIF
@@ -597,7 +651,8 @@ CONTAINS
     IF (opcode == c_func_tempx_ev) THEN
       CALL get_values(1, values)
       CALL push_on_eval(kb / ev &
-          * initial_conditions(NINT(values(1)))%temp(ix, iy, iz, 1))
+          * initial_conditions(NINT(values(1)))%&
+          temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 1))
       err = err_simplify
       RETURN
     ENDIF
@@ -605,7 +660,8 @@ CONTAINS
     IF (opcode == c_func_tempy_ev) THEN
       CALL get_values(1, values)
       CALL push_on_eval(kb / ev &
-          * initial_conditions(NINT(values(1)))%temp(ix, iy, iz, 2))
+          * initial_conditions(NINT(values(1)))%&
+          temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 2))
       err = err_simplify
       RETURN
     ENDIF
@@ -613,14 +669,15 @@ CONTAINS
     IF (opcode == c_func_tempz_ev) THEN
       CALL get_values(1, values)
       CALL push_on_eval(kb / ev &
-          * initial_conditions(NINT(values(1)))%temp(ix, iy, iz, 3))
+          * initial_conditions(NINT(values(1)))%&
+          temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 3))
       err = err_simplify
       RETURN
     ENDIF
 
     IF (opcode >= c_func_custom_lowbound) THEN
       ! Check for custom functions
-      val = custom_function(opcode, ix, iy, iz, err)
+      val = custom_function(opcode, parameters, err)
       IF (IAND(err, c_err_unknown_element) == 0) CALL push_on_eval(val)
       err = err_simplify
       RETURN

@@ -283,6 +283,7 @@ CONTAINS
     CHARACTER(LEN=string_length) :: filename, mult_string
     LOGICAL :: got_file, dump
     INTEGER :: i, j, io, iu, n
+    TYPE(parameter_pack) :: parameters
 
     errcode = c_err_none
     IF (value == blank .OR. element == blank) RETURN
@@ -305,7 +306,8 @@ CONTAINS
         NULLIFY(species_ionisation_energies)
         CALL initialise_stack(stack)
         CALL tokenize(value, stack, errcode)
-        CALL evaluate_and_return_all(stack, 0, &
+        parameters%pack_ix = 0
+        CALL evaluate_and_return_all(stack, parameters, &
             n_secondary_species_in_block, species_ionisation_energies, errcode)
         CALL deallocate_stack(stack)
       ENDIF
@@ -866,7 +868,7 @@ CONTAINS
           CALL tokenize(mult_string, stack, errcode)
 
       ! Sanity check
-      array(1) = evaluate_at_point(stack, 1, errcode)
+      array(1) = evaluate(stack, errcode)
       IF (errcode /= c_err_none) THEN
         IF (rank == 0) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
@@ -879,7 +881,8 @@ CONTAINS
       ENDIF
 
       DO ix = -2, nx+3
-        array(ix) = evaluate_at_point(stack, ix, errcode)
+        parameters%pack_ix = ix
+        array(ix) = evaluate_with_parameters(stack, parameters, errcode)
       ENDDO
     ENDIF
 
