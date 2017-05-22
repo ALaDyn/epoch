@@ -148,11 +148,13 @@ CONTAINS
   SUBROUTINE insert_particles
 
     TYPE(particle), POINTER :: current
-    TYPE(particle_list) :: append_list
+    TYPE(particle_list), POINTER :: append_list
     INTEGER :: ispecies, i
     INTEGER(i8) :: ipart, npart_per_cell, n0
-    REAL(num) :: temp_local, drift_local, npart_frac
+    REAL(num) :: temp_local, drift_local, npart_frac, mass
+    REAL(num),DIMENSION(3) :: drift
     TYPE(parameter_pack) :: parameters
+    TYPE(particle_species), POINTER :: species
 
     ! This subroutine injects particles at the right hand edge of the box
 
@@ -162,6 +164,7 @@ CONTAINS
     errcode = c_err_none
 
     DO ispecies = 1, n_species
+      ALLOCATE(append_list)
       CALL create_empty_partlist(append_list)
       npart_per_cell = FLOOR(species_list(ispecies)%npart_per_cell, KIND=i8)
       npart_frac = species_list(ispecies)%npart_per_cell - npart_per_cell
@@ -172,35 +175,64 @@ CONTAINS
       ENDIF
 
       parameters%pack_ix = nx
-      DO i = 1, 3
-        temperature(i) = evaluate_with_parameters( &
-            species_list(ispecies)%temperature_function(i), parameters, errcode)
-        drift(i) = evaluate_with_parameters( &
-            species_list(ispecies)%drift_function(i), parameters, errcode)
-      ENDDO
+
+      !Even for high resolution window operation, sample cell centred
+      !density to determine if cell is 'empty'
       density = evaluate_with_parameters( &
           species_list(ispecies)%density_function, parameters, errcode)
-      IF (density > initial_conditions(ispecies)%density_max) &
-          density = initial_conditions(ispecies)%density_max
+      IF (density > species_list(ispecies)%initial_conditions%density_max) &
+          density = species_list(ispecies)%initial_conditions%density_max
 
-      IF (density < initial_conditions(ispecies)%density_min) CYCLE
-
+      IF (density < species_list(ispecies)%initial_conditions%density_min) &
+          CYCLE
       DO ipart = n0, npart_per_cell
         ! Place extra particle based on probability
         IF (ipart == 0) THEN
           IF (npart_frac < random()) CYCLE
         ENDIF
         CALL create_particle(current)
+#ifdef PER_PARTICLE_CHARGE_MASS
+        current%mass = species_list(ispecies)%mass
+        current%charge = species_list(ispecies)%charge
+        mass = current%mass
+#else
+        mass = species_list(ispecies)%mass
+#endif
         current%part_pos = x_grid_max + dx + (random() - 0.5_num) * dx
+        parameters%use_grid_position=.FALSE.
+        parameters%pack_pos = current%part_pos
+        !Setup particle density at the exact position of the new particle
+        density = evaluate_with_parameters( &
+            species_list(ispecies)%density_function, parameters, errcode)
+        IF (density > species_list(ispecies)%initial_conditions%density_max) &
+            density = species_list(ispecies)%initial_conditions%density_max
 
-        DO i = 1, 3
-          temp_local = temperature(i)
-          drift_local = drift(i)
-          current%part_p(i) = momentum_from_temperature(&
-              species_list(ispecies)%mass, temp_local, drift_local)
-        ENDDO
-
+        IF (density < species_list(ispecies)%initial_conditions%density_min) &
+            CYCLE
         current%weight = dx / species_list(ispecies)%npart_per_cell * density
+
+        IF (.NOT. species_list(ispecies)%dist_fn_set) THEN
+          DO i = 1, 3
+            temperature(i) = evaluate_with_parameters( &
+                species_list(ispecies)%temperature_function(i), parameters, &
+                errcode)
+            drift(i) = evaluate_with_parameters( &
+                species_list(ispecies)%drift_function(i), parameters, errcode)
+          ENDDO
+          IF (species_list(ispecies)%use_maxwell_juettner) THEN
+            current%part_p = momentum_from_temperature_relativistic(&
+                mass, temperature, &
+                species_list(ispecies)%fractional_tail_cutoff)
+          ELSE
+            DO i = 1, 3
+              temp_local = temperature(i)
+              current%part_p(i) = momentum_from_temperature(&
+                  mass, temp_local)
+            ENDDO
+          ENDIF
+          CALL particle_drift_lorentz_transform(current,mass,drift)
+        ENDIF
+
 #ifdef PARTICLE_DEBUG
         current%processor = rank
         current%processor_at_t0 = rank
@@ -208,10 +240,16 @@ CONTAINS
         CALL add_particle_to_partlist(append_list, current)
       ENDDO
 
+      IF (species_list(ispecies)%dist_fn_set) THEN
+        species=>species_list(ispecies)
+        CALL sample_partlist_from_distfn(species, append_list)
+      ENDIF
       CALL append_partlist(species_list(ispecies)%attached_list, append_list)
+      DEALLOCATE(append_list)
     ENDDO
 
   END SUBROUTINE insert_particles
+
 
 
 

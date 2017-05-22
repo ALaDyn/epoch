@@ -344,6 +344,22 @@ CONTAINS
 
     IF (deck_state == c_ds_first) RETURN
 
+    !This sets up whether or not to use the MJ sampler for a species.
+    !It could go in the first deck pass, but that requires more temporary
+    !variables and seems unnecessary
+    IF (str_cmp(element, 'use_maxwell_juettner') &
+        .OR. str_cmp(element, 'use_maxwell_juttner')) THEN
+      species_list(species_id)%use_maxwell_juettner = &
+          as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'fractional_tail_cutoff')) THEN
+      species_list(species_id)%fractional_tail_cutoff = &
+          as_real_print(value, element, errcode)
+      RETURN
+    ENDIF
+
     ! *************************************************************
     ! This section identifies a species. Generic
     ! but currently only used in photon production
@@ -523,12 +539,12 @@ CONTAINS
     IF (str_cmp(element, 'density_min') .OR. str_cmp(element, 'minrho')) THEN
       dmin = as_real_print(value, element, errcode)
       IF (dmin <= 0.0_num) dmin = EPSILON(1.0_num)
-      initial_conditions(species_id)%density_min = dmin
+      species_list(species_id)%initial_conditions%density_min = dmin
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'density_max') .OR. str_cmp(element, 'maxrho')) THEN
-      initial_conditions(species_id)%density_max = &
+      species_list(species_id)%initial_conditions%density_max = &
           as_real_print(value, element, errcode)
       RETURN
     ENDIF
@@ -546,7 +562,7 @@ CONTAINS
       ENDIF
 
       CALL fill_array(species_list(species_id)%density_function, &
-          initial_conditions(species_id)%density, &
+          species_list(species_id)%initial_conditions%density, &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -554,7 +570,7 @@ CONTAINS
     IF (str_cmp(element, 'drift_x')) THEN
       n = 1
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          initial_conditions(species_id)%drift(:,n), &
+          species_list(species_id)%initial_conditions%drift(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -562,7 +578,7 @@ CONTAINS
     IF (str_cmp(element, 'drift_y')) THEN
       n = 2
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          initial_conditions(species_id)%drift(:,n), &
+          species_list(species_id)%initial_conditions%drift(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -570,8 +586,36 @@ CONTAINS
     IF (str_cmp(element, 'drift_z')) THEN
       n = 3
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          initial_conditions(species_id)%drift(:,n), &
+          species_list(species_id)%initial_conditions%drift(:,n), &
           mult, mult_string, element, value, filename, got_file)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn')) THEN
+      species_list(species_id)%dist_fn_set = .TRUE.
+      CALL initialise_stack(species_list(species_id)%dist_fn)
+      CALL tokenize(value, species_list(species_id)%dist_fn, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn_px_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(1))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(1))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(1), errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn_py_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(2))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(2))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(2), errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn_pz_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(3))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(3))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(3), errcode)
       RETURN
     ENDIF
 
@@ -583,22 +627,22 @@ CONTAINS
 
       n = 1
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,n), &
+          species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       n = 2
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,n), &
+          species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       n = 3
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,n), &
+          species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
 
       debug_mode = .FALSE.
-      initial_conditions(species_id)%temp(:,2) = &
-          initial_conditions(species_id)%temp(:,n)
-      initial_conditions(species_id)%temp(:,3) = &
-          initial_conditions(species_id)%temp(:,n)
+      species_list(species_id)%initial_conditions%temp(:,2) = &
+          species_list(species_id)%initial_conditions%temp(:,1)
+      species_list(species_id)%initial_conditions%temp(:,3) = &
+          species_list(species_id)%initial_conditions%temp(:,1)
       RETURN
     ENDIF
 
@@ -608,7 +652,7 @@ CONTAINS
 
       n = 1
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,n), &
+          species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -619,7 +663,7 @@ CONTAINS
 
       n = 2
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,n), &
+          species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -630,7 +674,7 @@ CONTAINS
 
       n = 3
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,n), &
+          species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -840,6 +884,7 @@ CONTAINS
     TYPE(stack_element) :: block
     TYPE(primitive_stack) :: stack
     INTEGER :: io, iu, ix
+    TYPE(parameter_pack) :: parameters
 
     CALL initialise_stack(stack)
     IF (got_file) THEN
@@ -861,6 +906,7 @@ CONTAINS
       CALL push_to_stack(stack, block)
       CALL load_block(element, block)
       CALL push_to_stack(stack, block)
+      stack%should_simplify = .FALSE.
       IF (ABS(mult - 1.0_num) > c_tiny) array = mult * array
     ELSE
       CALL tokenize(value, stack, errcode)

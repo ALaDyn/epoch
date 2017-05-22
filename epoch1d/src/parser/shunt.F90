@@ -64,6 +64,10 @@ CONTAINS
     block%numerical_data = 0.0_num
     work = 0
 
+#ifdef PARSER_DEBUG
+    block%text = name
+#endif
+
     IF (LEN(TRIM(name)) == 0) THEN
       block%ptype = c_pt_null
       block%value = 0
@@ -460,9 +464,6 @@ CONTAINS
 
     ! Populate the block
     CALL load_block(current, block)
-#ifdef PARSER_DEBUG
-    block%text = TRIM(current)
-#endif
     IF (block%ptype == c_pt_bad) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
@@ -603,10 +604,6 @@ CONTAINS
 
     ! Populate the block
     CALL load_block(current, block)
-#ifdef PARSER_DEBUG
-    block%text = TRIM(current)
-    PRINT *, block%ptype, TRIM(current)
-#endif
     IF (block%ptype == c_pt_bad) THEN
       DO iu = 1, nio_units ! Print to stdout and to file
         io = io_units(iu)

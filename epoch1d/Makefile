@@ -442,7 +442,7 @@ numerics.o: numerics.f90 shared_data.o
 particle_migration.o: particle_migration.F90 calc_df.o partlist.o prefetch.o
 particle_pointer_advance.o: particle_pointer_advance.f90 shared_data.o
 particle_temperature.o: particle_temperature.F90 random_generator.o \
-  shared_data.o
+  evaluate.o shared_data.o
 particles.o: particles.F90 boundary.o current_smooth.o partlist.o prefetch.o
 partlist.o: partlist.F90 random_generator.o shared_data.o
 photons.o: photons.F90 partlist.o

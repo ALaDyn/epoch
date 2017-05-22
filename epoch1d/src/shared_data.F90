@@ -577,6 +577,17 @@ MODULE shared_data
     TYPE(particle_list), POINTER :: next, prev
   END TYPE particle_list
 
+
+  ! Represents the initial conditions of a species
+  TYPE initial_condition_block
+    REAL(num), DIMENSION(:), POINTER :: density
+    REAL(num), DIMENSION(:,:), POINTER :: temp
+    REAL(num), DIMENSION(:,:), POINTER :: drift
+
+    REAL(num) :: density_min
+    REAL(num) :: density_max
+  END TYPE initial_condition_block
+
   ! Object representing a particle species
   TYPE particle_species
     ! Core properties
@@ -592,6 +603,10 @@ MODULE shared_data
     INTEGER(i8) :: count
     TYPE(particle_list) :: attached_list
     LOGICAL :: immobile
+
+    !Parameters for relativistic particle loader
+    REAL(num) :: fractional_tail_cutoff
+    LOGICAL :: use_maxwell_juettner
 
 #ifndef NO_TRACER_PARTICLES
     LOGICAL :: tracer
@@ -611,6 +626,11 @@ MODULE shared_data
     REAL(num) :: npart_per_cell
     TYPE(primitive_stack) :: density_function, temperature_function(3)
     TYPE(primitive_stack) :: drift_function(3)
+
+    ! Non thermal distribution functions
+    LOGICAL :: dist_fn_set = .FALSE.
+    TYPE(primitive_stack) :: dist_fn
+    TYPE(primitive_stack) :: dist_fn_range(3)
 
     ! Thermal boundaries
     REAL(num), DIMENSION(:), POINTER :: ext_temp_x_min, ext_temp_x_max
@@ -632,23 +652,15 @@ MODULE shared_data
     ! Particle migration
     TYPE(particle_species_migration) :: migrate
 
+    !Grid based initial condition
+    TYPE(initial_condition_block) :: initial_conditions
+
   END TYPE particle_species
 
   !----------------------------------------------------------------------------
   ! Initial conditions
   !----------------------------------------------------------------------------
-  ! Represents the initial conditions of a species
-  TYPE initial_condition_block
-    REAL(num), DIMENSION(:), POINTER :: density
-    REAL(num), DIMENSION(:,:), POINTER :: temp
-    REAL(num), DIMENSION(:,:), POINTER :: drift
-
-    REAL(num) :: density_min
-    REAL(num) :: density_max
-  END TYPE initial_condition_block
-
   INTEGER :: deck_state
-  TYPE(initial_condition_block), DIMENSION(:), ALLOCATABLE :: initial_conditions
 
   !----------------------------------------------------------------------------
   ! file handling

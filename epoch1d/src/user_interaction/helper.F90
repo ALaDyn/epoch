@@ -37,11 +37,11 @@ CONTAINS
 
       IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_x_min(1:3) = &
-            initial_conditions(ispecies)%temp(1,1:3)
+            species_list(ispecies)%initial_conditions%temp(1,1:3)
       ENDIF
       IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_x_max(1:3) = &
-            initial_conditions(ispecies)%temp(nx,1:3)
+            species_list(ispecies)%initial_conditions%temp(nx,1:3)
       ENDIF
     ENDDO
 
@@ -60,23 +60,27 @@ CONTAINS
       species => species_list(ispecies)
 
 #ifndef PER_SPECIES_WEIGHT
-      CALL setup_particle_density(initial_conditions(ispecies)%density, &
-          species, initial_conditions(ispecies)%density_min, &
-          initial_conditions(ispecies)%density_max)
+      CALL setup_particle_density(species, &
+          species_list(ispecies)%initial_conditions%density_min, &
+          species_list(ispecies)%initial_conditions%density_max)
 #else
-      CALL non_uniform_load_particles(initial_conditions(ispecies)%density, &
-          species, initial_conditions(ispecies)%density_min, &
-          initial_conditions(ispecies)%density_max)
+      CALL non_uniform_load_particles(species, &
+          species_list(ispecies)%initial_conditions%density_min, &
+          species_list(ispecies)%initial_conditions%density_max)
 #endif
-      CALL setup_particle_temperature(&
-          initial_conditions(ispecies)%temp(:,1), c_dir_x, species, &
-          initial_conditions(ispecies)%drift(:,1))
-      CALL setup_particle_temperature(&
-          initial_conditions(ispecies)%temp(:,2), c_dir_y, species, &
-          initial_conditions(ispecies)%drift(:,2))
-      CALL setup_particle_temperature(&
-          initial_conditions(ispecies)%temp(:,3), c_dir_z, species, &
-          initial_conditions(ispecies)%drift(:,3))
+      IF (.NOT. species%dist_fn_set) THEN
+        IF (species%use_maxwell_juettner) THEN
+          IF (rank == 0) THEN
+            PRINT *,'Using Maxwell-Juettner distribution for species ' // &
+                TRIM(species%name) // '. This might be very slow'
+          ENDIF
+          CALL setup_particle_temperature_relativistic(species)
+        ELSE
+          CALL setup_particle_temperature(species)
+        ENDIF
+      ELSE
+          CALL setup_particle_distfn(species)
+      ENDIF
     ENDDO
 
     IF (rank == 0) THEN
@@ -98,21 +102,22 @@ CONTAINS
 
 
 
+
   SUBROUTINE allocate_ic
 
     INTEGER :: ispecies
 
-    ALLOCATE(initial_conditions(1:n_species))
+!    ALLOCATE(initial_conditions(1:n_species))
     DO ispecies = 1, n_species
-      ALLOCATE(initial_conditions(ispecies)%density(-2:nx+3))
-      ALLOCATE(initial_conditions(ispecies)%temp (-2:nx+3,1:3))
-      ALLOCATE(initial_conditions(ispecies)%drift(-2:nx+3,1:3))
+      ALLOCATE(species_list(ispecies)%initial_conditions%density(-2:nx+3))
+      ALLOCATE(species_list(ispecies)%initial_conditions%temp (-2:nx+3,1:3))
+      ALLOCATE(species_list(ispecies)%initial_conditions%drift(-2:nx+3,1:3))
 
-      initial_conditions(ispecies)%density = 1.0_num
-      initial_conditions(ispecies)%temp = 0.0_num
-      initial_conditions(ispecies)%drift = 0.0_num
-      initial_conditions(ispecies)%density_min = EPSILON(1.0_num)
-      initial_conditions(ispecies)%density_max = HUGE(1.0_num)
+      species_list(ispecies)%initial_conditions%density = 1.0_num
+      species_list(ispecies)%initial_conditions%temp = 0.0_num
+      species_list(ispecies)%initial_conditions%drift = 0.0_num
+      species_list(ispecies)%initial_conditions%density_min = EPSILON(1.0_num)
+      species_list(ispecies)%initial_conditions%density_max = HUGE(1.0_num)
     ENDDO
 
   END SUBROUTINE allocate_ic
@@ -124,11 +129,11 @@ CONTAINS
     INTEGER :: ispecies
 
     DO ispecies = 1, n_species
-      DEALLOCATE(initial_conditions(ispecies)%density)
-      DEALLOCATE(initial_conditions(ispecies)%temp)
-      DEALLOCATE(initial_conditions(ispecies)%drift)
+      DEALLOCATE(species_list(ispecies)%initial_conditions%density)
+      DEALLOCATE(species_list(ispecies)%initial_conditions%temp)
+      DEALLOCATE(species_list(ispecies)%initial_conditions%drift)
     ENDDO
-    IF (.NOT. move_window) DEALLOCATE(initial_conditions)
+ !   IF (.NOT. move_window) DEALLOCATE(initial_conditions)
 
   END SUBROUTINE deallocate_ic
 
@@ -460,10 +465,9 @@ CONTAINS
 
 
 #ifndef PER_SPECIES_WEIGHT
-  SUBROUTINE setup_particle_density(density_in, species, density_min, &
+  SUBROUTINE setup_particle_density(species, density_min, &
       density_max)
 
-    REAL(num), DIMENSION(-2:), INTENT(IN) :: density_in
     TYPE(particle_species), POINTER :: species
     REAL(num), INTENT(IN) :: density_min, density_max
     TYPE(particle), POINTER :: current
@@ -472,23 +476,21 @@ CONTAINS
     REAL(num) :: wdata
     TYPE(particle_list), POINTER :: partlist
     INTEGER :: ix, i, isubx
-    REAL(num), DIMENSION(:), ALLOCATABLE :: density
     LOGICAL, DIMENSION(:), ALLOCATABLE :: density_map
+    REAL(num) :: density
+    TYPE(parameter_pack) :: parameters
 #include "particle_head.inc"
 
-    ALLOCATE(density(-2:nx+3))
     ALLOCATE(density_map(-2:nx+3))
-    density = density_in
     density_map = .FALSE.
 
-    CALL field_bc(density, ng)
-
     DO ix = -2, nx+3
-      IF (density(ix) > density_max) density(ix) = density_max
-      IF (density(ix) >= density_min) THEN
+      parameters%pack_ix = ix
+      density = evaluate_with_parameters( &
+            species%density_function, parameters, errcode)
+      IF (density > density_max) density = density_max
+      IF (density >= density_min) THEN
         density_map(ix) = .TRUE.
-      ELSE
-        density(ix) = 0.0_num
       ENDIF
     ENDDO ! ix
 
@@ -508,24 +510,16 @@ CONTAINS
 
 #include "particle_to_grid.inc"
 
-      ! Calculate density at the particle position
-      wdata = 0.0_num
-      DO isubx = sf_min, sf_max
-        i = cell_x + isubx
-#ifdef PARTICLE_SHAPE_TOPHAT
-        IF (.NOT. density_map(i)) i = cell_x + 1 - isubx
-#else
-        IF (.NOT. density_map(i)) THEN
-          i = cell_x + isubx / 2
-#ifdef PARTICLE_SHAPE_BSPLINE3
-          IF (.NOT. density_map(i)) i = cell_x - isubx / 2
-#endif
-        ENDIF
-#endif
-        wdata = wdata + gx(isubx) * density(i)
-      ENDDO ! isubx
+      parameters%use_grid_position = .FALSE.
+      parameters%pack_pos = current%part_pos
+      parameters%pack_ix = cell_x
+      density = evaluate_with_parameters( &
+            species%density_function, parameters, errcode)
 
-      current%weight = wdata
+      !Set the density to be clipped between the minimum and maximum values
+      current%weight = MIN(density,density_max) * &
+          MAX(SIGN(1.0_num,density-density_min),0.0_num)
+
       npart_in_cell(cell_x) = npart_in_cell(cell_x) + 1
 
       current => current%next
@@ -533,7 +527,6 @@ CONTAINS
     ENDDO
 
     DEALLOCATE(density_map)
-    DEALLOCATE(density)
 
     wdata = dx
 
