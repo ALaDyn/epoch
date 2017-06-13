@@ -577,7 +577,7 @@ CONTAINS
     INTEGER :: count, ipoint, ipoint_val, n, err_simplify
     REAL(num), DIMENSION(:), ALLOCATABLE :: var_length_values
     REAL(num) :: point, t0, p0, p1, x0, x1, val_local
-    INTEGER :: ix
+    INTEGER :: ix, ispec
 #include "particle_head.inc"
 
     err = c_err_none
@@ -588,13 +588,14 @@ CONTAINS
     IF (opcode == c_func_rho) THEN
 #include "pack_to_grid.inc"
       CALL get_values(1, values)
+      ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(NINT(values(1)))% &
+        CALL push_on_eval(species_list(ispec)% &
             initial_conditions%density(parameters%pack_ix))
       ELSE
         val_local = 0.0_num
         DO ix = sf_min, sf_max
-          val_local = val_local + gx(ix) * species_list(NINT(values(1)))% &
+          val_local = val_local + gx(ix) * species_list(ispec)% &
               initial_conditions%density(cell_x+ix)
         ENDDO
         CALL push_on_eval(val_local)
@@ -606,13 +607,14 @@ CONTAINS
     IF (opcode == c_func_tempx) THEN
 #include "pack_to_grid.inc"
       CALL get_values(1, values)
+      ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(NINT(values(1)))% &
+        CALL push_on_eval(species_list(ispec)% &
             initial_conditions%temp(parameters%pack_ix, 1))
       ELSE
         val_local = 0.0_num
         DO ix = sf_min, sf_max
-          val_local = val_local + gx(ix) * species_list(NINT(values(1)))% &
+          val_local = val_local + gx(ix) * species_list(ispec)% &
               initial_conditions%temp(cell_x+ix, 1)
         ENDDO
         CALL push_on_eval(val_local)
@@ -624,13 +626,14 @@ CONTAINS
     IF (opcode == c_func_tempy) THEN
 #include "pack_to_grid.inc"
       CALL get_values(1, values)
+      ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(NINT(values(1)))% &
+        CALL push_on_eval(species_list(ispec)% &
             initial_conditions%temp(parameters%pack_ix, 2))
       ELSE
         val_local = 0.0_num
         DO ix = sf_min, sf_max
-          val_local = val_local + gx(ix) * species_list(NINT(values(1)))% &
+          val_local = val_local + gx(ix) * species_list(ispec)% &
               initial_conditions%temp(cell_x+ix, 2)
         ENDDO
         CALL push_on_eval(val_local)
@@ -642,13 +645,14 @@ CONTAINS
     IF (opcode == c_func_tempz) THEN
 #include "pack_to_grid.inc"
       CALL get_values(1, values)
+      ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(NINT(values(1)))% &
+        CALL push_on_eval(species_list(ispec)% &
             initial_conditions%temp(parameters%pack_ix, 3))
       ELSE
         val_local = 0.0_num
         DO ix = sf_min, sf_max
-          val_local = val_local + gx(ix) * species_list(NINT(values(1)))% &
+          val_local = val_local + gx(ix) * species_list(ispec)% &
               initial_conditions%temp(cell_x+ix, 3)
         ENDDO
         CALL push_on_eval(val_local)
@@ -660,13 +664,14 @@ CONTAINS
     IF (opcode == c_func_tempx_ev) THEN
 #include "pack_to_grid.inc"
       CALL get_values(1, values)
+      ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(kb / ev * species_list(NINT(values(1)))% &
+        CALL push_on_eval(kb / ev * species_list(ispec)% &
             initial_conditions%temp(parameters%pack_ix, 1))
       ELSE
         val_local = 0.0_num
         DO ix = sf_min, sf_max
-          val_local = val_local + gx(ix) * species_list(NINT(values(1)))% &
+          val_local = val_local + gx(ix) * species_list(ispec)% &
               initial_conditions%temp(cell_x+ix, 1)
         ENDDO
         CALL push_on_eval(kb / ev * val_local)
@@ -678,13 +683,14 @@ CONTAINS
     IF (opcode == c_func_tempy_ev) THEN
 #include "pack_to_grid.inc"
       CALL get_values(1, values)
+      ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(kb / ev * species_list(NINT(values(1)))% &
+        CALL push_on_eval(kb / ev * species_list(ispec)% &
             initial_conditions%temp(parameters%pack_ix, 2))
       ELSE
         val_local = 0.0_num
         DO ix = sf_min, sf_max
-          val_local = val_local + gx(ix) * species_list(NINT(values(1)))% &
+          val_local = val_local + gx(ix) * species_list(ispec)% &
               initial_conditions%temp(cell_x+ix, 2)
         ENDDO
         CALL push_on_eval(kb / ev * val_local)
@@ -696,13 +702,14 @@ CONTAINS
     IF (opcode == c_func_tempz_ev) THEN
 #include "pack_to_grid.inc"
       CALL get_values(1, values)
+      ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(kb / ev * species_list(NINT(values(1)))% &
+        CALL push_on_eval(kb / ev * species_list(ispec)% &
             initial_conditions%temp(parameters%pack_ix, 3))
       ELSE
         val_local = 0.0_num
         DO ix = sf_min, sf_max
-          val_local = val_local + gx(ix) * species_list(NINT(values(1)))% &
+          val_local = val_local + gx(ix) * species_list(ispec)% &
               initial_conditions%temp(cell_x+ix, 3)
         ENDDO
         CALL push_on_eval(kb / ev * val_local)
