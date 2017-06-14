@@ -176,12 +176,9 @@ CONTAINS
 
       parameters%pack_ix = nx
 
-      !Even for high resolution window operation, sample cell centred
-      !density to determine if cell is 'empty'
+      !Calculate cell centre density to determine if cell is 'empty'
       density = evaluate_with_parameters( &
           species_list(ispecies)%density_function, parameters, errcode)
-      IF (density > species_list(ispecies)%initial_conditions%density_max) &
-          density = species_list(ispecies)%initial_conditions%density_max
 
       IF (density < species_list(ispecies)%initial_conditions%density_min) &
           CYCLE
@@ -207,8 +204,6 @@ CONTAINS
         IF (density > species_list(ispecies)%initial_conditions%density_max) &
             density = species_list(ispecies)%initial_conditions%density_max
 
-        IF (density < species_list(ispecies)%initial_conditions%density_min) &
-            CYCLE
         current%weight = dx / species_list(ispecies)%npart_per_cell * density
 
         IF (.NOT. species_list(ispecies)%dist_fn_set) THEN
