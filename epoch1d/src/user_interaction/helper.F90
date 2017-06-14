@@ -140,10 +140,9 @@ CONTAINS
 
 
 #ifdef PER_SPECIES_WEIGHT
-  SUBROUTINE non_uniform_load_particles(density, species, density_min, &
+  SUBROUTINE non_uniform_load_particles(species, density_min, &
       density_max)
 
-    REAL(num), DIMENSION(-2:), INTENT(INOUT) :: density
     TYPE(particle_species), POINTER :: species
     REAL(num), INTENT(INOUT) :: density_min, density_max
     INTEGER(i8) :: num_valid_cells_local, num_valid_cells_global
@@ -155,17 +154,18 @@ CONTAINS
     CHARACTER(LEN=15) :: string
     TYPE(particle_list), POINTER :: partlist
     TYPE(particle), POINTER :: current, next
+    REAL(num), ALLOCATABLE, DIMENSION(:) :: density
 
     partlist => species%attached_list
 
     num_valid_cells_local = 0
     density_total = 0.0_num
-
+    ALLOCATE(density(-2:nx+3))
     DO ix = -2, nx+3
+      parameters%pack_ix = ix
+      density(ix) = evaluate_with_parameters( &
+            species%density_function, parameters, errcode)
       IF (density(ix) > density_max) density(ix) = density_max
-    ENDDO ! ix
-
-    DO ix = 1, nx
       IF (density(ix) >= density_min) THEN
         num_valid_cells_local = num_valid_cells_local + 1
         density_total = density_total + density(ix)
