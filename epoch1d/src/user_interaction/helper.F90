@@ -155,6 +155,7 @@ CONTAINS
     TYPE(particle_list), POINTER :: partlist
     TYPE(particle), POINTER :: current, next
     REAL(num), ALLOCATABLE, DIMENSION(:) :: density
+    TYPE(parameter_pack) :: parameters
 
     partlist => species%attached_list
 
@@ -246,6 +247,7 @@ CONTAINS
     ENDIF
 
     CALL particle_bcs
+    DEALLOCATE(density)
 
   END SUBROUTINE non_uniform_load_particles
 #endif
