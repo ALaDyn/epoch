@@ -268,8 +268,10 @@ CONTAINS
     flux_momentum_from_temperature = SQRT(mom1**2 + mom2**2)
 
   END FUNCTION flux_momentum_from_temperature
-  
-    ! Subroutine to initialise a non-thermal particle distribution
+ 
+
+ 
+  ! Subroutine to initialise a non-thermal particle distribution
   SUBROUTINE setup_particle_distfn(part_species)
 
     TYPE(particle_species), POINTER :: part_species

@@ -628,8 +628,8 @@ CONTAINS
       CALL get_values(1, values)
       ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(ispec)%initial_conditions%&
-            density(parameters%pack_ix, parameters%pack_iy))
+        val_local = species_list(ispec)%initial_conditions%&
+            density(parameters%pack_ix, parameters%pack_iy)
       ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
@@ -639,8 +639,8 @@ CONTAINS
                 initial_conditions%density(cell_x+ix, cell_y+iy)
           ENDDO
         ENDDO
-        CALL push_on_eval(val_local)
       ENDIF
+      CALL push_on_eval(val_local)
       err = err_simplify
       RETURN
     ENDIF
@@ -649,8 +649,8 @@ CONTAINS
       CALL get_values(1, values)
       ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(ispec)%initial_conditions%&
-            temp(parameters%pack_ix, parameters%pack_iy, 1))
+        val_local = species_list(ispec)%initial_conditions%&
+            temp(parameters%pack_ix, parameters%pack_iy, 1)
       ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
@@ -660,8 +660,8 @@ CONTAINS
                 initial_conditions%temp(cell_x+ix, cell_y+iy, 1)
           ENDDO
         ENDDO
-        CALL push_on_eval(val_local)
       ENDIF
+      CALL push_on_eval(val_local)
       err = err_simplify
       RETURN
     ENDIF
@@ -670,8 +670,8 @@ CONTAINS
       CALL get_values(1, values)
       ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(ispec)%initial_conditions%&
-            temp(parameters%pack_ix, parameters%pack_iy, 2))
+        val_local = species_list(ispec)%initial_conditions%&
+            temp(parameters%pack_ix, parameters%pack_iy, 2)
       ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
@@ -681,8 +681,8 @@ CONTAINS
                 initial_conditions%temp(cell_x+ix, cell_y+iy, 2)
           ENDDO
         ENDDO
-        CALL push_on_eval(val_local)
       ENDIF
+      CALL push_on_eval(val_local)
       err = err_simplify
       RETURN
     ENDIF
@@ -691,8 +691,8 @@ CONTAINS
       CALL get_values(1, values)
       ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(species_list(ispec)%initial_conditions%&
-            temp(parameters%pack_ix, parameters%pack_iy, 3))
+        val_local = species_list(ispec)%initial_conditions%&
+            temp(parameters%pack_ix, parameters%pack_iy, 3)
       ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
@@ -702,8 +702,8 @@ CONTAINS
                 initial_conditions%temp(cell_x+ix, cell_y+iy, 3)
           ENDDO
         ENDDO
-        CALL push_on_eval(val_local)
       ENDIF
+      CALL push_on_eval(val_local)
       err = err_simplify
       RETURN
     ENDIF
@@ -712,8 +712,8 @@ CONTAINS
       CALL get_values(1, values)
       ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(kb / ev * species_list(ispec)%initial_conditions%&
-            temp(parameters%pack_ix, parameters%pack_iy, 1))
+        val_local = species_list(ispec)%initial_conditions%&
+            temp(parameters%pack_ix, parameters%pack_iy, 1)
       ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
@@ -723,8 +723,8 @@ CONTAINS
                 initial_conditions%temp(cell_x+ix, cell_y+iy, 1)
           ENDDO
         ENDDO
-        CALL push_on_eval(kb / ev * val_local)
       ENDIF
+      CALL push_on_eval(kb / ev * val_local)
       err = err_simplify
       RETURN
     ENDIF
@@ -733,8 +733,8 @@ CONTAINS
       CALL get_values(1, values)
       ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(kb / ev * species_list(ispec)%initial_conditions%&
-            temp(parameters%pack_ix, parameters%pack_iy, 2))
+        val_local = species_list(ispec)%initial_conditions%&
+            temp(parameters%pack_ix, parameters%pack_iy, 2)
       ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
@@ -744,8 +744,8 @@ CONTAINS
                 initial_conditions%temp(cell_x+ix, cell_y+iy, 2)
           ENDDO
         ENDDO
-        CALL push_on_eval(kb / ev * val_local)
       ENDIF
+      CALL push_on_eval(kb / ev * val_local)
       err = err_simplify
       RETURN
     ENDIF
@@ -754,8 +754,8 @@ CONTAINS
       CALL get_values(1, values)
       ispec = NINT(values(1))
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(kb / ev * species_list(ispec)%initial_conditions%&
-            temp(parameters%pack_ix, parameters%pack_iy, 3))
+        val_local = species_list(ispec)%initial_conditions%&
+            temp(parameters%pack_ix, parameters%pack_iy, 3)
       ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
@@ -765,9 +765,8 @@ CONTAINS
                 initial_conditions%temp(cell_x+ix, cell_y+iy, 3)
           ENDDO
         ENDDO
-        CALL push_on_eval(kb / ev * val_local)
       ENDIF
-
+      CALL push_on_eval(kb / ev * val_local)
       err = err_simplify
       RETURN
     ENDIF
