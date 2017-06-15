@@ -225,7 +225,7 @@ CONTAINS
                   mass, temp_local)
             ENDDO
           ENDIF
-          CALL particle_drift_lorentz_transform(current,mass,drift)
+          CALL particle_drift_lorentz_transform(current, mass, drift)
         ENDIF
 
 #ifdef PARTICLE_DEBUG

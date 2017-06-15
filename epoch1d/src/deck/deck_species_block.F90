@@ -595,6 +595,7 @@ CONTAINS
       species_list(species_id)%dist_fn_set = .TRUE.
       CALL initialise_stack(species_list(species_id)%dist_fn)
       CALL tokenize(value, species_list(species_id)%dist_fn, errcode)
+      species_list(species_id)%dist_fn%should_simplify = .FALSE.
       RETURN
     ENDIF
 

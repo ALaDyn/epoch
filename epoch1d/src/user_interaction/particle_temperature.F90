@@ -415,6 +415,8 @@ CONTAINS
 
       !pack spatial information has already been set before calling
       CALL basic_evaluate(stack, parameters, err)
+      !CALL display_tokens(stack)
+      !STOP
       setlevel = pop_off_eval()
       IF (err /= c_err_none .AND. rank == 0) THEN
         PRINT*, 'Unable to evaluate distribution function'

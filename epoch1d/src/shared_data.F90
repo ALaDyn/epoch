@@ -381,6 +381,11 @@ MODULE shared_parser_data
   INTEGER, PARAMETER :: c_const_dir_yz_angle = 89
   INTEGER, PARAMETER :: c_const_dir_zx_angle = 90
 
+  !Arbitrary distribution function constants
+  INTEGER, PARAMETER :: c_const_px = 91
+  INTEGER, PARAMETER :: c_const_py = 92
+  INTEGER, PARAMETER :: c_const_pz = 93
+
   ! Custom constants
   INTEGER, PARAMETER :: c_const_deck_lowbound = 4096
   INTEGER, PARAMETER :: c_const_custom_lowbound = 8192
