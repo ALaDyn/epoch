@@ -23,7 +23,6 @@ MODULE window
   IMPLICIT NONE
 
   LOGICAL, SAVE :: window_started
-  REAL(num), ALLOCATABLE :: density(:), temperature(:,:), drift(:,:)
   REAL(num), SAVE :: window_shift_fraction
 
 CONTAINS
@@ -37,9 +36,6 @@ CONTAINS
     IF (.NOT. move_window) RETURN
 
 #ifndef PER_SPECIES_WEIGHT
-    ALLOCATE(density(-2:ny+3))
-    ALLOCATE(temperature(-2:ny+3, 1:3))
-    ALLOCATE(drift(-2:ny+3, 1:3))
     window_started = .FALSE.
 #else
     IF (rank == 0) THEN
@@ -54,10 +50,6 @@ CONTAINS
 
 
   SUBROUTINE deallocate_window
-
-    IF (ALLOCATED(density)) DEALLOCATE(density)
-    IF (ALLOCATED(temperature)) DEALLOCATE(temperature)
-    IF (ALLOCATED(drift)) DEALLOCATE(drift)
 
   END SUBROUTINE deallocate_window
 
@@ -167,23 +159,16 @@ CONTAINS
     REAL(num) :: cell_y_r, cell_frac_y, cy2
     INTEGER :: cell_y
     REAL(num), DIMENSION(-1:1) :: gy
-    REAL(num) :: temp_local, drift_local, npart_frac
-    REAL(num) :: weight_local
+    REAL(num) :: npart_frac
+    REAL(num), DIMENSION(3) :: temp_local, drift_local
+    REAL(num) :: weight_local, density_local, mass
     TYPE(parameter_pack) :: parameters
+    TYPE(particle_species), POINTER :: species
 
     ! This subroutine injects particles at the right hand edge of the box
 
     ! Only processors on the right need do anything
     IF (.NOT.x_max_boundary) RETURN
-
-    IF (nproc > 1) THEN
-      IF (SIZE(density) /= ny+6) THEN
-        DEALLOCATE(density, temperature, drift)
-        ALLOCATE(density(-2:ny+3))
-        ALLOCATE(temperature(-2:ny+3, 1:3))
-        ALLOCATE(drift(-2:ny+3, 1:3))
-      ENDIF
-    ENDIF
 
     errcode = c_err_none
 
@@ -197,27 +182,13 @@ CONTAINS
         n0 = 1
       ENDIF
 
-      DO i = 1, 3
-        parameters%pack_ix = nx
-        DO iy = -2, ny+3
-          parameters%pack_iy = iy
-          temperature(iy,i) = evaluate_with_parameters( &
-              species_list(ispecies)%temperature_function(i), parameters, &
-              errcode)
-          drift(iy,i) = evaluate_with_parameters( &
-              species_list(ispecies)%drift_function(i), parameters, errcode)
-        ENDDO
-      ENDDO
-      DO iy = -2, ny+3
-        parameters%pack_iy = iy
-        density(iy) = evaluate_with_parameters( &
-            species_list(ispecies)%density_function, parameters, errcode)
-        IF (density(iy) > initial_conditions(ispecies)%density_max) &
-            density(iy) = initial_conditions(ispecies)%density_max
-      ENDDO
-
+      parameters%pack_ix = nx
       DO iy = 1, ny
-        IF (density(iy) < initial_conditions(ispecies)%density_min) CYCLE
+        parameters%pack_iy = iy
+        density_local = evaluate_with_parameters( &
+            species_list(ispecies)%density_function, parameters, errcode)
+        IF (density_local < species_list(ispecies)%&
+            initial_conditions%density_min) CYCLE
         DO ipart = n0, npart_per_cell
           ! Place extra particle based on probability
           IF (ipart == 0) THEN
@@ -226,6 +197,19 @@ CONTAINS
           CALL create_particle(current)
           current%part_pos(1) = x_grid_max + dx + (random() - 0.5_num) * dx
           current%part_pos(2) = y(iy) + (random() - 0.5_num) * dy
+
+          parameters%use_grid_position=.FALSE.
+          parameters%pack_pos = current%part_pos
+          !Setup particle density at the exact position of the new particle
+          density_local = evaluate_with_parameters( &
+            species_list(ispecies)%density_function, parameters, errcode)
+          IF (density_local > species_list(ispecies)%&
+              initial_conditions%density_max) THEN
+            density_local = species_list(ispecies)%initial_conditions%&
+                density_max
+          ENDIF
+          weight_local = dx * dy * density_local/species_list(ispecies)&
+              %npart_per_cell
 
           ! Always use the triangle particle weighting for simplicity
           cell_y_r = (current%part_pos(2) - y_grid_min_local) / dy
@@ -238,22 +222,26 @@ CONTAINS
           gy( 0) = 0.75_num - cy2
           gy( 1) = 0.5_num * (0.25_num + cy2 - cell_frac_y)
 
-          DO i = 1, 3
-            temp_local = 0.0_num
-            drift_local = 0.0_num
-            DO isuby = -1, 1
-              temp_local = temp_local + gy(isuby) * temperature(cell_y+isuby, i)
-              drift_local = drift_local + gy(isuby) * drift(cell_y+isuby, i)
+          IF (.NOT. species_list(ispecies)%dist_fn_set) THEN
+            DO i = 1, 3
+              temp_local(i) = evaluate_with_parameters( &
+                  species_list(ispecies)%temperature_function(i), &
+                  parameters, errcode)
+              drift_local(i) = evaluate_with_parameters( &
+                  species_list(ispecies)%drift_function(i), parameters, errcode)
             ENDDO
-            current%part_p(i) = momentum_from_temperature(&
-                species_list(ispecies)%mass, temp_local, drift_local)
-          ENDDO
-
-          weight_local = 0.0_num
-          DO isuby = -1, 1
-            weight_local = weight_local + gy(isuby) * dx * dy &
-                / species_list(ispecies)%npart_per_cell * density(cell_y+isuby)
-          ENDDO
+            IF (species_list(ispecies)%use_maxwell_juettner) THEN
+              current%part_p = momentum_from_temperature_relativistic(&
+                  mass, temp_local, &
+                  species_list(ispecies)%fractional_tail_cutoff)
+            ELSE
+              DO i = 1, 3
+                current%part_p(i) = momentum_from_temperature(&
+                    mass, temp_local(i))
+              ENDDO
+            ENDIF
+            CALL particle_drift_lorentz_transform(current, mass, drift_local)
+          ENDIF
           current%weight = weight_local
 #ifdef PARTICLE_DEBUG
           current%processor = rank

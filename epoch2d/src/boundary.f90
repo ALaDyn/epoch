@@ -808,17 +808,17 @@ CONTAINS
                 ! x-direction
                 i = 1
                 cur%part_p(i) = flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! y-direction
                 i = 2
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! z-direction
                 i = 3
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 cur%part_pos(1) = 2.0_num * x_min - part_pos
 
@@ -878,17 +878,17 @@ CONTAINS
                 ! x-direction
                 i = 1
                 cur%part_p(i) = -flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! y-direction
                 i = 2
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! z-direction
                 i = 3
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 cur%part_pos(1) = 2.0_num * x_max - part_pos
 
@@ -949,17 +949,17 @@ CONTAINS
                 ! x-direction
                 i = 1
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! y-direction
                 i = 2
                 cur%part_p(i) = flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! z-direction
                 i = 3
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 cur%part_pos(2) = 2.0_num * y_min - part_pos
 
@@ -1019,17 +1019,17 @@ CONTAINS
                 ! x-direction
                 i = 1
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! y-direction
                 i = 2
                 cur%part_p(i) = -flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 ! z-direction
                 i = 3
                 cur%part_p(i) = momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                    species_list(ispecies)%mass, temp(i))
 
                 cur%part_pos(2) = 2.0_num * y_max - part_pos
 

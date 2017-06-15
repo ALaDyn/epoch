@@ -203,6 +203,10 @@ CONTAINS
     IF (as_constant == c_const_y .AND. stagger(c_dir_y,tokenize_stagger)) &
         as_constant = c_const_yb
 
+    IF (str_cmp(name, 'px')) as_constant = c_const_px
+    IF (str_cmp(name, 'py')) as_constant = c_const_py
+    IF (str_cmp(name, 'pz')) as_constant = c_const_pz
+
     ! User submitted constant using 'Register'
     DO i = 1, n_new_constant
       IF (str_cmp(TRIM(name), TRIM(new_constant_name(i)%value))) &

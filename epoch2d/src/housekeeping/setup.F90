@@ -346,11 +346,15 @@ CONTAINS
     DO ispecies = 1, n_species
       CALL initialise_stack(species_list(ispecies)%density_function)
       CALL set_stack_zero  (species_list(ispecies)%density_function)
+      CALL initialise_stack(species_list(ispecies)%dist_fn)
+      CALL set_stack_zero  (species_list(ispecies)%dist_fn)
       DO n = 1, 3
         CALL initialise_stack(species_list(ispecies)%temperature_function(n))
         CALL set_stack_zero  (species_list(ispecies)%temperature_function(n))
         CALL initialise_stack(species_list(ispecies)%drift_function(n))
         CALL set_stack_zero  (species_list(ispecies)%drift_function(n))
+        CALL initialise_stack(species_list(ispecies)%dist_fn_range(n))
+        CALL set_stack_zero  (species_list(ispecies)%dist_fn_range(n))
       ENDDO
       species_list(ispecies)%electron = .FALSE.
       species_list(ispecies)%ionise = .FALSE.
@@ -561,8 +565,9 @@ CONTAINS
         fac2 = 3.0_num * k_max**2 * kb / species_list(ispecies)%mass
         DO iy = 1, ny
         DO ix = 1, nx
-          omega2 = fac1 * initial_conditions(ispecies)%density(ix,iy) &
-              + fac2 * MAXVAL(initial_conditions(ispecies)%temp(ix,iy,:))
+          omega2 = fac1 * species_list(ispecies)%initial_conditions&
+              %density(ix,iy) + fac2 * &
+              MAXVAL(species_list(ispecies)%initial_conditions%temp(ix,iy,:))
           IF (omega2 <= c_tiny) CYCLE
           omega = SQRT(omega2)
           IF (2.0_num * pi / omega < min_dt) min_dt = 2.0_num * pi / omega
