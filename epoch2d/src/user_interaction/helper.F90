@@ -115,16 +115,9 @@ CONTAINS
     INTEGER :: ispecies
 
     DO ispecies = 1, n_species
-      ALLOCATE(species_list(ispecies)%initial_conditions%&
-          density(-2:nx+3,-2:ny+3))
-      ALLOCATE(species_list(ispecies)%initial_conditions%&
-          temp(-2:nx+3,-2:ny+3,1:3))
-      ALLOCATE(species_list(ispecies)%initial_conditions%&
-          drift(-2:nx+3,-2:ny+3,1:3))
-
-      species_list(ispecies)%initial_conditions%density = 1.0_num
-      species_list(ispecies)%initial_conditions%temp = 0.0_num
-      species_list(ispecies)%initial_conditions%drift = 0.0_num
+      NULLIFY(species_list(ispecies)%initial_conditions%density)
+      NULLIFY(species_list(ispecies)%initial_conditions%temp)
+      NULLIFY(species_list(ispecies)%initial_conditions%drift)
       species_list(ispecies)%initial_conditions%density_min = EPSILON(1.0_num)
       species_list(ispecies)%initial_conditions%density_max = HUGE(1.0_num)
     ENDDO
@@ -138,9 +131,18 @@ CONTAINS
     INTEGER :: ispecies
 
     DO ispecies = 1, n_species
-      DEALLOCATE(species_list(ispecies)%initial_conditions%density)
-      DEALLOCATE(species_list(ispecies)%initial_conditions%temp)
-      DEALLOCATE(species_list(ispecies)%initial_conditions%drift)
+      IF (ASSOCIATED(species_list(ispecies)%initial_conditions%density)) THEN
+        DEALLOCATE(species_list(ispecies)%initial_conditions%density)
+        NULLIFY(species_list(ispecies)%initial_conditions%density)
+      ENDIF
+      IF (ASSOCIATED(species_list(ispecies)%initial_conditions%drift)) THEN
+        DEALLOCATE(species_list(ispecies)%initial_conditions%drift)
+        NULLIFY(species_list(ispecies)%initial_conditions%drift)
+      ENDIF
+      IF (ASSOCIATED(species_list(ispecies)%initial_conditions%temp)) THEN
+        DEALLOCATE(species_list(ispecies)%initial_conditions%temp)
+        NULLIFY(species_list(ispecies)%initial_conditions%temp)
+      ENDIF
     ENDDO
 
   END SUBROUTINE deallocate_ic

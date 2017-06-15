@@ -153,7 +153,7 @@ CONTAINS
   SUBROUTINE insert_particles
 
     TYPE(particle), POINTER :: current
-    TYPE(particle_list) :: append_list
+    TYPE(particle_list), POINTER :: append_list
     INTEGER :: ispecies, i, iy, isuby
     INTEGER(i8) :: ipart, npart_per_cell, n0
     REAL(num) :: cell_y_r, cell_frac_y, cy2
@@ -173,6 +173,7 @@ CONTAINS
     errcode = c_err_none
 
     DO ispecies = 1, n_species
+      ALLOCATE(append_list)
       CALL create_empty_partlist(append_list)
       npart_per_cell = FLOOR(species_list(ispecies)%npart_per_cell, KIND=i8)
       npart_frac = species_list(ispecies)%npart_per_cell - npart_per_cell
@@ -211,17 +212,6 @@ CONTAINS
           weight_local = dx * dy * density_local/species_list(ispecies)&
               %npart_per_cell
 
-          ! Always use the triangle particle weighting for simplicity
-          cell_y_r = (current%part_pos(2) - y_grid_min_local) / dy
-          cell_y = FLOOR(cell_y_r + 0.5_num)
-          cell_frac_y = REAL(cell_y, num) - cell_y_r
-          cell_y = cell_y + 1
-
-          cy2 = cell_frac_y**2
-          gy(-1) = 0.5_num * (0.25_num + cy2 + cell_frac_y)
-          gy( 0) = 0.75_num - cy2
-          gy( 1) = 0.5_num * (0.25_num + cy2 - cell_frac_y)
-
           IF (.NOT. species_list(ispecies)%dist_fn_set) THEN
             DO i = 1, 3
               temp_local(i) = evaluate_with_parameters( &
@@ -247,11 +237,16 @@ CONTAINS
           current%processor = rank
           current%processor_at_t0 = rank
 #endif
+          IF (species_list(ispecies)%dist_fn_set) THEN
+            species=>species_list(ispecies)
+            CALL sample_partlist_from_distfn(species, append_list)
+          ENDIF
           CALL add_particle_to_partlist(append_list, current)
         ENDDO
       ENDDO
 
       CALL append_partlist(species_list(ispecies)%attached_list, append_list)
+      DEALLOCATE(append_list)
     ENDDO
 
   END SUBROUTINE insert_particles

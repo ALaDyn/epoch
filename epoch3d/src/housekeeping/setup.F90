@@ -381,12 +381,18 @@ CONTAINS
     DO ispecies = 1, n_species
       CALL initialise_stack(species_list(ispecies)%density_function)
       CALL set_stack_zero  (species_list(ispecies)%density_function)
+      CALL initialise_stack(species_list(ispecies)%dist_fn)
+      CALL set_stack_zero  (species_list(ispecies)%dist_fn)
       DO n = 1, 3
         CALL initialise_stack(species_list(ispecies)%temperature_function(n))
         CALL set_stack_zero  (species_list(ispecies)%temperature_function(n))
         CALL initialise_stack(species_list(ispecies)%drift_function(n))
         CALL set_stack_zero  (species_list(ispecies)%drift_function(n))
+        CALL initialise_stack(species_list(ispecies)%dist_fn_range(n))
+        CALL set_stack_zero  (species_list(ispecies)%dist_fn_range(n))
       ENDDO
+      species_list(ispecies)%fractional_tail_cutoff = 0.0001_num
+      species_list(ispecies)%use_maxwell_juettner = .FALSE.
       species_list(ispecies)%electron = .FALSE.
       species_list(ispecies)%ionise = .FALSE.
       species_list(ispecies)%ionise_to_species = -1
@@ -608,25 +614,39 @@ CONTAINS
 
   SUBROUTINE set_plasma_frequency_dt
 
-    INTEGER :: ispecies, ix, iy, iz
+    INTEGER :: ispecies, ix, iy, iz, itemp, ixsub, iysub, izsub
     REAL(num) :: min_dt, omega2, omega, k_max, fac1, fac2
+    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: dens_local, n_local
+    TYPE(particle), POINTER :: current
+#include "particle_head.inc"
 
     IF (ic_from_restart) RETURN
+    ALLOCATE(dens_local(nx,ny,nz))
+    dens_local = 0.0_num
+    ALLOCATE(n_local(nx,ny,nz))
+    n_local = 0.0_num
 
     min_dt = 1000000.0_num
     k_max = 2.0_num * pi / MIN(dx, dy, dz)
 
-    ! Identify the plasma frequency (Bohm-Gross dispersion relation)
-    ! Note that this doesn't get strongly relativistic plasmas right
     DO ispecies = 1, n_species
       IF (species_list(ispecies)%species_type /= c_species_id_photon) THEN
+        current=>species_list(ispecies)%attached_list%head
+        DO WHILE(ASSOCIATED(current))
+#include "particle_to_grid_nofrac.inc"
+          dens_local(cell_x, cell_y, cell_z) = &
+              dens_local(cell_x, cell_y, cell_z) + current%weight
+          n_local(cell_x, cell_y, cell_z) = n_local(cell_x, cell_y, cell_z) + &
+              1.0_num
+          current=>current%next
+        ENDDO
+        dens_local = dens_local / n_local
         fac1 = q0**2 / species_list(ispecies)%mass / epsilon0
         fac2 = 3.0_num * k_max**2 * kb / species_list(ispecies)%mass
         DO iz = 1, nz
         DO iy = 1, ny
         DO ix = 1, nx
-          omega2 = fac1 * initial_conditions(ispecies)%density(ix,iy,iz) &
-              + fac2 * MAXVAL(initial_conditions(ispecies)%temp(ix,iy,iz,:))
+          omega2 = fac1 * dens_local(ix, iy, iz)
           IF (omega2 <= c_tiny) CYCLE
           omega = SQRT(omega2)
           IF (2.0_num * pi / omega < min_dt) min_dt = 2.0_num * pi / omega
@@ -635,7 +655,7 @@ CONTAINS
         ENDDO ! iz
       ENDIF
     ENDDO
-
+    DEALLOCATE(dens_local)
     CALL MPI_ALLREDUCE(min_dt, dt_plasma_frequency, 1, mpireal, MPI_MIN, &
         comm, errcode)
     ! Must resolve plasma frequency

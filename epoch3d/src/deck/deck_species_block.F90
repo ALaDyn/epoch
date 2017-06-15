@@ -49,6 +49,42 @@ MODULE deck_species_block
 
 CONTAINS
 
+  SUBROUTINE allocate_density_ics(species_id)
+
+    INTEGER, INTENT(IN) :: species_id
+
+    IF (ASSOCIATED(species_list(species_id)%initial_conditions%density)) RETURN
+    ALLOCATE(species_list(species_id)%initial_conditions%density&
+        (-2:nx+3, -2:ny+3, -2:nz+3))
+
+  END SUBROUTINE allocate_density_ics
+
+
+
+  SUBROUTINE allocate_temp_ics(species_id)
+
+    INTEGER, INTENT(IN) :: species_id
+
+    IF (ASSOCIATED(species_list(species_id)%initial_conditions%temp)) RETURN
+    ALLOCATE(species_list(species_id)%initial_conditions%temp&
+        (-2:nx+3, -2:ny+3, -2:nz+3, 3))
+
+  END SUBROUTINE allocate_temp_ics
+
+
+
+  SUBROUTINE allocate_drift_ics(species_id)
+
+    INTEGER, INTENT(IN) :: species_id
+
+    IF (ASSOCIATED(species_list(species_id)%initial_conditions%drift)) RETURN
+    ALLOCATE(species_list(species_id)%initial_conditions%drift&
+        (-2:nx+3, -2:ny+3, -2:nz+3, 3))
+
+  END SUBROUTINE allocate_drift_ics
+
+
+
   SUBROUTINE species_deck_initialise
 
     current_block = 0
@@ -521,12 +557,12 @@ CONTAINS
     IF (str_cmp(element, 'density_min') .OR. str_cmp(element, 'minrho')) THEN
       dmin = as_real_print(value, element, errcode)
       IF (dmin <= 0.0_num) dmin = EPSILON(1.0_num)
-      initial_conditions(species_id)%density_min = dmin
+      species_list(species_id)%initial_conditions%density_min = dmin
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'density_max') .OR. str_cmp(element, 'maxrho')) THEN
-      initial_conditions(species_id)%density_max = &
+      species_list(species_id)%initial_conditions%density_max = &
           as_real_print(value, element, errcode)
       RETURN
     ENDIF
@@ -543,33 +579,67 @@ CONTAINS
         mult_string = '/ species_list(species_id)%mass'
       ENDIF
 
+      IF (got_file) CALL allocate_density_ics(species_id)
+
       CALL fill_array(species_list(species_id)%density_function, &
-          initial_conditions(species_id)%density, &
+          species_list(species_id)%initial_conditions%density, &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'drift_x')) THEN
       n = 1
+      IF (got_file) CALL allocate_drift_ics(species_id)
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          initial_conditions(species_id)%drift(:,:,:,n), &
+          species_list(species_id)%initial_conditions%drift(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'drift_y')) THEN
       n = 2
+      IF (got_file) CALL allocate_drift_ics(species_id)
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          initial_conditions(species_id)%drift(:,:,:,n), &
+          species_list(species_id)%initial_conditions%drift(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'drift_z')) THEN
       n = 3
+      IF (got_file) CALL allocate_drift_ics(species_id)
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          initial_conditions(species_id)%drift(:,:,:,n), &
+          species_list(species_id)%initial_conditions%drift(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn')) THEN
+      species_list(species_id)%dist_fn_set = .TRUE.
+      CALL initialise_stack(species_list(species_id)%dist_fn)
+      CALL tokenize(value, species_list(species_id)%dist_fn, errcode)
+      species_list(species_id)%dist_fn%should_simplify = .FALSE.
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn_px_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(1))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(1))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(1), errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn_py_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(2))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(2))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(2), errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'dist_fn_pz_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(3))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(3))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(3), errcode)
       RETURN
     ENDIF
 
@@ -579,24 +649,26 @@ CONTAINS
         .OR. str_cmp(element, 'temp_ev')) THEN
       IF (str_cmp(element, 'temp_ev')) mult = ev / kb
 
+      IF (got_file) CALL allocate_temp_ics(species_id)
       n = 1
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,:,:,n), &
+          species_list(species_id)%initial_conditions%temp(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
       n = 2
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,:,:,n), &
+          species_list(species_id)%initial_conditions%temp(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
       n = 3
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,:,:,n), &
+          species_list(species_id)%initial_conditions%temp(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
-
+      IF (got_file) THEN
+        species_list(species_id)%initial_conditions%temp(:,:,:,2) = &
+            species_list(species_id)%initial_conditions%temp(:,:,:,n)
+        species_list(species_id)%initial_conditions%temp(:,:,3) = &
+            species_list(species_id)%initial_conditions%temp(:,:,:,n)
+      ENDIF
       debug_mode = .FALSE.
-      initial_conditions(species_id)%temp(:,:,:,2) = &
-          initial_conditions(species_id)%temp(:,:,:,n)
-      initial_conditions(species_id)%temp(:,:,:,3) = &
-          initial_conditions(species_id)%temp(:,:,:,n)
       RETURN
     ENDIF
 
@@ -605,8 +677,9 @@ CONTAINS
       IF (str_cmp(element, 'temp_x_ev')) mult = ev / kb
 
       n = 1
+      IF (got_file) CALL allocate_temp_ics(species_id)
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,:,:,n), &
+          species_list(species_id)%initial_conditions%temp(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -616,8 +689,9 @@ CONTAINS
       IF (str_cmp(element, 'temp_y_ev')) mult = ev / kb
 
       n = 2
+      IF (got_file) CALL allocate_temp_ics(species_id)
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,:,:,n), &
+          species_list(species_id)%initial_conditions%temp(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -627,8 +701,9 @@ CONTAINS
       IF (str_cmp(element, 'temp_z_ev')) mult = ev / kb
 
       n = 3
+      IF (got_file) CALL allocate_temp_ics(species_id)
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          initial_conditions(species_id)%temp(:,:,:,n), &
+          species_list(species_id)%initial_conditions%temp(:,:,:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
     ENDIF
@@ -861,35 +936,11 @@ CONTAINS
       CALL load_block(element, block)
       CALL push_to_stack(stack, block)
       IF (ABS(mult - 1.0_num) > c_tiny) array = mult * array
+      stack%should_simplify=.FALSE.
     ELSE
       CALL tokenize(value, stack, errcode)
       IF (ABS(mult - 1.0_num) > c_tiny) &
           CALL tokenize(mult_string, stack, errcode)
-
-      ! Sanity check
-      array(1,1,1) = evaluate(stack, errcode)
-      IF (errcode /= c_err_none) THEN
-        IF (rank == 0) THEN
-          DO iu = 1, nio_units ! Print to stdout and to file
-            io = io_units(iu)
-            WRITE(io,*) '*** ERROR ***'
-            WRITE(io,*) 'Unable to parse input deck.'
-          ENDDO
-        ENDIF
-        CALL abort_code(errcode)
-      ENDIF
-
-      DO iz = -2, nz+3
-        parameters%pack_iz = iz
-        DO iy = -2, ny+3
-          parameters%pack_iy = iy
-          DO ix = -2, nx+3
-            parameters%pack_ix = ix
-            array(ix,iy,iz) = evaluate_with_parameters(stack, &
-                parameters, errcode)
-          ENDDO
-        ENDDO
-      ENDDO
     ENDIF
 
     CALL deallocate_stack(output)

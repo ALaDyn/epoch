@@ -165,34 +165,27 @@ CONTAINS
   SUBROUTINE insert_particles
 
     TYPE(particle), POINTER :: current
-    TYPE(particle_list) :: append_list
+    TYPE(particle_list), POINTER :: append_list
     INTEGER :: ispecies, i, iy, iz, isuby, isubz
     INTEGER(i8) :: ipart, npart_per_cell, n0
     REAL(num) :: cell_y_r, cell_frac_y, cy2
     REAL(num) :: cell_z_r, cell_frac_z, cz2
     INTEGER :: cell_y, cell_z
     REAL(num), DIMENSION(-1:1) :: gy, gz
-    REAL(num) :: temp_local, drift_local, npart_frac
-    REAL(num) :: weight_local
+    REAL(num), DIMENSION(3) :: temp_local, drift_local
+    REAL(num) :: weight_local, density_local, mass, npart_frac
     TYPE(parameter_pack) :: parameters
+    TYPE(particle_species), POINTER :: species
 
     ! This subroutine injects particles at the right hand edge of the box
 
     ! Only processors on the right need do anything
     IF (.NOT.x_max_boundary) RETURN
 
-    IF (nproc > 1) THEN
-      IF (SIZE(density,1) /= ny+6 .OR. SIZE(density,2) /= nz+6) THEN
-        DEALLOCATE(density, temperature, drift)
-        ALLOCATE(density(-2:ny+3,-2:nz+3))
-        ALLOCATE(temperature(-2:ny+3,-2:nz+3, 1:3))
-        ALLOCATE(drift(-2:ny+3,-2:nz+3, 1:3))
-      ENDIF
-    ENDIF
-
     errcode = c_err_none
 
     DO ispecies = 1, n_species
+      ALLOCATE(append_list)
       CALL create_empty_partlist(append_list)
       npart_per_cell = FLOOR(species_list(ispecies)%npart_per_cell, KIND=i8)
       npart_frac = species_list(ispecies)%npart_per_cell - npart_per_cell
@@ -202,36 +195,15 @@ CONTAINS
         n0 = 1
       ENDIF
 
-      DO i = 1, 3
-        parameters%pack_ix = nx
-        DO iz = -2, nz+3
-          parameters%pack_iz = iz
-          DO iy = -2, ny+3
-            parameters%pack_iy = iy
-            temperature(iy,iz,i) = evaluate_with_parameters( &
-                species_list(ispecies)%temperature_function(i), &
-                parameters, errcode)
-            drift(iy,iz,i) = evaluate_with_parameters( &
-                species_list(ispecies)%drift_function(i), &
-                parameters, errcode)
-          ENDDO
-        ENDDO
-      ENDDO
+      parameters%pack_ix = nx
       DO iz = -2, nz+3
         parameters%pack_iz = iz
         DO iy = -2, ny+3
           parameters%pack_iy = iy
-          density(iy,iz) = evaluate_with_parameters( &
+          density_local = evaluate_with_parameters( &
               species_list(ispecies)%density_function, parameters, errcode)
-          IF (density(iy,iz) > initial_conditions(ispecies)%density_max) &
-              density(iy,iz) = initial_conditions(ispecies)%density_max
-        ENDDO
-      ENDDO
-
-      DO iz = 1, nz
-        DO iy = 1, ny
-          IF (density(iy,iz) < initial_conditions(ispecies)%density_min) &
-              CYCLE
+          IF (density_local < species_list(ispecies)%&
+              initial_conditions%density_min) CYCLE
           DO ipart = n0, npart_per_cell
             ! Place extra particle based on probability
             IF (ipart == 0) THEN
@@ -242,62 +214,56 @@ CONTAINS
             current%part_pos(2) = y(iy) + (random() - 0.5_num) * dy
             current%part_pos(3) = z(iz) + (random() - 0.5_num) * dz
 
-            ! Always use the triangle particle weighting for simplicity
-            cell_y_r = (current%part_pos(2) - y_grid_min_local) / dy
-            cell_y = FLOOR(cell_y_r + 0.5_num)
-            cell_frac_y = REAL(cell_y, num) - cell_y_r
-            cell_y = cell_y + 1
+          parameters%use_grid_position=.FALSE.
+          parameters%pack_pos = current%part_pos
+          !Setup particle density at the exact position of the new particle
+          density_local = evaluate_with_parameters( &
+            species_list(ispecies)%density_function, parameters, errcode)
+          IF (density_local > species_list(ispecies)%&
+              initial_conditions%density_max) THEN
+            density_local = species_list(ispecies)%initial_conditions%&
+                density_max
+          ENDIF
+          weight_local = dx * dy * dz * density_local/species_list(ispecies)&
+              %npart_per_cell
 
-            cell_z_r = (current%part_pos(3) - z_grid_min_local) / dz
-            cell_z = FLOOR(cell_z_r + 0.5_num)
-            cell_frac_z = REAL(cell_z, num) - cell_z_r
-            cell_z = cell_z + 1
-
-            cy2 = cell_frac_y**2
-            gy(-1) = 0.5_num * (0.25_num + cy2 + cell_frac_y)
-            gy( 0) = 0.75_num - cy2
-            gy( 1) = 0.5_num * (0.25_num + cy2 - cell_frac_y)
-
-            cz2 = cell_frac_z**2
-            gz(-1) = 0.5_num * (0.25_num + cz2 + cell_frac_z)
-            gz( 0) = 0.75_num - cz2
-            gz( 1) = 0.5_num * (0.25_num + cz2 - cell_frac_z)
-
+          IF (.NOT. species_list(ispecies)%dist_fn_set) THEN
             DO i = 1, 3
-              temp_local = 0.0_num
-              drift_local = 0.0_num
-              DO isubz = -1, 1
-                DO isuby = -1, 1
-                  temp_local = temp_local + gy(isuby) * gz(isubz) &
-                      * temperature(cell_y+isuby, cell_z+isubz, i)
-                  drift_local = drift_local + gy(isuby) * gz(isubz) &
-                      * drift(cell_y+isuby, cell_z+isubz, i)
-                ENDDO
-              ENDDO
-              current%part_p(i) = momentum_from_temperature(&
-                  species_list(ispecies)%mass, temp_local, drift_local)
+              temp_local(i) = evaluate_with_parameters( &
+                  species_list(ispecies)%temperature_function(i), &
+                  parameters, errcode)
+              drift_local(i) = evaluate_with_parameters( &
+                  species_list(ispecies)%drift_function(i), parameters, errcode)
             ENDDO
+            IF (species_list(ispecies)%use_maxwell_juettner) THEN
+              current%part_p = momentum_from_temperature_relativistic(&
+                  mass, temp_local, &
+                  species_list(ispecies)%fractional_tail_cutoff)
+            ELSE
+              DO i = 1, 3
+                current%part_p(i) = momentum_from_temperature(&
+                    mass, temp_local(i))
+              ENDDO
+            ENDIF
+            CALL particle_drift_lorentz_transform(current, mass, drift_local)
+          ENDIF
+          current%weight = weight_local
 
-            weight_local = 0.0_num
-            DO isubz = -1, 1
-              DO isuby = -1, 1
-                weight_local = weight_local &
-                    + gy(isuby) * gz(isubz) * dx * dy * dz &
-                    / species_list(ispecies)%npart_per_cell &
-                    * density(cell_y+isuby, cell_z+isubz)
-              ENDDO
-            ENDDO
-            current%weight = weight_local
 #ifdef PARTICLE_DEBUG
             current%processor = rank
             current%processor_at_t0 = rank
 #endif
+            IF (species_list(ispecies)%dist_fn_set) THEN
+              species=>species_list(ispecies)
+              CALL sample_partlist_from_distfn(species, append_list)
+            ENDIF
             CALL add_particle_to_partlist(append_list, current)
           ENDDO
         ENDDO
       ENDDO
 
       CALL append_partlist(species_list(ispecies)%attached_list, append_list)
+      DEALLOCATE(append_list)
     ENDDO
 
   END SUBROUTINE insert_particles
