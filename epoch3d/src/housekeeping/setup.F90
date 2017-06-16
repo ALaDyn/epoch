@@ -655,7 +655,7 @@ CONTAINS
         ENDDO ! iz
       ENDIF
     ENDDO
-    DEALLOCATE(dens_local)
+    DEALLOCATE(dens_local, n_local)
     CALL MPI_ALLREDUCE(min_dt, dt_plasma_frequency, 1, mpireal, MPI_MIN, &
         comm, errcode)
     ! Must resolve plasma frequency

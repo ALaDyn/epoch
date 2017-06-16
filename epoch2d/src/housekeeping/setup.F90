@@ -551,7 +551,7 @@ CONTAINS
 
   SUBROUTINE set_plasma_frequency_dt
 
-    INTEGER :: ispecies, ix, iy, iz
+    INTEGER :: ispecies, ix, iy
     REAL(num) :: min_dt, omega2, omega, k_max, fac1, fac2
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: dens_local, n_local
     TYPE(particle), POINTER :: current
@@ -590,7 +590,7 @@ CONTAINS
         ENDDO ! iy
       ENDIF
     ENDDO
-    DEALLOCATE(dens_local)
+    DEALLOCATE(dens_local, n_local)
     CALL MPI_ALLREDUCE(min_dt, dt_plasma_frequency, 1, mpireal, MPI_MIN, &
         comm, errcode)
     ! Must resolve plasma frequency

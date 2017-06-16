@@ -484,30 +484,42 @@ CONTAINS
 
     INTEGER :: ispecies, ix
     REAL(num) :: min_dt, omega2, omega, k_max, fac1, fac2
+    REAL(num), DIMENSION(:), ALLOCATABLE :: dens_local, n_local
+    TYPE(particle), POINTER :: current
+#include "particle_head.inc"
 
     IF (ic_from_restart) RETURN
+    ALLOCATE(dens_local(nx))
+    dens_local = 0.0_num
+    ALLOCATE(n_local(nx))
+    n_local = 0.0_num
 
     min_dt = 1000000.0_num
     k_max = 2.0_num * pi / dx
 
-    ! Identify the plasma frequency (Bohm-Gross dispersion relation)
-    ! Note that this doesn't get strongly relativistic plasmas right
     DO ispecies = 1, n_species
       IF (species_list(ispecies)%species_type /= c_species_id_photon) THEN
+        current=>species_list(ispecies)%attached_list%head
+        DO WHILE(ASSOCIATED(current))
+#include "particle_to_grid_nofrac.inc"
+          dens_local(cell_x) = &
+              dens_local(cell_x) + current%weight
+          n_local(cell_x) = n_local(cell_x) + &
+              1.0_num
+          current=>current%next
+        ENDDO
+        dens_local = dens_local / n_local
         fac1 = q0**2 / species_list(ispecies)%mass / epsilon0
         fac2 = 3.0_num * k_max**2 * kb / species_list(ispecies)%mass
         DO ix = 1, nx
-          omega2 = fac1 &
-              * species_list(ispecies)%initial_conditions%density(ix) &
-              + fac2 &
-              * MAXVAL(species_list(ispecies)%initial_conditions%temp(ix,:))
+          omega2 = fac1 * dens_local(ix)
           IF (omega2 <= c_tiny) CYCLE
           omega = SQRT(omega2)
           IF (2.0_num * pi / omega < min_dt) min_dt = 2.0_num * pi / omega
         ENDDO ! ix
       ENDIF
     ENDDO
-
+    DEALLOCATE(dens_local, n_local)
     CALL MPI_ALLREDUCE(min_dt, dt_plasma_frequency, 1, mpireal, MPI_MIN, &
         comm, errcode)
     ! Must resolve plasma frequency
