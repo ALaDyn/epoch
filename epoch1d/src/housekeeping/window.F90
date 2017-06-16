@@ -151,7 +151,7 @@ CONTAINS
     TYPE(particle_list), POINTER :: append_list
     INTEGER :: ispecies, i
     INTEGER(i8) :: ipart, npart_per_cell, n0
-    REAL(num) :: temp_local, drift_local, npart_frac, mass
+    REAL(num) :: temp_local, npart_frac, mass
     REAL(num),DIMENSION(3) :: drift
     TYPE(parameter_pack) :: parameters
     TYPE(particle_species), POINTER :: species

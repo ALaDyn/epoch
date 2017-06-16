@@ -488,7 +488,7 @@ CONTAINS
     INTEGER, DIMENSION(:), ALLOCATABLE :: npart_in_cell
     REAL(num) :: wdata
     TYPE(particle_list), POINTER :: partlist
-    INTEGER :: ix, i, isubx
+    INTEGER :: ix
     LOGICAL, DIMENSION(:), ALLOCATABLE :: density_map
     REAL(num) :: density
     TYPE(parameter_pack) :: parameters

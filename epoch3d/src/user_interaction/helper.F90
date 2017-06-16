@@ -600,7 +600,7 @@ CONTAINS
     INTEGER, DIMENSION(:,:,:), ALLOCATABLE :: npart_in_cell
     REAL(num) :: wdata, density
     TYPE(particle_list), POINTER :: partlist
-    INTEGER :: ix, iy, iz, i, j, k, isubx, isuby, isubz
+    INTEGER :: ix, iy, iz
     LOGICAL, DIMENSION(:,:,:), ALLOCATABLE :: density_map
     TYPE(parameter_pack) :: parameters
 #include "particle_head.inc"

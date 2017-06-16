@@ -34,7 +34,6 @@ CONTAINS
     REAL(num), DIMENSION(3) :: drift_local
     TYPE(particle), POINTER :: current
     INTEGER(i8) :: ipart
-    INTEGER :: ix, iy, iz
     INTEGER :: idir
     TYPE(parameter_pack) :: parameters
 #include "particle_head.inc"
@@ -83,7 +82,7 @@ CONTAINS
     REAL(num), DIMENSION(3) :: drift_local, temp_local
     TYPE(particle), POINTER :: current
     INTEGER(i8) :: ipart
-    INTEGER :: ix, idir
+    INTEGER :: idir
     TYPE(parameter_pack) :: parameters
 #include "particle_head.inc"
 
@@ -205,7 +204,7 @@ CONTAINS
     REAL(num) :: random_number, probability
     REAL(num) :: momentum_x, momentum_y, momentum_z, momentum
     REAL(num) :: temp, temp_max, p_max_x, p_max_y, p_max_z, p_max
-    REAL(num) :: dof
+    INTEGER :: dof
     REAL(num) :: inter1, inter2, inter3
 
     temp = SUM(temperature)
@@ -283,7 +282,7 @@ CONTAINS
     TYPE(particle_species), POINTER :: part_species
     TYPE(particle_list), POINTER :: partlist
     INTEGER(i8) :: ipart, iit, ipart_global, iit_global
-    REAL(num) :: average_its, mass
+    REAL(num) :: average_its
     CHARACTER(LEN=25) :: string
 #include "particle_head.inc"
 

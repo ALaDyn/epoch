@@ -910,8 +910,7 @@ CONTAINS
     LOGICAL, INTENT(IN) :: got_file
     TYPE(stack_element) :: block
     TYPE(primitive_stack) :: stack
-    INTEGER :: io, iu, ix, iy
-    TYPE(parameter_pack) :: parameters
+    INTEGER :: io, iu
 
     CALL initialise_stack(stack)
     IF (got_file) THEN

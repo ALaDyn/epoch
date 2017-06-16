@@ -154,11 +154,9 @@ CONTAINS
 
     TYPE(particle), POINTER :: current
     TYPE(particle_list), POINTER :: append_list
-    INTEGER :: ispecies, i, iy, isuby
+    INTEGER :: ispecies, i, iy
     INTEGER(i8) :: ipart, npart_per_cell, n0
-    REAL(num) :: cell_y_r, cell_frac_y, cy2
     INTEGER :: cell_y
-    REAL(num), DIMENSION(-1:1) :: gy
     REAL(num) :: npart_frac
     REAL(num), DIMENSION(3) :: temp_local, drift_local
     REAL(num) :: weight_local, density_local, mass

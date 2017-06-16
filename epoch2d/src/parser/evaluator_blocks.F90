@@ -163,7 +163,6 @@ CONTAINS
     INTEGER :: err_simplify
     REAL(num) :: val
 
-    
     err = c_err_none
     err_simplify = c_err_none
 

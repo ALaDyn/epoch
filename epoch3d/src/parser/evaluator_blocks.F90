@@ -691,7 +691,7 @@ CONTAINS
       IF (parameters%use_grid_position) THEN
         val_local = species_list(ispec)%initial_conditions%&
             temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 2)
-      ELSE 
+      ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
         DO iz = sf_min, sf_max
@@ -763,7 +763,7 @@ CONTAINS
       IF (parameters%use_grid_position) THEN
         val_local = species_list(ispec)%initial_conditions%&
             temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 2)
-      ELSE 
+      ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
         DO iz = sf_min, sf_max
@@ -787,7 +787,7 @@ CONTAINS
       IF (parameters%use_grid_position) THEN
         val_local = species_list(ispec)%initial_conditions%&
             temp(parameters%pack_ix, parameters%pack_iy, parameters%pack_iz, 3)
-      ELSE 
+      ELSE
 #include "pack_to_grid.inc"
         val_local = 0.0_num
         DO iz = sf_min, sf_max

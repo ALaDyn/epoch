@@ -535,7 +535,7 @@ CONTAINS
     INTEGER, DIMENSION(:,:), ALLOCATABLE :: npart_in_cell
     REAL(num) :: wdata, density
     TYPE(particle_list), POINTER :: partlist
-    INTEGER :: ix, iy, i, j, isubx, isuby
+    INTEGER :: ix, iy
     LOGICAL, DIMENSION(:,:), ALLOCATABLE :: density_map
     TYPE(parameter_pack) :: parameters
 #include "particle_head.inc"

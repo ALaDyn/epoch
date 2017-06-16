@@ -39,7 +39,6 @@ CONTAINS
 
     INTEGER :: i, errcode
     REAL(num) :: dc
-    TYPE(parameter_pack) :: parameters
 
     IF (.NOT.print_deck_constants) RETURN
     IF (rank /= 0) RETURN

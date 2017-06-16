@@ -361,7 +361,6 @@ CONTAINS
     INTEGER, INTENT(IN) :: n_elements
     REAL(num), DIMENSION(:), INTENT(INOUT) :: array
     INTEGER, INTENT(INOUT) :: err
-    INTEGER :: i
     TYPE(parameter_pack) :: parameters
 
     parameters%pack_ix = 1

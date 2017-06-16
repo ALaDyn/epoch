@@ -166,12 +166,8 @@ CONTAINS
 
     TYPE(particle), POINTER :: current
     TYPE(particle_list), POINTER :: append_list
-    INTEGER :: ispecies, i, iy, iz, isuby, isubz
+    INTEGER :: ispecies, i, iy, iz
     INTEGER(i8) :: ipart, npart_per_cell, n0
-    REAL(num) :: cell_y_r, cell_frac_y, cy2
-    REAL(num) :: cell_z_r, cell_frac_z, cz2
-    INTEGER :: cell_y, cell_z
-    REAL(num), DIMENSION(-1:1) :: gy, gz
     REAL(num), DIMENSION(3) :: temp_local, drift_local
     REAL(num) :: weight_local, density_local, mass, npart_frac
     TYPE(parameter_pack) :: parameters

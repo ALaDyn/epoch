@@ -551,7 +551,7 @@ CONTAINS
 
   SUBROUTINE set_plasma_frequency_dt
 
-    INTEGER :: ispecies, ix, iy, iz, itemp, ixsub, iysub, izsub
+    INTEGER :: ispecies, ix, iy, iz
     REAL(num) :: min_dt, omega2, omega, k_max, fac1, fac2
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: dens_local, n_local
     TYPE(particle), POINTER :: current
