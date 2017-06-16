@@ -185,9 +185,9 @@ CONTAINS
       NULLIFY(species%initial_conditions%density)
       NULLIFY(species%initial_conditions%temp)
       NULLIFY(species%initial_conditions%drift)
+      species%initial_conditions%density_max = HUGE(1.0_num)
+      species%initial_conditions%density_min = EPSILON(1.0_num)
     ENDDO
-    species%initial_conditions%density_max = HUGE(1.0_num)
-    species%initial_conditions%density_min = EPSILON(1.0_num)
 
   END SUBROUTINE allocate_ic
 
