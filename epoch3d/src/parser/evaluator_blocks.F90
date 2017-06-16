@@ -176,9 +176,9 @@ CONTAINS
 
     IF (opcode == c_const_x) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(x(parameters%pack_ix)))
+        CALL push_on_eval(x(parameters%pack_ix))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos(1)))
+        CALL push_on_eval(parameters%pack_pos(1))
       ENDIF
       err = err_simplify
       RETURN
@@ -186,9 +186,9 @@ CONTAINS
 
     IF (opcode == c_const_xb) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(xb(parameters%pack_ix)))
+        CALL push_on_eval(xb(parameters%pack_ix))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos(1)))
+        CALL push_on_eval(parameters%pack_pos(1))
       ENDIF
       err = err_simplify
       RETURN
@@ -202,9 +202,9 @@ CONTAINS
 
     IF (opcode == c_const_y) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(y(parameters%pack_iy)))
+        CALL push_on_eval(y(parameters%pack_iy))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos(2)))
+        CALL push_on_eval(parameters%pack_pos(2))
       ENDIF
       err = err_simplify
       RETURN
@@ -212,9 +212,9 @@ CONTAINS
 
     IF (opcode == c_const_yb) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(yb(parameters%pack_iy)))
+        CALL push_on_eval(yb(parameters%pack_iy))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos(2)))
+        CALL push_on_eval(parameters%pack_pos(2))
       ENDIF
       err = err_simplify
       RETURN
@@ -228,9 +228,9 @@ CONTAINS
 
     IF (opcode == c_const_z) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(z(parameters%pack_iz)))
+        CALL push_on_eval(z(parameters%pack_iz))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos(3)))
+        CALL push_on_eval(parameters%pack_pos(3))
       ENDIF
       err = err_simplify
       RETURN
@@ -238,9 +238,9 @@ CONTAINS
 
     IF (opcode == c_const_zb) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(zb(parameters%pack_iz)))
+        CALL push_on_eval(zb(parameters%pack_iz))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos(3)))
+        CALL push_on_eval(parameters%pack_pos(3))
       ENDIF
       err = err_simplify
       RETURN

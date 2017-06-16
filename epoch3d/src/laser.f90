@@ -179,9 +179,9 @@ CONTAINS
       CASE(c_bd_x_min, c_bd_x_max)
         parameters%pack_ix = 0
         DO j = 1,nz
-          parameters%pack_iy = j
+          parameters%pack_iz = j
           DO i = 1,ny
-            parameters%pack_iz = i
+            parameters%pack_iy = i
             laser%phase(i,j) = &
                 evaluate_with_parameters(laser%phase_function, parameters, err)
           ENDDO
