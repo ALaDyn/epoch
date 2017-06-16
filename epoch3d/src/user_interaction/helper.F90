@@ -27,8 +27,9 @@ CONTAINS
 
   SUBROUTINE set_thermal_bcs
 
-    INTEGER :: ispecies
+    INTEGER :: ispecies, idir, ix, iy, iz
     TYPE(particle_species), POINTER :: species
+    TYPE(parameter_pack) :: parameters
 
     DO ispecies = 1, n_species
       species => species_list(ispecies)
@@ -36,16 +37,84 @@ CONTAINS
       ! Set temperature at boundary for thermal bcs.
 
       IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
+        parameters%pack_ix = 1
+        DO iz = -2, nz+3
+          parameters%pack_iz = iz
+          DO iy = -2, ny+3
+            parameters%pack_iy = iy
+            DO idir = 1, 3
+              species%ext_temp_x_min(iy, iz, idir) = evaluate_with_parameters( &
+                  species%temperature_function(idir), parameters, errcode)
+            ENDDO
+          ENDDO
+        ENDDO
       ENDIF
       IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
+        parameters%pack_ix = nx
+        DO iz = -2, nz+3
+          parameters%pack_iz = iz
+          DO iy = -2, ny+3
+            parameters%pack_iy = iy
+            DO idir = 1, 3
+              species%ext_temp_x_max(iy, iz, idir) = evaluate_with_parameters( &
+                  species%temperature_function(idir), parameters, errcode)
+            ENDDO
+          ENDDO
+        ENDDO
       ENDIF
+
       IF (bc_particle(c_bd_y_min) == c_bc_thermal) THEN
+        parameters%pack_iy = 1
+        DO iz = -2, nz+3
+          parameters%pack_iz = iz
+          DO ix = -2, nx+3
+            parameters%pack_ix = ix
+            DO idir = 1, 3
+              species%ext_temp_y_min(ix, iz, idir) = evaluate_with_parameters( &
+                  species%temperature_function(idir), parameters, errcode)
+            ENDDO
+          ENDDO
+        ENDDO
       ENDIF
       IF (bc_particle(c_bd_y_max) == c_bc_thermal) THEN
+        parameters%pack_iy = ny
+        DO iz = -2, nz+3
+          parameters%pack_iz = iz
+          DO ix = -2, nx+3
+            parameters%pack_ix = ix
+            DO idir = 1, 3
+              species%ext_temp_y_max(ix, iz, idir) = evaluate_with_parameters( &
+                  species%temperature_function(idir), parameters, errcode)
+            ENDDO
+          ENDDO
+        ENDDO
       ENDIF
+
       IF (bc_particle(c_bd_z_min) == c_bc_thermal) THEN
+        parameters%pack_iz = 1
+        DO iy = -2, ny+3
+          parameters%pack_iy = iy
+          DO ix = -2, nx+3
+            parameters%pack_ix = ix
+            DO idir = 1, 3
+              species%ext_temp_z_min(ix, iy, idir) = evaluate_with_parameters( &
+                  species%temperature_function(idir), parameters, errcode)
+            ENDDO
+          ENDDO
+        ENDDO
       ENDIF
       IF (bc_particle(c_bd_z_max) == c_bc_thermal) THEN
+        parameters%pack_iz = nz
+        DO iy = -2, ny+3
+          parameters%pack_iy = iy
+          DO ix = -2, nx+3
+            parameters%pack_ix = ix
+            DO idir = 1, 3
+              species%ext_temp_z_max(ix, iy, idir) = evaluate_with_parameters( &
+                  species%temperature_function(idir), parameters, errcode)
+            ENDDO
+          ENDDO
+        ENDDO
       ENDIF
     ENDDO
 

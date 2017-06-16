@@ -27,8 +27,9 @@ CONTAINS
 
   SUBROUTINE set_thermal_bcs
 
-    INTEGER :: ispecies
+    INTEGER :: ispecies, idir, ix, iy
     TYPE(particle_species), POINTER :: species
+    TYPE(parameter_pack) :: parameters
 
     DO ispecies = 1, n_species
       species => species_list(ispecies)
@@ -36,20 +37,45 @@ CONTAINS
       ! Set temperature at boundary for thermal bcs.
 
       IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
-        species_list(ispecies)%ext_temp_x_min(-2:ny+3,1:3) = &
-            species_list(ispecies)%initial_conditions%temp(1,-2:ny+3,1:3)
+        parameters%pack_ix = 1
+        DO iy = -2, ny+3
+          parameters%pack_iy = iy
+          DO idir = 1, 3
+            species%ext_temp_x_min(iy,idir) = evaluate_with_parameters( &
+                species%temperature_function(idir), parameters, errcode)
+          ENDDO
+        ENDDO
       ENDIF
       IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
-        species_list(ispecies)%ext_temp_x_max(-2:ny+3,1:3) = &
-            species_list(ispecies)%initial_conditions%temp(nx,-2:ny+3,1:3)
+        parameters%pack_ix = nx
+        DO iy = -2, ny+3
+          parameters%pack_iy = iy
+          DO idir = 1, 3
+            species%ext_temp_x_max(iy, idir) = evaluate_with_parameters( &
+                species%temperature_function(idir), parameters, errcode)
+          ENDDO
+        ENDDO
       ENDIF
+
       IF (bc_particle(c_bd_y_min) == c_bc_thermal) THEN
-        species_list(ispecies)%ext_temp_y_min(-2:nx+3,1:3) = &
-            species_list(ispecies)%initial_conditions%temp(-2:nx+3,1,1:3)
+        parameters%pack_iy = 1
+        DO ix = -2, nx+3
+          parameters%pack_ix = ix
+          DO idir = 1, 3
+            species%ext_temp_y_min(ix,idir) = evaluate_with_parameters( &
+                species%temperature_function(idir), parameters, errcode)
+          ENDDO
+        ENDDO
       ENDIF
       IF (bc_particle(c_bd_y_max) == c_bc_thermal) THEN
-        species_list(ispecies)%ext_temp_y_max(-2:nx+3,1:3) = &
-            species_list(ispecies)%initial_conditions%temp(-2:nx+3,ny,1:3)
+        parameters%pack_iy = ny
+        DO ix = -2, nx+3
+          parameters%pack_ix = ix
+          DO idir = 1, 3
+            species%ext_temp_y_max(ix, idir) = evaluate_with_parameters( &
+                species%temperature_function(idir), parameters, errcode)
+          ENDDO
+        ENDDO
       ENDIF
     ENDDO
 

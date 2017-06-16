@@ -665,7 +665,7 @@ CONTAINS
       IF (got_file) THEN
         species_list(species_id)%initial_conditions%temp(:,:,:,2) = &
             species_list(species_id)%initial_conditions%temp(:,:,:,n)
-        species_list(species_id)%initial_conditions%temp(:,:,3) = &
+        species_list(species_id)%initial_conditions%temp(:,:,:,3) = &
             species_list(species_id)%initial_conditions%temp(:,:,:,n)
       ENDIF
       debug_mode = .FALSE.

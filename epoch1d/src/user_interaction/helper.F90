@@ -27,21 +27,28 @@ CONTAINS
 
   SUBROUTINE set_thermal_bcs
 
-    INTEGER :: ispecies
+    INTEGER :: ispecies, idir
     TYPE(particle_species), POINTER :: species
+    TYPE(parameter_pack) :: parameters
 
     DO ispecies = 1, n_species
       species => species_list(ispecies)
 
       ! Set temperature at boundary for thermal bcs.
 
+      parameters%pack_ix = 1
       IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
-        species_list(ispecies)%ext_temp_x_min(1:3) = &
-            species_list(ispecies)%initial_conditions%temp(1,1:3)
+        DO idir = 1, 3
+          species%ext_temp_x_min(idir) = evaluate_with_parameters( &
+              species%temperature_function(idir), parameters, errcode)
+        ENDDO
       ENDIF
+      parameters%pack_ix = nx
       IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
-        species_list(ispecies)%ext_temp_x_max(1:3) = &
-            species_list(ispecies)%initial_conditions%temp(nx,1:3)
+        DO idir = 1, 3
+          species%ext_temp_x_max(idir) = evaluate_with_parameters( &
+              species%temperature_function(idir), parameters, errcode)
+        ENDDO
       ENDIF
     ENDDO
 
@@ -107,15 +114,11 @@ CONTAINS
 
     INTEGER :: ispecies
 
-!    ALLOCATE(initial_conditions(1:n_species))
     DO ispecies = 1, n_species
-      ALLOCATE(species_list(ispecies)%initial_conditions%density(-2:nx+3))
-      ALLOCATE(species_list(ispecies)%initial_conditions%temp (-2:nx+3,1:3))
-      ALLOCATE(species_list(ispecies)%initial_conditions%drift(-2:nx+3,1:3))
+      NULLIFY(species_list(ispecies)%initial_conditions%density)
+      NULLIFY(species_list(ispecies)%initial_conditions%drift)
+      NULLIFY(species_list(ispecies)%initial_conditions%temp)
 
-      species_list(ispecies)%initial_conditions%density = 1.0_num
-      species_list(ispecies)%initial_conditions%temp = 0.0_num
-      species_list(ispecies)%initial_conditions%drift = 0.0_num
       species_list(ispecies)%initial_conditions%density_min = EPSILON(1.0_num)
       species_list(ispecies)%initial_conditions%density_max = HUGE(1.0_num)
     ENDDO
@@ -129,11 +132,19 @@ CONTAINS
     INTEGER :: ispecies
 
     DO ispecies = 1, n_species
-      DEALLOCATE(species_list(ispecies)%initial_conditions%density)
-      DEALLOCATE(species_list(ispecies)%initial_conditions%temp)
-      DEALLOCATE(species_list(ispecies)%initial_conditions%drift)
+      IF (ASSOCIATED(species_list(ispecies)%initial_conditions%density)) THEN
+        DEALLOCATE(species_list(ispecies)%initial_conditions%density)
+        NULLIFY(species_list(ispecies)%initial_conditions%density)
+      ENDIF
+      IF (ASSOCIATED(species_list(ispecies)%initial_conditions%drift)) THEN
+        DEALLOCATE(species_list(ispecies)%initial_conditions%drift)
+        NULLIFY(species_list(ispecies)%initial_conditions%drift)
+      ENDIF
+      IF (ASSOCIATED(species_list(ispecies)%initial_conditions%temp)) THEN
+        DEALLOCATE(species_list(ispecies)%initial_conditions%temp)
+        NULLIFY(species_list(ispecies)%initial_conditions%temp)
+      ENDIF
     ENDDO
- !   IF (.NOT. move_window) DEALLOCATE(initial_conditions)
 
   END SUBROUTINE deallocate_ic
 
@@ -165,7 +176,7 @@ CONTAINS
     DO ix = -2, nx+3
       parameters%pack_ix = ix
       density(ix) = evaluate_with_parameters( &
-            species%density_function, parameters, errcode)
+          species%density_function, parameters, errcode)
       IF (density(ix) > density_max) density(ix) = density_max
       IF (density(ix) >= density_min) THEN
         num_valid_cells_local = num_valid_cells_local + 1
