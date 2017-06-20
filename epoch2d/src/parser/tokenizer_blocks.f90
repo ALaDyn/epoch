@@ -185,6 +185,10 @@ CONTAINS
     IF (str_cmp(name, 'no_sum')) as_constant = c_const_io_no_sum
     IF (str_cmp(name, 'single')) as_constant = c_const_io_dump_single
     IF (str_cmp(name, 'average_single')) as_constant = c_const_io_average_single
+    IF (str_cmp(name, 'accumulate')) as_constant = c_const_io_accumulate
+    IF (str_cmp(name, 'accumulate_single')) &
+        as_constant = c_const_io_accumulate_single
+
 
     ! Distribution function constants
     IF (str_cmp(name, 'dir_x')) as_constant = c_const_dir_x

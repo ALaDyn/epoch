@@ -423,6 +423,16 @@ CONTAINS
       RETURN
     ENDIF
 
+    IF (opcode == c_const_io_accumulate) THEN
+      CALL push_on_eval(REAL(c_io_accumulate, num))
+      RETURN
+    ENDIF
+
+    IF (opcode == c_const_io_accumulate_single) THEN
+      CALL push_on_eval(REAL(c_io_accumulate+c_io_accumulate_single, num))
+      RETURN
+    ENDIF
+
     IF (opcode == c_const_dir_x) THEN
       CALL push_on_eval(REAL(c_dir_x, num))
       RETURN

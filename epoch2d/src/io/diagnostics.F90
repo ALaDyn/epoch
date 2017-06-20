@@ -47,7 +47,7 @@ MODULE diagnostics
   INTEGER(i8), ALLOCATABLE :: ejected_offset(:)
   LOGICAL :: reset_ejected, done_species_offset_init, done_subset_init
   LOGICAL :: restart_flag, dump_source_code, dump_input_decks
-  LOGICAL :: dump_field_grid, skipped_any_set
+  LOGICAL :: dump_field_grid, dump_accum_grid, skipped_any_set
   LOGICAL, ALLOCATABLE :: dump_point_grid(:)
   LOGICAL, ALLOCATABLE, SAVE :: prefix_first_call(:)
   INTEGER :: isubset
@@ -1095,6 +1095,7 @@ CONTAINS
 
     DO io = 1, 1
       IF (.NOT. io_block_list(io)%any_accumulate) CYCLE
+<<<<<<< HEAD
       IF ( (io_block_list(io)%accumulate_counter%dt_acc > 0 .AND. &
           time >= io_block_list(io)%accumulate_counter%last_accumulate_time + &
           io_block_list(io)%accumulate_counter%dt_acc - dt/2.0_num) .OR. &
@@ -1104,18 +1105,31 @@ CONTAINS
         DO id = 1, num_vars_to_dump
 !          IF (IAND(io_block_list(io)%dumpmask(id), c_io_accumulate) /= 0) THEN
           IF (io_block_list(io)%accumulated_data(id)%array_assoc) THEN
+=======
+      IF (time >= io_block_list(io)%accumulate_counter%last_accumulate + &
+          io_block_list(io)%accumulate_counter%dt_accumulate - dt/2.0_num) THEN
+        DO id = 1, num_vars_to_dump
+          IF (IAND(io_block_list(io)%dumpmask(id), c_io_accumulate) /= 0) THEN
+>>>>>>> Basic data types for accumulators
             CALL accumulate_field(id, io_block_list(io)%accumulate_counter, &
                 io_block_list(io)%accumulated_data(id))
           ENDIF
         ENDDO
         io_block_list(io)%accumulate_counter%current_step = &
             io_block_list(io)%accumulate_counter%current_step + 1
+<<<<<<< HEAD
         io_block_list(io)%accumulate_counter%last_accumulate_time = time
         io_block_list(io)%accumulate_counter%last_accumulate_step = step
      ENDIF
     ENDDO
 
 >>>>>>> Add types and array IO. ToDO: Grids, load balancer, non-subset output, control max_rows
+=======
+        io_block_list(io)%accumulate_counter%last_accumulate = time
+     ENDIF
+    ENDDO
+
+>>>>>>> Basic data types for accumulators
     IF (MOD(file_numbers(1), restart_dump_every) == 0 &
         .AND. restart_dump_every > -1) restart_flag = .TRUE.
     IF (first_call(iprefix) .AND. force_first_to_be_restartable) &
@@ -1301,11 +1315,19 @@ CONTAINS
     TYPE(accumulated_data_block) :: accum_block
 
      IF ( .NOT. ASSOCIATED(accum_block%array)) RETURN
+<<<<<<< HEAD
      IF ( accum%current_step > accum%nsteps ) THEN
        PRINT*, "WARNING: Accumulator overflow", accum%current_step, accum%nsteps
        RETURN
      ENDIF
      accum%time(accum%current_step) = time
+=======
+     IF ( accum%current_step > accum%n_steps ) THEN
+       PRINT*, "WARNING: Accumulator overflow"
+       RETURN
+     ENDIF
+!PRINT*, accum%current_step, SHAPE(accum_block%array), SHAPE(ex)
+>>>>>>> Basic data types for accumulators
      IF(accum_block%dump_single) THEN
        SELECT CASE(ioutput)
         CASE(c_dump_ex)
@@ -1353,7 +1375,10 @@ CONTAINS
   END SUBROUTINE accumulate_field
 
 
+<<<<<<< HEAD
 >>>>>>> Add types and array IO. ToDO: Grids, load balancer, non-subset output, control max_rows
+=======
+>>>>>>> Basic data types for accumulators
   SUBROUTINE write_field(id, code, block_id, name, units, stagger, array)
 
     INTEGER, INTENT(IN) :: id, code
@@ -1366,10 +1391,14 @@ CONTAINS
     INTEGER :: i0, i1, j0, j1
     INTEGER :: subtype, subarray, rsubtype, rsubarray
     INTEGER, DIMENSION(c_ndims) :: dims
+    INTEGER, DIMENSION(c_ndims+1) :: acc_dims
     LOGICAL :: convert, dump_skipped, restart_id, normal_id, unaveraged_id
+    LOGICAL :: accumulated_id
     CHARACTER(LEN=c_id_length) :: temp_block_id, temp_grid_id
     CHARACTER(LEN=c_max_string_length) :: temp_name
     TYPE(averaged_data_block), POINTER :: avg
+    TYPE(accumulated_data_block), POINTER:: accum
+    TYPE(accumulator_type), POINTER :: acc_counter
     TYPE(io_block_type), POINTER :: iob
     TYPE(subset), POINTER :: sub
     INTEGER, DIMENSION(2,c_ndims) :: ranges, ran_sec
@@ -1378,7 +1407,7 @@ CONTAINS
 
     mask = iomask(id)
     IF (IAND(mask, c_io_never) /= 0) RETURN
-
+!PRINT*, 'Dumping', time
     ! This is a normal dump and normal output variable
     normal_id = IAND(IAND(code, mask), IOR(c_io_always, c_io_full)) /= 0
     ! This is a restart dump and a restart variable
@@ -1388,7 +1417,11 @@ CONTAINS
         .OR. IAND(mask, c_io_snapshot) /= 0
 
     accumulated_id = (IAND(mask, c_io_accumulate) /= 0) &
+<<<<<<< HEAD
         .OR. (IAND(mask, c_io_accumulate_single) /= 0)
+=======
+        .AND. (IAND(mask, c_io_accumulate_single) /= 0)
+>>>>>>> Basic data types for accumulators
 
     convert = IAND(mask, c_io_dump_single) /= 0 .AND. .NOT.restart_id
 
@@ -1571,6 +1604,7 @@ CONTAINS
     ENDDO
 
     !Do accumulated data
+<<<<<<< HEAD
     dump_acc = .FALSE.
     DO ib = 1, n_io_blocks
       iob => io_block_list(ib)
@@ -1646,6 +1680,46 @@ CONTAINS
     ENDIF
 
 >>>>>>> Add types and array IO. ToDO: Grids, load balancer, non-subset output, control max_rows
+=======
+    DO io = 1, n_io_blocks
+      iob => io_block_list(io)
+      IF (.NOT.iob%dump) CYCLE
+
+      IF (IAND(mask, c_io_accumulate) == 0) CYCLE
+
+      accum => io_block_list(1)%accumulated_data(id)
+      acc_counter => iob%accumulate_counter
+      acc_dims(1:c_ndims) = dims
+      acc_dims(c_ndims+1) = acc_counter%current_step
+
+      IF (accum%dump_single) THEN
+
+!        CALL sdf_write_plain_variable(sdf_handle, &
+!            TRIM(block_id) // '_accum', TRIM(name) // '_accum', &
+!            TRIM(units), acc_dims, stagger, 'grid_accum', &
+!            accum%array_r4(:,:,1:acc_dims(c_ndims+1)), &
+!            subtype_field_r4_acc, subarray_field_r4_acc)
+
+        accum%r4array = 0.0_num
+      ELSE
+
+!        CALL sdf_write_plain_variable(sdf_handle, &
+!            TRIM(block_id) // '_accum', TRIM(name) // '_accum', &
+!            TRIM(units), acc_dims, stagger, 'grid_accum', &
+!            accum%array(:,:,1:acc_dims(c_ndims+1)), &
+!            subtype_field_acc, subarray_field_acc)
+
+        accum%array = 0.0_num
+      ENDIF
+
+      dump_accum_grid = .TRUE.
+  PRINT*, "Restting", acc_counter%current_step, accum%dump_single
+      acc_counter%current_step = 1
+    ENDDO
+
+
+
+>>>>>>> Basic data types for accumulators
   END SUBROUTINE write_field
 
 
