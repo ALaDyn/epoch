@@ -553,15 +553,13 @@ CONTAINS
 
     INTEGER :: ispecies, ix, iy
     REAL(num) :: min_dt, omega2, omega, k_max, fac1, fac2
-    REAL(num), DIMENSION(:,:), ALLOCATABLE :: dens_local, n_local
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: dens_local
     TYPE(particle), POINTER :: current
 #include "particle_head.inc"
 
     IF (ic_from_restart) RETURN
     ALLOCATE(dens_local(nx,ny))
     dens_local = 0.0_num
-    ALLOCATE(n_local(nx,ny))
-    n_local = 0.0_num
 
     min_dt = 1000000.0_num
     k_max = 2.0_num * pi / MIN(dx, dy)
@@ -571,13 +569,16 @@ CONTAINS
         current=>species_list(ispecies)%attached_list%head
         DO WHILE(ASSOCIATED(current))
 #include "particle_to_grid_nofrac.inc"
+#ifndef PER_SPECIES_WEIGHT
           dens_local(cell_x, cell_y) = &
               dens_local(cell_x, cell_y) + current%weight
-          n_local(cell_x, cell_y) = n_local(cell_x, cell_y) + &
-              1.0_num
+#else
+          dens_local(cell_x, cell_y) = &
+              dens_local(cell_x, cell_y) + species_list(ispecies)%weight
+#endif
           current=>current%next
         ENDDO
-        dens_local = dens_local / n_local
+        dens_local = dens_local / (dx * dy)
         fac1 = q0**2 / species_list(ispecies)%mass / epsilon0
         fac2 = 3.0_num * k_max**2 * kb / species_list(ispecies)%mass
         DO iy = 1, ny
@@ -590,7 +591,7 @@ CONTAINS
         ENDDO ! iy
       ENDIF
     ENDDO
-    DEALLOCATE(dens_local, n_local)
+    DEALLOCATE(dens_local)
     CALL MPI_ALLREDUCE(min_dt, dt_plasma_frequency, 1, mpireal, MPI_MIN, &
         comm, errcode)
     ! Must resolve plasma frequency

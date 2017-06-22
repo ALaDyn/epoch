@@ -138,7 +138,7 @@ CONTAINS
           species%initial_conditions%density_max)
 #else
       CALL non_uniform_load_particles(&
-          species, species%initial_conditions(ispecies)%density_min, &
+          species, species%initial_conditions%density_min, &
           species%initial_conditions%density_max)
 #endif
       IF (.NOT. species%dist_fn_set) THEN
@@ -248,7 +248,7 @@ CONTAINS
       parameters%pack_iy = iy
     DO ix = -2, nx+3
       parameters%pack_ix = ix
-      density(ix) = evaluate_with_parameters( &
+      density(ix,iy,iz) = evaluate_with_parameters( &
           species%density_function, parameters, errcode)
       IF (density(ix,iy,iz) > density_max) density(ix,iy,iz) = density_max
       IF (density(ix,iy,iz) >= density_min) THEN
