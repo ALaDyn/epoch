@@ -126,6 +126,7 @@ PROGRAM pic
   CALL initialise_window ! window.f90
   CALL set_dt
   CALL set_maxwell_solver
+  CALL setup_data_accumulate
   CALL deallocate_ic
 
   npart_global = 0

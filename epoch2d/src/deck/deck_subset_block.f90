@@ -393,6 +393,7 @@ CONTAINS
       subset_list(i)%use_id_max     = .FALSE.
       subset_list(i)%skip           = .FALSE.
       subset_list(i)%dump_field_grid = .FALSE.
+      subset_list(i)%dump_acc_grid = .FALSE.
       subset_list(i)%space_restrictions = .FALSE.
       subset_list(i)%skip_dir       = 1
       subset_list(i)%random_fraction = 0.0_num

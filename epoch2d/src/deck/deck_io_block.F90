@@ -27,7 +27,7 @@ MODULE deck_io_block
   PUBLIC :: io_block_start, io_block_end
   PUBLIC :: io_block_handle_element, io_block_check
 
-  INTEGER, PARAMETER :: ov = 29
+  INTEGER, PARAMETER :: ov = 31
   INTEGER, PARAMETER :: io_block_elements = num_vars_to_dump + ov
   INTEGER :: block_number, nfile_prefixes
   INTEGER :: rolling_restart_io_block
@@ -158,7 +158,10 @@ CONTAINS
     io_block_name (i+26) = 'dump_cycle_first_index'
     io_block_name (i+27) = 'filesystem'
     io_block_name (i+28) = 'dump_first_after_restart'
-    io_block_name (i+ov) = 'disabled'
+    io_block_name (i+29) = 'disabled'
+    o9 = ov
+    io_block_name (i+30) = 'dt_accumulate'
+    io_block_name (i+31) = 'nstep_accumulate'
 
     track_ejected_particles = .FALSE.
     dump_absorption = .FALSE.
@@ -228,6 +231,7 @@ CONTAINS
             ENDIF
             io_block_list(i)%dt_average = t_end
           ENDIF
+
           IF (io_block%dump_cycle_first_index > io_block%dump_cycle) THEN
             IF (rank == 0) THEN
               DO iu = 1, nio_units ! Print to stdout and to file
@@ -244,9 +248,11 @@ CONTAINS
 
         ALLOCATE(file_prefixes(nfile_prefixes))
         ALLOCATE(file_numbers(nfile_prefixes))
+        ALLOCATE(file_accum_reset(nfile_prefixes))
         DO i = 1,nfile_prefixes
           file_prefixes(i) = TRIM(io_prefixes(i))
           file_numbers(i) = 0
+          file_accum_reset(i) = .FALSE.
         ENDDO
         DEALLOCATE(io_prefixes)
 
@@ -366,6 +372,7 @@ CONTAINS
     INTEGER, PARAMETER :: c_err_new_style_ignore = 1
     INTEGER, PARAMETER :: c_err_new_style_global = 2
     INTEGER, PARAMETER :: c_err_old_style_ignore = 3
+    LOGICAL :: acc_dt = .FALSE., acc_nstep = .FALSE., done_warning = .FALSE.
 
     errcode = c_err_none
     IF (value == blank) RETURN
@@ -554,6 +561,14 @@ CONTAINS
     CASE(29)
       io_block%dump_first_after_restart = &
           as_logical_print(value, element, errcode)
+    CASE(30)
+      io_block%accumulate_counter%dt_acc = &
+          as_real_print(value, element, errcode)
+      acc_dt = .TRUE.
+    CASE(31)
+      io_block%accumulate_counter%nstep_acc = &
+          as_integer_print(value, element, errcode)
+      acc_nstep = .TRUE.
     END SELECT
 
     IF (style_error == c_err_old_style_ignore) THEN
@@ -595,6 +610,20 @@ CONTAINS
           WRITE(io,*)
         ENDDO
       ENDIF
+    ENDIF
+    IF (acc_dt .AND. acc_nstep .AND. .NOT. done_warning) THEN
+      done_warning = .TRUE.
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** WARNING ***', iu
+          WRITE(io,*) 'Setting both dt_accumulate and' &
+              // ' nstep_accumulate may give unpredictable behaviour.' &
+              // 'Using nstep_accumulate value!'
+        ENDDO
+      ENDIF
+      io_block%accumulate_counter%dt_acc = -1
     ENDIF
 
     IF (elementselected > num_vars_to_dump) RETURN

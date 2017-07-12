@@ -36,7 +36,7 @@ MODULE setup
   PUBLIC :: after_control, minimal_init, restart_data
   PUBLIC :: open_files, close_files, flush_stat_file
   PUBLIC :: setup_species, after_deck_last, set_dt
-  PUBLIC :: read_cpu_split
+  PUBLIC :: read_cpu_split, setup_data_accumulate
 
   TYPE(particle), POINTER, SAVE :: iterator_list
 #ifndef NO_IO
@@ -308,6 +308,115 @@ CONTAINS
     ENDDO
 
   END SUBROUTINE setup_data_averaging
+
+
+
+  SUBROUTINE setup_data_accumulate()
+
+    INTEGER :: io, n_steps, mask, nstep_acc
+    INTEGER :: iu
+    INTEGER, DIMENSION(num_vars_to_dump) :: combined_mask
+    REAL(num) :: dt_accum, dt_snap
+    TYPE(accumulator_type), POINTER :: counter
+    TYPE(accumulated_data_block), POINTER :: accum
+
+    counter => io_block_list(1)%accumulate_counter
+    counter%current_step = 1
+    counter%last_accumulate_time = 0
+    counter%last_accumulate_step = 0
+    counter%reset = .FALSE.
+
+    DO io = 1, num_vars_to_dump
+      accum => io_block_list(1)%accumulated_data(io)
+      NULLIFY(accum%r4array, accum%array)
+    ENDDO
+
+    IF (.NOT. any_accumulate) RETURN
+    dt_accum = -1
+    n_steps = 0
+    nstep_acc = -1
+    dt_snap = -1
+    combined_mask = 0
+    DO io = 1, n_io_blocks
+      combined_mask = IOR(combined_mask, io_block_list(io)%dumpmask)
+      !Take first block's values
+      IF (n_steps > 0) CYCLE
+      IF(io_block_list(io)%any_accumulate) THEN
+        file_accum_reset(io_block_list(io)%prefix_index) = .TRUE.
+        !PRINT*, io_block_list(io)%prefix_index, file_prefixes(io_block_list(io)%prefix_index)
+        IF (io_block_list(io)%dt_snapshot > 0 ) THEN
+          dt_snap = io_block_list(io)%dt_snapshot
+        ELSE IF (io_block_list(io)%nstep_snapshot > 0) THEN
+         !This should be accurate enough for the sizes, and we add one
+         dt_snap = io_block_list(io)%nstep_snapshot * dt
+        ENDIF
+        IF (io_block_list(io)%accumulate_counter%dt_acc > 0) THEN
+          n_steps = CEILING(dt_snap &
+              / io_block_list(io)%accumulate_counter%dt_acc) + 1
+          dt_accum = io_block_list(io)%accumulate_counter%dt_acc
+          nstep_acc = -1
+        ELSE IF (io_block_list(io)%accumulate_counter%nstep_acc > 0) THEN
+          dt_accum = io_block_list(io)%accumulate_counter%nstep_acc * dt
+          n_steps = CEILING(dt_snap / dt_accum) + 1
+          nstep_acc = io_block_list(io)%accumulate_counter%nstep_acc
+          dt_accum = -1
+        ENDIF
+      ENDIF
+    ENDDO
+
+    IF (dt_snap < 0) THEN
+      io_block_list(1)%any_accumulate = .FALSE.
+
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** WARNING ***'
+          WRITE(io,*) 'No snapshot interval specified. &
+              & To use accumulation please set either dt_snapshot or&
+              & nstep_snapshot for accumulated blocks'
+        ENDDO
+      ENDIF
+    ENDIF
+    IF (dt_accum < 0.0_num .AND. nstep_acc == -1) RETURN
+
+    io_block_list(1)%any_accumulate = .TRUE.
+    IF (n_steps > max_accumulate_steps) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** WARNING ***'
+          WRITE(io,'(A,I3,A, E10.3)') 'Attempting to accumulate &
+              & more than ', max_accumulate_steps, &
+              ' times. Some data will not be written'
+          WRITE(io,*) 'To accumulate further adjust max_accumulate_steps'
+        ENDDO
+      ENDIF
+      n_steps = max_accumulate_steps
+    ENDIF
+
+    counter%dt_acc = dt_accum
+    counter%nstep_acc = nstep_acc
+    counter%nsteps = n_steps
+    ALLOCATE(counter%time(n_steps))
+    DO io = 1, num_vars_to_dump
+      !mask = io_block_list(1)%dumpmask(io)
+      !Currently only accumulate core fields, so no per species option
+!      IF (IAND(mask, c_io_no_sum) /= 0) CYCLE
+      io_block_list(1)%accumulated_data(io)%array_assoc = .FALSE.
+      IF (IAND(combined_mask(io), c_io_accumulate) == 0) CYCLE
+      accum => io_block_list(1)%accumulated_data(io)
+      IF (accum%dump_single) THEN
+        ALLOCATE(accum%r4array(-ng+1:nx+ng, -ng+1:ny+ng, n_steps))
+        accum%r4array = 0.0_num
+        accum%array_assoc = .TRUE.
+      ELSE
+        ALLOCATE(accum%array(-ng+1:nx+ng, -ng+1:ny+ng, n_steps))
+        accum%array = 0.0_num
+        accum%array_assoc = .TRUE.
+      ENDIF
+   ENDDO
+
+  END SUBROUTINE setup_data_accumulate
 
 
 
