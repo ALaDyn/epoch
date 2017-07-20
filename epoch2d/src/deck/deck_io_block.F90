@@ -193,6 +193,19 @@ CONTAINS
           ENDIF
           CALL abort_code(c_err_preset_element)
         ENDIF
+        IF (.NOT.new_style_io_block) THEN
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*) ''
+              WRITE(io,*) '*** WARNING ***'
+              WRITE(io,*) 'Unnamed output blocks are deprecated and will be &
+                  &removed'
+              WRITE(io, *) 'Set "name =" to use the new style'
+              WRITE(io,*) ''
+            ENDDO
+          ENDIF
+        ENDIF
 
         ALLOCATE(io_prefixes(n_io_blocks+1))
         nfile_prefixes = 1
