@@ -802,16 +802,27 @@ CONTAINS
       p_list2%tail%next => p_list2%head
 
 #ifdef PER_SPECIES_WEIGHT
-      np = icount * weight1
+      IF (icount >= jcount) THEN
+        np = icount * weight1
+      ELSE
+        np = jcount * weight2
+      ENDIF
       factor = pcount * MIN(weight1, weight2)
 #else
       current => p_list1%head
       impact => p_list2%head
 
-      DO k = 1, icount
-        np = np + current%weight
-        current => current%next
-      ENDDO
+      IF (icount >= jcount) THEN
+        DO k = 1, icount
+          np = np + current%weight
+          current => current%next
+        ENDDO
+      ELSE
+        DO k = 1, jcount
+          np = np + impact%weight
+          impact => impact%next
+        ENDDO
+      ENDIF
 
       current => p_list1%head
       impact => p_list2%head
