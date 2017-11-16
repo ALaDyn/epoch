@@ -719,7 +719,7 @@ CONTAINS
     IF (temp <= c_tiny) RETURN
 
 #ifdef PER_SPECIES_WEIGHT
-    np = icount * weight
+    np = 0.5 * icount * weight
     factor = user_factor
 #else
     current => p_list%head
@@ -734,14 +734,17 @@ CONTAINS
       CALL prefetch_particle(impact)
 #endif
     ENDDO
-    np = np + current%weight
-    factor = factor + MIN(current%weight, impact%weight)
 
-    IF (MOD(icount, 2_i8) /= 0) THEN
-      np = np + impact%next%weight
-      factor = factor + MIN(current%weight, impact%next%weight)
-      np = np + impact%weight
-      factor = factor + MIN(impact%weight, impact%next%weight)
+    IF (MOD(icount, 2_i8) == 0) THEN
+      np = np + current%weight
+      factor = factor + MIN(current%weight, impact%weight)
+    ELSE
+      np = np + 0.5 * current%weight
+      factor = factor + 0.5 * MIN(current%weight, impact%weight)
+      np = np + 0.5 * impact%next%weight
+      factor = factor + 0.5 * MIN(impact%next%weight, current%weight)
+      np = np + 0.5 * impact%weight
+      factor = factor + 0.5 * MIN(impact%weight, impact%next%weight)
     ENDIF
 
     factor = user_factor * np / factor
