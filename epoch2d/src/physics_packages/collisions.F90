@@ -1018,8 +1018,8 @@ CONTAINS
         / (gamma_rel_r * (cos_theta - SQRT(DOT_PRODUCT(vcr, vcr)) / vrabs))
     tan_theta_cm2 = tan_theta_cm**2
 
-    sin_theta = SQRT(tan_theta_cm2 / (1.0_num + tan_theta_cm2))
-    cos_theta = SQRT(1.0_num / (1.0_num + tan_theta_cm2))
+    sin_theta = tan_theta_cm / SQRT(1.0_num + tan_theta_cm2)
+    cos_theta = 1.0_num / SQRT(1.0_num + tan_theta_cm2)
 
     ! Post-collision momenta in COM frame
     p3 = p3_mag * (c1 * cos_theta + c2 * sin_theta * COS(ran2) &
