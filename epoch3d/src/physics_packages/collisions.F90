@@ -868,13 +868,14 @@ CONTAINS
 #endif
       ENDDO
 #endif
+      factor = user_factor * np / factor
 
       current => p_list1%head
       impact => p_list2%head
       DO k = 1, pcount
         CALL scatter(current, impact, mass1, mass2, charge1, charge2, &
             weight1, weight2, idens, jdens, itemp, jtemp, &
-            log_lambda, user_factor * np / factor)
+            log_lambda, factor)
         current => current%next
         impact => impact%next
 #ifdef PREFETCH
