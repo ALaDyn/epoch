@@ -28,7 +28,6 @@ MODULE deck_io_block
   PUBLIC :: io_block_handle_element, io_block_check
 
   INTEGER, PARAMETER :: ov = 31
-  INTEGER, PARAMETER :: ov = 30
   INTEGER, PARAMETER :: io_block_elements = num_vars_to_dump + ov
   INTEGER :: block_number, nfile_prefixes
   INTEGER :: rolling_restart_io_block
@@ -233,12 +232,12 @@ CONTAINS
             ENDIF
             io_block_list(i)%dt_average = t_end
           ENDIF
-      IF (io_block_list(i)%any_accumulate) PRINT*,io_block_list(i)%accumulate_counter%dt_accumulate
+      IF (io_block_list(i)%any_accumulate) PRINT*,io_block_list(i)%accumulate_counter%dt_acc
           IF (io_block_list(i)%any_accumulate .AND. &
               io_block_list(i)%dt_snapshot &
-              / io_block_list(i)%accumulate_counter%dt_accumulate &
+              / io_block_list(i)%accumulate_counter%dt_acc &
               >= max_accumulate_steps) THEN
-            io_block_list(i)%accumulate_counter%dt_accumulate = &
+            io_block_list(i)%accumulate_counter%dt_acc = &
                 io_block_list(i)%dt_snapshot / max_accumulate_steps
             IF (rank == 0) THEN
               DO iu = 1, nio_units ! Print to stdout and to file
@@ -247,12 +246,11 @@ CONTAINS
                 WRITE(io,*) 'Attempting to accumulate more than', &
                     max_accumulate_steps, &
                     'times. Using dt_accumulate of', &
-                    io_block_list(i)%accumulate_counter%dt_accumulate
+                    io_block_list(i)%accumulate_counter%dt_acc
  !               WRITE(io,*) 'To use more rows TBA!!'
               ENDDO
             ENDIF
          ENDIF
->>>>>>> Basic data types for accumulators
           IF (io_block%dump_cycle_first_index > io_block%dump_cycle) THEN
             IF (rank == 0) THEN
               DO iu = 1, nio_units ! Print to stdout and to file
