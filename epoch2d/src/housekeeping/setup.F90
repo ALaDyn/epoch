@@ -222,7 +222,6 @@ CONTAINS
     INTEGER :: i
 
     CALL setup_data_averaging
-    CALL setup_data_accumulate
     CALL setup_split_particles
     CALL setup_field_boundaries
 
@@ -398,7 +397,7 @@ CONTAINS
     counter%dt_acc = dt_accum
     counter%nstep_acc = nstep_acc
     counter%nsteps = n_steps
-    ALLOCATE(counter%time(n_steps))
+    IF( .NOT. ALLOCATED(counter%time)) ALLOCATE(counter%time(n_steps))
     DO io = 1, num_vars_to_dump
       !mask = io_block_list(1)%dumpmask(io)
       !Currently only accumulate core fields, so no per species option

@@ -492,7 +492,7 @@ CONTAINS
       IF (io_block_list(io)%accumulated_data(id)%dump_single) THEN
         IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%r4array)) CYCLE
 
-        ALLOCATE(r4temp_sum(-2:nx_new+3, -2:ny_new+3, counter%nsteps))
+        ALLOCATE(r4temp_sum(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
         !This is inefficient but gets something working faster
         DO i = 1, counter%nsteps
           CALL remap_field_r4(&
@@ -502,7 +502,7 @@ CONTAINS
 
         DEALLOCATE(io_block_list(io)%accumulated_data(id)%r4array)
         ALLOCATE(io_block_list(io)%accumulated_data(id)&
-            %r4array(-2:nx_new+3, -2:ny_new+3, counter%nsteps))
+            %r4array(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
 
         io_block_list(io)%accumulated_data(id)%r4array = r4temp_sum
 
@@ -510,7 +510,7 @@ CONTAINS
       ELSE
         IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%array)) CYCLE
 
-        ALLOCATE(temp_sum(-2:nx_new+3, -2:ny_new+3, counter%nsteps))
+        ALLOCATE(temp_sum(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
 
         DO i = 1, counter%nsteps
           CALL remap_field(&
@@ -520,7 +520,7 @@ CONTAINS
 
         DEALLOCATE(io_block_list(io)%accumulated_data(id)%array)
         ALLOCATE(io_block_list(io)%accumulated_data(id)&
-            %array(-2:nx_new+3, -2:ny_new+3, counter%nsteps))
+            %array(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
 
         io_block_list(io)%accumulated_data(id)%array = temp_sum
 
