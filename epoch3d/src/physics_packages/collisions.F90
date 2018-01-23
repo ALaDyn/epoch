@@ -1041,9 +1041,9 @@ CONTAINS
     p4 = -p3
 
     ! Lorentz momentum transform to get back to lab frame
-    tvar = DOT_PRODUCT(p3, vc) * gamma_rel_m1 / vc_sq
+    tvar = DOT_PRODUCT(p3, vc) * gamma_rel_m1 / (vc_sq + c_tiny)
     p5 = p3 + vc * (tvar + gamma_rel * e3 / c**2)
-    tvar = DOT_PRODUCT(p4, vc) * gamma_rel_m1 / vc_sq
+    tvar = DOT_PRODUCT(p4, vc) * gamma_rel_m1 / (vc_sq + c_tiny)
     p6 = p4 + vc * (tvar + gamma_rel * e4 / c**2)
 
     e5 = c * SQRT(DOT_PRODUCT(p5, p5) + (m1 * c)**2)
