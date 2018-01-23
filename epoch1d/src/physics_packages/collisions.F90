@@ -705,14 +705,14 @@ CONTAINS
     IF (temp <= c_tiny) RETURN
 
 #ifdef PER_SPECIES_WEIGHT
-    np = 0.5 * icount * weight
+    np = icount * weight
     factor = user_factor
 #else
     current => p_list%head
     impact => current%next
     DO k = 2, icount-2, 2
-      np = np + current%weight
-      factor = factor + MIN(current%weight, impact%weight)
+      np = np + current%weight + impact%weight
+      factor = factor + 2.0_num * MIN(current%weight, impact%weight)
       current => impact%next
       impact => current%next
 #ifdef PREFETCH
@@ -722,15 +722,15 @@ CONTAINS
     ENDDO
 
     IF (MOD(icount, 2_i8) == 0) THEN
-      np = np + current%weight
-      factor = factor + MIN(current%weight, impact%weight)
+      np = np + current%weight + impact%weight
+      factor = factor + 2.0_num * MIN(current%weight, impact%weight)
     ELSE
-      np = np + 0.5 * current%weight
-      factor = factor + 0.5 * MIN(current%weight, impact%weight)
-      np = np + 0.5 * impact%next%weight
-      factor = factor + 0.5 * MIN(impact%next%weight, current%weight)
-      np = np + 0.5 * impact%weight
-      factor = factor + 0.5 * MIN(impact%weight, impact%next%weight)
+      np = np + 0.5_num * current%weight + impact%weight
+      factor = factor + MIN(current%weight, impact%weight)
+      np = np + 0.5_num * impact%next%weight + current%weight
+      factor = factor + MIN(impact%next%weight, current%weight)
+      np = np + 0.5_num * impact%weight + impact%next%weight
+      factor = factor + MIN(impact%weight, impact%next%weight)
     ENDIF
 
     factor = user_factor * np / factor
