@@ -985,6 +985,9 @@ CONTAINS
     v3 = p3 * c**2 / e3
     v4 = p4 * c**2 / e4
 
+    ! New coordinate system to simplify scattering.
+    CALL new_coords(v3, c1, c2, c3)
+
     ! Relative velocity
     tvar = 1.0_num - (DOT_PRODUCT(v3, v4) / c**2)
     vr = (v3 - v4) / tvar
@@ -1001,9 +1004,6 @@ CONTAINS
 
     ! NOTE: nu is now the number of collisions per timestep, NOT collision
     ! frequency
-
-    ! New coordinate system to simplify scattering.
-    CALL new_coords(vr, c1, c2, c3)
 
     ! this is to ensure that 0 < ran1 < 1
     ! ran1=0 gives NaN in logarithm
