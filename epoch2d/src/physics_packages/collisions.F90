@@ -911,7 +911,7 @@ CONTAINS
     REAL(num) :: vc_sq, vc_mag, p1_vc, p2_vc, p3_mag
     REAL(num) :: delta, sin_theta, cos_theta, tan_theta_cm, tan_theta_cm2
     REAL(num) :: vrabs
-    REAL(num) :: nu, ran1, ran2
+    REAL(num) :: nu, nudt, ran1, ran2
     !REAL(num) :: m_red
 
     ! Copy all of the necessary particle data into variables with easier to
@@ -981,15 +981,14 @@ CONTAINS
 
     ! Collision frequency
     nu = coll_freq(vrabs, log_lambda, m1, m2, q1, q2, itemp, jtemp, jdens)
-    nu = nu * factor * dt
+    nudt = nu * factor * dt
+    ! NOTE: nudt is the number of collisions per timestep, NOT collision
+    ! frequency
 
 !    m_red = mass1 * mass2 / (mass1 + mass2)
 !    nu = ((idens * (charge1 * charge2)**2 * log_lambda) &
 !        / (8.0_num * pi * (epsilon0**2) * (m_red**2) * (vrabs**3))) &
 !        * gamma_rel * dt * factor
-
-    ! NOTE: nu is now the number of collisions per timestep, NOT collision
-    ! frequency
 
     ! this is to ensure that 0 < ran1 < 1
     ! ran1=0 gives NaN in logarithm
@@ -1001,8 +1000,8 @@ CONTAINS
     ! mean 0, variance of nu
     ! Possible place for speed up by caching the second Box Muller number
     ! and using it later
-    ! SQRT(-2.0_num * nu * LOG(ran1)) * COS(ran2)
-    delta = SQRT(-2.0_num * nu * LOG(ran1)) * SIN(ran2)
+    ! SQRT(-2.0_num * nudt * LOG(ran1)) * COS(ran2)
+    delta = SQRT(-2.0_num * nudt * LOG(ran1)) * SIN(ran2)
     ran2 = 2.0_num * pi * random()
 
     ! angle theta in the One Particle at Rest frame
