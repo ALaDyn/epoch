@@ -48,7 +48,7 @@ CONTAINS
 
     IF (sendcounts(iproc) > 0) THEN
       CALL partlist_send_nocount(pointers_send(iproc), iproc)
-      CALL destroy_partlist(pointers_send(iproc))
+      CALL destroy_partlist_retain_store(pointers_send(iproc))
     ENDIF
 
   END SUBROUTINE do_sendpart

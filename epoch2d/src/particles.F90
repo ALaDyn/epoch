@@ -190,7 +190,12 @@ CONTAINS
 #endif
 #endif
       !DEC$ VECTOR ALWAYS
+      !PRINT*, ispecies, species_list(ispecies)%attached_list%count
+      CALL test_store(species_list(ispecies))
       DO ipart = 1, species_list(ispecies)%attached_list%count
+        !PRINT*, ipart
+        IF (.NOT. ASSOCIATED(current)) PRINT*, 'Error on', ipart, rank
+        !PRINT*, ASSOCIATED(current) !, ASSOCIATED(current%next)
         next => current%next
 #ifdef PREFETCH
         CALL prefetch_particle(next)
@@ -238,6 +243,7 @@ CONTAINS
         cell_x_r = part_x * idx
         cell_y_r = part_y * idy
 #endif
+        !print*, part_x
         ! Round cell position to nearest cell
         cell_x1 = FLOOR(cell_x_r + 0.5_num)
         ! Calculate fraction of cell between nearest cell boundary and particle

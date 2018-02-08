@@ -287,6 +287,7 @@ CONTAINS
     LOGICAL, DIMENSION(1-ng:,1-ng:), INTENT(IN) :: load_list
     INTEGER(i8), DIMENSION(:), ALLOCATABLE :: valid_cell_list
     TYPE(particle_list), POINTER :: partlist
+    TYPE(particle_store), POINTER :: partstore
     TYPE(particle), POINTER :: current, next
     INTEGER(i8) :: ipart, npart_per_cell, num_int, num_total, idx
     INTEGER(i8) :: num_valid_cells_local, num_valid_cells_global
@@ -296,7 +297,7 @@ CONTAINS
     REAL(num), ALLOCATABLE :: num_frac(:)
     INTEGER(i8) :: cell_x
     INTEGER(i8) :: cell_y
-    INTEGER(i8) :: i, ipos
+    INTEGER(i8) :: i, ipos, current_index
     INTEGER :: ix, iy
     CHARACTER(LEN=15) :: string
     LOGICAL :: sweep
@@ -401,17 +402,32 @@ CONTAINS
           REAL(npart_this_species,num) / num_valid_cells_global
       npart_per_cell = FLOOR(species%npart_per_cell, KIND=i8)
     ENDIF
-
+    PRINT*, num_new_particles, species%npart_per_cell, npart_this_species,&
+        num_valid_cells_global
     partlist => species%attached_list
+    partstore => species%attached_store
 
     CALL destroy_partlist(partlist)
-    CALL create_allocated_partlist(partlist, num_new_particles)
+    CALL destroy_store(partstore)
+    CALL create_particle_store(partstore, &
+          num_new_particles)
+    !Now have a store with at least one chunk of memory allocated
+    !And all linking etc is done
 
-    ! Randomly place npart_per_cell particles into each valid cell
+    partlist%count = num_new_particles
+    !Randomly place npart_per_cell particles into each valid cell
     npart_left = num_new_particles
-    current => partlist%head
-    IF (npart_per_cell > 0) THEN
 
+    current => partstore%next_slot
+    !TODO the following should be handled in store/list creation
+    IF(num_new_particles > 0) THEN
+      partlist%tail => partstore%head%store(num_new_particles)
+      partlist%head => current
+    ENDIF
+
+    current_index = 1 !TODO Now just diagnostic tracker
+    WRITE(100+rank, *) 'About to load ', npart_per_cell, num_new_particles
+    IF (npart_per_cell > 0) THEN
       DO iy = 1, ny
       DO ix = 1, nx
         IF (.NOT. load_list(ix, iy)) CYCLE
@@ -432,18 +448,21 @@ CONTAINS
 #endif
           current%part_pos(1) = x(ix) + (random() - 0.5_num) * dx
           current%part_pos(2) = y(iy) + (random() - 0.5_num) * dy
-
+          current%live = 1
           ipart = ipart + 1
-          current => current%next
+          !WRITE(100+rank, *) 'Placed ', current_index
+
+          CALL increment_next_free_element(partstore, partlist)
+          current => partstore%next_slot
+          current_index = current_index + 1
 
           ! One particle sucessfully placed
           npart_left = npart_left - 1
         ENDDO
       ENDDO ! ix
       ENDDO ! iy
-
-    ENDIF
-
+   ENDIF
+   FLUSH(100+rank)
     ! When num_new_particles does not equal
     ! npart_per_cell * num_valid_cells_local there will be particles left
     ! over that didn't get placed.
@@ -470,30 +489,37 @@ CONTAINS
         cell_y = cell_y + 1
 
         cell_x = ipos + 1
-
         current%part_pos(1) = x(cell_x) + (random() - 0.5_num) * dx
         current%part_pos(2) = y(cell_y) + (random() - 0.5_num) * dy
+        current%live = 1
+        WRITE(100+rank, *) 'Loaded', current_index, 'at', cell_x, cell_y
+        CALL increment_next_free_element(partstore, partlist)
+        current => partstore%next_slot
+        current_index = current_index + 1
 
-        current => current%next
       ENDDO
-
       DEALLOCATE(valid_cell_list)
     ENDIF
+    WRITE(100+rank, *) 'Ending with ', current_index
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
-    DO WHILE(ASSOCIATED(current))
-      next => current%next
-      CALL remove_particle_from_partlist(partlist, current)
-      DEALLOCATE(current)
-      current => next
-    ENDDO
+    ! Remove any particles from list that weren't placed
+    !We just have to fix the last actual particle and the list tail
+    IF(ASSOCIATED(current%prev)) THEN
+      !This means current is meant to be a valid particle
+      NULLIFY(current%prev%next)
+      partlist%tail => current%prev
+    ENDIF
+
+    WRITE(100+rank, *) 'About to check'
+    CALL test_store(species)
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
 
     species%count = npart_this_species
-
+    WRITE(100+rank, *)  npart_this_species, partlist%count
     IF (rank == 0) THEN
       CALL integer_as_string(npart_this_species, string)
       WRITE(*,*) 'Loaded ', TRIM(ADJUSTL(string)), &
@@ -550,7 +576,7 @@ CONTAINS
 
     ! Uniformly load particles in space
     CALL load_particles(species, density_map)
-
+    CALL test_store(species)
     ALLOCATE(npart_in_cell(1-ng:nx+ng,1-ng:ny+ng))
     npart_in_cell = 0
 

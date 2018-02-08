@@ -749,10 +749,11 @@ CONTAINS
     REAL(num) :: cell_y_r, cell_frac_y
     REAL(num) :: cf2, temp(3)
     REAL(num) :: part_pos
+    INTEGER, SAVE :: iter = 0
 
     DO ispecies = 1, n_species
       cur => species_list(ispecies)%attached_list%head
-
+      !cur => species_list(ispecies)%attached_store%head%head
       DO iy = -1, 1
         DO ix = -1, 1
           IF (ABS(ix) + ABS(iy) == 0) CYCLE
@@ -763,7 +764,10 @@ CONTAINS
 
       DO WHILE (ASSOCIATED(cur))
         next => cur%next
-
+        IF (cur%live < 1) THEN
+          cur => next
+          CYCLE
+        ENDIF
         xbd = 0
         ybd = 0
         out_of_bounds = .FALSE.
@@ -1052,20 +1056,27 @@ CONTAINS
 
         IF (out_of_bounds) THEN
           ! Particle has gone forever
-          CALL remove_particle_from_partlist(&
-              species_list(ispecies)%attached_list, cur)
+          WRITE(100+rank, *) 'Removing'
+          CALL remove_particle_from_list_and_store(&
+              species_list(ispecies)%attached_list, &
+              species_list(ispecies)%attached_store, cur)
           IF (track_ejected_particles) THEN
-            CALL add_particle_to_partlist(&
-                ejected_list(ispecies)%attached_list, cur)
+            !Ejected particles should be actually copied to this list
+            !CALL add_particle_to_partlist(&
+             !   ejected_list(ispecies)%attached_list, cur)
           ELSE
-            DEALLOCATE(cur)
+            !DEALLOCATE(cur)
           ENDIF
         ELSE IF (ABS(xbd) + ABS(ybd) > 0) THEN
           ! Particle has left processor, send it to its neighbour
-          CALL remove_particle_from_partlist(&
-              species_list(ispecies)%attached_list, cur)
-          CALL add_particle_to_partlist(send(xbd, ybd), cur)
-        ENDIF
+         CALL remove_particle_from_list_and_store(&
+              species_list(ispecies)%attached_list, &
+              species_list(ispecies)%attached_store, cur)
+         !Live is now 0 and links are dead
+           WRITE(100+rank, *) 'Moving ', cur%part_pos, xbd, ybd
+         !This relinks the particle into the new list
+         CALL add_particle_to_partlist(send(xbd, ybd), cur)
+       ENDIF
 
         ! Move to next particle
         cur => next
@@ -1077,20 +1088,50 @@ CONTAINS
           IF (ABS(ix) + ABS(iy) == 0) CYCLE
           ixp = -ix
           iyp = -iy
+
+          WRITE(100+rank, *) 'Checking send positions'
+          CALL test_list_positions(send(ix, iy), .TRUE.)
+          WRITE(100+rank, *) 'Done send positions'
           CALL partlist_sendrecv(send(ix, iy), recv(ixp, iyp), &
               neighbour(ix, iy), neighbour(ixp, iyp))
-          CALL append_partlist(species_list(ispecies)%attached_list, &
-              recv(ixp, iyp))
+          !CALL append_partlist(species_list(ispecies)%attached_list, &
+           !   recv(ixp, iyp))
+          !Since elements of recv are copies of sent particles,
+            !their live flag may be 0, so we override it in the add
+          WRITE(100+rank, *) "Got ", recv(ixp, iyp)%count
         ENDDO
       ENDDO
 
       DO iy = -1, 1
         DO ix = -1, 1
           IF (ABS(ix) + ABS(iy) == 0) CYCLE
-          CALL destroy_partlist(send(ix, iy))
+          ixp = -ix
+          iyp = -iy
+
+          CALL add_partlist_to_list_and_store(&
+              species_list(ispecies)%attached_store, recv(ixp, iyp), &
+              species_list(ispecies)%attached_list, .TRUE.)
+          WRITE(100+rank, *) "Got ",ix, iy, recv(ixp, iyp)%count
+          WRITE(100+rank, *) 'From ', neighbour(ix, iy), neighbour(ixp, iyp)
+          WRITE(100+rank, *) 'Checking recv positions'
+          CALL test_list_positions(recv(ixp, iyp), .FALSE.)
+          WRITE(100+rank, *) 'Done recv positions'
+          !IF(recv(ixp, iyp)%count > 0) 
+          WRITE(100+rank, *) "In Sendrecv"
+          CALL test_store(species_list(ispecies))
+        ENDDO
+      ENDDO
+   WRITE(100+rank, *) 'Done bnds', iter
+   iter = iter + 1
+      DO iy = -1, 1
+        DO ix = -1, 1
+          IF (ABS(ix) + ABS(iy) == 0) CYCLE
+!          CALL destroy_partlist(send(ix, iy))
           CALL destroy_partlist(recv(ix, iy))
         ENDDO
       ENDDO
+      WRITE(100+rank, *) "After destroy"
+      CALL test_store(species_list(ispecies))
 
     ENDDO
 

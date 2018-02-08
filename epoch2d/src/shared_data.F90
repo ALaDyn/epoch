@@ -2,6 +2,7 @@
 ! Copyright (C) 2014-2015 Stephan Kuschel <stephan.kuschel@gmail.com>
 ! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
 ! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2017      Heather Ratcliffe <H.Ratcliffe@warwick.ac.uk>
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -564,6 +565,9 @@ MODULE shared_data
     REAL(num) :: optical_depth_tri
 #endif
 #endif
+    INTEGER :: live
+    ! 1 for normal live particle, 0 for dead but existing, 
+    ! -1 for dead and can be compacted out
   END TYPE particle
 
   ! Data for migration between species
@@ -607,6 +611,33 @@ MODULE shared_data
     REAL(num) :: density_back
   END TYPE initial_condition_block
 
+  !Type representing a single sublist of partlist
+
+  INTEGER(i8), PARAMETER :: sublist_size = 1000 !Size of a sublist. Grow ops allocate a new sublist of this size
+  REAL(num), PARAMETER :: sublist_slack = 0.05  !Fractional slack to initially allocate
+  REAL(num), PARAMETER :: list_factor = 1.6  !Grow ops allocate to this times previous size
+
+  !Segment of memory storing particles
+  !Does not track number of valid particles, only its own length
+  TYPE particle_sub_store
+    INTEGER(i8) :: length
+    INTEGER(i8) :: first_free_element
+    TYPE(particle_sub_store), POINTER :: previous, next
+    TYPE(particle), POINTER :: head !First live particle in store, i.e. head of list
+    TYPE(particle), DIMENSION(:), POINTER :: store => NULL() !Actual memory
+  END TYPE particle_sub_store
+
+  !Type representing a contiguous block of memory
+  !Used to store particles
+  !Currently a single chunk, will extend to multiples
+  TYPE particle_store
+    INTEGER(i8) :: total_length !Sum of sublist lengths, for convenience, ==number of potential slots
+    INTEGER(i8) :: n_subs ! n_subs stored for convenience only
+    TYPE(particle), POINTER :: next_slot  !Next place to insert a new particle
+    TYPE(particle_sub_store), POINTER :: head => NULL() !Currently head should be the only chunk
+  END TYPE particle_store
+
+
   ! Object representing a particle species
   TYPE particle_species
     ! Core properties
@@ -621,6 +652,7 @@ MODULE shared_data
     REAL(num) :: weight
     INTEGER(i8) :: count
     TYPE(particle_list) :: attached_list
+    TYPE(particle_store) :: attached_store
     LOGICAL :: immobile
 
 #ifndef NO_TRACER_PARTICLES
