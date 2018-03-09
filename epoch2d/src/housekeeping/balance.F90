@@ -1692,12 +1692,9 @@ CONTAINS
         current%processor = part_proc
 #endif
         IF (part_proc /= rank) THEN
-!          CALL remove_particle_from_partlist(&
-!             species_list(ispecies)%attached_list, current)
           CALL remove_particle_from_list_and_store(&
               species_list(ispecies)%attached_list, &
               species_list(ispecies)%attached_store, current)
-
           CALL add_particle_to_partlist(pointers_send(part_proc), current)
         ENDIF
         current => next
@@ -1709,18 +1706,14 @@ CONTAINS
 
       CALL MPI_ALLTOALL(sendcounts, 1, MPI_INTEGER8, recvcounts, 1, &
           MPI_INTEGER8, comm, errcode)
+
       CALL redblack(pointers_send, pointers_recv, sendcounts, recvcounts)
 
       DO iproc = 0, nproc - 1
-!        CALL append_partlist(species_list(ispecies)%attached_list, &
- !           pointers_recv(iproc))
-!        PRINT*, "got", pointers_recv(iproc)%count, rank, iproc
         CALL add_partlist_to_list_and_store(&
             species_list(ispecies)%attached_store, pointers_recv(iproc), &
             species_list(ispecies)%attached_list, .TRUE.)
-        !CALL destroy_partlist_retain_store(pointers_recv(iproc)) !Not needed but for clarity
       ENDDO
-!      PRINT*, 'Done', rank
     ENDDO
 
     DEALLOCATE(sendcounts, recvcounts)

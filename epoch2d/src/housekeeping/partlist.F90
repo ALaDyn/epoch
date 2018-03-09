@@ -432,7 +432,6 @@ CONTAINS
       NULLIFY(previous%next)
       list%tail => previous
     ENDIF
-    WRITE(100+rank, *)  "Relinked ", cnt, " particles"
 
   END SUBROUTINE relink_partlist
 
@@ -452,18 +451,15 @@ CONTAINS
     TYPE(particle), DIMENSION(:), POINTER :: new_store
     INTEGER(i8) :: new_size, i
 
-    !PRINT*, 'lengths', rank, store%head%length, store%total_length
 
     IF(store%head%first_free_element >= store%head%length -1) THEN
       !First resort: compact store
-      !PRINT*, "Trying to compact"
       CALL compact_backing_store(store, list)
       IF(store%head%first_free_element >= store%head%length -1) THEN
         !Compacting insufficient, reallocate larger...
         !Allocate a larger store
         !new_size = store%total_length + sublist_size
         new_size = FLOOR(store%total_length * list_factor)
-        PRINT*, 'Reallocating particle store', store%total_length,  new_size, rank
         ALLOCATE(new_store(new_size))
         new_store(1:store%total_length) = store%head%store
         DO i = store%total_length + 1, new_size
@@ -653,30 +649,25 @@ CONTAINS
       list%head => store%next_slot
     ENDIF
 
-    WRITE(100+rank, *) "When adding", ASSOCIATED(list%tail)
     IF (ASSOCIATED(list%tail)) THEN
       !Will link into to previous tail
       prev => list%tail
     ENDIF
     add_count = 0
     DO WHILE(ASSOCIATED(current))
-      WRITE(100+rank, *) 'Trying to add'
       !Only consider live particles, unless overrriding
       IF ( override_live .OR. current%live == 1) THEN
 
         !Diagnostic only...
         next_index = store%head%first_free_element
-        WRITE(100+rank, *) 'Adding at ',next_index
         !End diagnostic
 
         next_slot => store%next_slot
         next => next_slot
         CALL copy_particle(current, next)
-        WRITE(100+rank, *) 'Adding'
         next%live = 1
         add_count = add_count + 1
         !Link new particle into list, leaving next alone
-        WRITE(100+rank, *) "Prev is ", ASSOCIATED(prev)
         IF ( ASSOCIATED(prev)) prev%next => next
         next%prev => prev
         NULLIFY(next%next)
@@ -685,15 +676,9 @@ CONTAINS
         CALL increment_next_free_element(store, list)
       ENDIF
       prev => list%tail !If relinked, tail was updated, else it =>next
-      !WRITE(100+rank, *) prev%live, prev%part_pos, current%part_pos, &
-      !    ASSOCIATED(prev%prev), ASSOCIATED(prev%next), &
-      !    Associated(next%prev, prev), list%tail%part_pos
       current => current%next
     END DO
 
-    WRITE(100+rank, *) 'Added ', add_count, 'of', newlist%count
-    WRITE(100+rank, *) 'Length is now ', list%count
-    !CALL relink_partlist(store, list)  !Diagnostic
   END SUBROUTINE add_partlist_to_list_and_store
 
 
@@ -783,7 +768,6 @@ CONTAINS
 
     ! Decrement counter
     list%count = list%count - 1
-    WRITE(100+rank, *) 'Removing to give ', list%count
 
   END SUBROUTINE remove_particle_from_list_and_store
 
@@ -1321,8 +1305,6 @@ CONTAINS
     last_placed = 1
     count = 0
     moved = 0
-    WRITE(100+rank, *) "Compacting, free is", store%head%first_free_element
-    WRITE(100+rank, *) "Particle count is", list%count
     current => list%head
 
     DO WHILE(ASSOCIATED(current))
@@ -1331,7 +1313,6 @@ CONTAINS
     !  IF (ASSOCIATED(current, list%tail)) EXIT
     END DO
 
-    WRITE(100+rank, *) "Actual count is", count
     count = 0
 
     !We're doing before we update first_free_element, so it may contain particle
@@ -1339,10 +1320,7 @@ CONTAINS
       IF(section%store(i)%live > 0) THEN
         count = count + 1
       ENDIF
-      WRITE(100+rank, *) 'particle at', i, 'is', section%store(i)%live, &
-        i-last_placed
       IF(section%store(i)%live > 0 .AND. i - last_placed > 1) THEN
-        WRITE(100+rank, *) "Moved from", i, "to", last_placed+1
         moved = moved + 1
         original => section%store(i)
         new => section%store(last_placed + 1)
@@ -1356,15 +1334,10 @@ CONTAINS
       new => section%store(i)
       new%live = 0
     ENDDO
-    WRITE(100+rank, *) 'last_placed at',  last_placed
 
     CALL relink_partlist(store, list)
     CALL update_store_endpoint(store, list, last_placed)
 
-    WRITE(100+rank, *) 'Counted', count, "and moved", moved
-    WRITE(100+rank, *) "After compact, free is", store%head%first_free_element
-    WRITE(100+rank, *) "Tail assoc with last placed is ", &
-        ASSOCIATED(list%tail, TARGET=store%head%store(last_placed))
 
   END SUBROUTINE compact_backing_store
 

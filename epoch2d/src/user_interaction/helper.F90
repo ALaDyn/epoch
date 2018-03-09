@@ -261,6 +261,7 @@ CONTAINS
         MPI_SUM, comm, errcode)
 
     species%count = npart_this_species
+
     species%weight = density_total_global * dx * dy / npart_this_species
 
     IF (rank == 0) THEN
@@ -402,8 +403,6 @@ CONTAINS
           REAL(npart_this_species,num) / num_valid_cells_global
       npart_per_cell = FLOOR(species%npart_per_cell, KIND=i8)
     ENDIF
-    PRINT*, num_new_particles, species%npart_per_cell, npart_this_species,&
-        num_valid_cells_global
     partlist => species%attached_list
     partstore => species%attached_store
 
@@ -426,7 +425,6 @@ CONTAINS
     ENDIF
 
     current_index = 1 !TODO Now just diagnostic tracker
-    WRITE(100+rank, *) 'About to load ', npart_per_cell, num_new_particles
     IF (npart_per_cell > 0) THEN
       DO iy = 1, ny
       DO ix = 1, nx
@@ -450,7 +448,6 @@ CONTAINS
           current%part_pos(2) = y(iy) + (random() - 0.5_num) * dy
           current%live = 1
           ipart = ipart + 1
-          !WRITE(100+rank, *) 'Placed ', current_index
 
           CALL increment_next_free_element(partstore, partlist)
           current => partstore%next_slot
@@ -461,8 +458,9 @@ CONTAINS
         ENDDO
       ENDDO ! ix
       ENDDO ! iy
-   ENDIF
-   FLUSH(100+rank)
+
+    ENDIF
+
     ! When num_new_particles does not equal
     ! npart_per_cell * num_valid_cells_local there will be particles left
     ! over that didn't get placed.
@@ -489,10 +487,10 @@ CONTAINS
         cell_y = cell_y + 1
 
         cell_x = ipos + 1
+
         current%part_pos(1) = x(cell_x) + (random() - 0.5_num) * dx
         current%part_pos(2) = y(cell_y) + (random() - 0.5_num) * dy
         current%live = 1
-        WRITE(100+rank, *) 'Loaded', current_index, 'at', cell_x, cell_y
         CALL increment_next_free_element(partstore, partlist)
         current => partstore%next_slot
         current_index = current_index + 1
@@ -500,7 +498,6 @@ CONTAINS
       ENDDO
       DEALLOCATE(valid_cell_list)
     ENDIF
-    WRITE(100+rank, *) 'Ending with ', current_index
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
@@ -512,14 +509,12 @@ CONTAINS
       partlist%tail => current%prev
     ENDIF
 
-    WRITE(100+rank, *) 'About to check'
-    CALL test_store(species)
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
 
     species%count = npart_this_species
-    WRITE(100+rank, *)  npart_this_species, partlist%count
+
     IF (rank == 0) THEN
       CALL integer_as_string(npart_this_species, string)
       WRITE(*,*) 'Loaded ', TRIM(ADJUSTL(string)), &
@@ -576,7 +571,7 @@ CONTAINS
 
     ! Uniformly load particles in space
     CALL load_particles(species, density_map)
-    CALL test_store(species)
+
     ALLOCATE(npart_in_cell(1-ng:nx+ng,1-ng:ny+ng))
     npart_in_cell = 0
 

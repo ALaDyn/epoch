@@ -69,7 +69,6 @@ CONTAINS
         CALL deallocate_stack(species_list(i)%temperature_function(n))
         CALL deallocate_stack(species_list(i)%drift_function(n))
       ENDDO
-      !CALL destroy_partlist(species_list(i)%attached_list)
       CALL destroy_store(species_list(i)%attached_store)
       DEALLOCATE(species_list(i)%ext_temp_x_min, STAT=stat)
       DEALLOCATE(species_list(i)%ext_temp_x_max, STAT=stat)
