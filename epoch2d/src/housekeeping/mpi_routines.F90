@@ -368,8 +368,8 @@ CONTAINS
 #endif
       NULLIFY(species_list(ispecies)%attached_list%next)
       NULLIFY(species_list(ispecies)%attached_list%prev)
-      CALL create_empty_partlist(species_list(ispecies)%attached_list)
-      CALL create_empty_particle_store(species_list(ispecies)%attached_list%store)
+      CALL create_empty_partlist(species_list(ispecies)%attached_list, &
+          use_store_default)
 
       IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
         ALLOCATE(species_list(ispecies)%ext_temp_x_min(1-ng:ny+ng,1:3))

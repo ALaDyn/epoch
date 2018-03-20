@@ -84,26 +84,29 @@ CONTAINS
 
 
 
-  SUBROUTINE create_empty_partlist(partlist)
+  SUBROUTINE create_empty_partlist(partlist, use_store_in)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
+    LOGICAL, INTENT(IN), OPTIONAL :: use_store_in
+    LOGICAL :: use_store
+
+    IF(.NOT. PRESENT(use_store_in)) THEN
+      use_store = .FALSE.
+    ELSE
+      use_store = use_store_in
+    ENDIF
 
     NULLIFY(partlist%head)
     NULLIFY(partlist%tail)
     partlist%count = 0
     partlist%id_update = 0
     partlist%safe = .TRUE.
+    partlist%use_store = use_store
+    IF (use_store) &
+        CALL create_particle_store(partlist%store, sublist_size, .TRUE., .TRUE.)
 
   END SUBROUTINE create_empty_partlist
 
-
-
-  SUBROUTINE create_empty_particle_store(store)
-
-    TYPE(particle_store), INTENT(INOUT) :: store
-    CALL create_particle_store(store, sublist_size, .TRUE., .TRUE.)
-
-  END SUBROUTINE create_empty_particle_store
 
 
   !TODO This should actually call function to create a section
