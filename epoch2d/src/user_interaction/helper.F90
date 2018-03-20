@@ -405,11 +405,13 @@ CONTAINS
     ENDIF
     partlist => species%attached_list
     partstore => species%attached_list%store
-
-    CALL destroy_partlist(partlist)
-    CALL destroy_store(partstore)
-    CALL create_particle_store(partstore, &
-          num_new_particles)
+    partlist%use_store = .TRUE.
+    !CALL destroy_partlist(partlist)
+    !CALL destroy_store(partstore)
+    !CALL create_particle_store(partstore, &
+    !      num_new_particles)
+    CALL create_allocated_partlist(partlist, num_new_particles, &
+        use_store_default)
     !Now have a store with at least one chunk of memory allocated
     !And all linking etc is done
 

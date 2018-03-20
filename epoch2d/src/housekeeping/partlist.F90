@@ -379,20 +379,34 @@ CONTAINS
 
 
 
-  SUBROUTINE create_allocated_partlist(partlist, n_elements)
+  SUBROUTINE create_allocated_partlist(partlist, n_elements, use_store_in)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     INTEGER(i8), INTENT(IN) :: n_elements
+    LOGICAL, INTENT(IN), OPTIONAL :: use_store_in
+    LOGICAL :: use_store
     TYPE(particle), POINTER :: new_particle
     INTEGER(i8) :: ipart
 
-    CALL create_empty_partlist(partlist)
+    IF(.NOT. PRESENT(use_store_in)) THEN
+      use_store = .FALSE.
+    ELSE
+      use_store = use_store_in
+    ENDIF
 
-    DO ipart = 0, n_elements-1
-      CALL create_particle(new_particle)
-      CALL add_particle_to_partlist(partlist, new_particle)
-      NULLIFY(new_particle)
-    ENDDO
+    IF (use_store) THEN
+      CALL create_particle_store(partlist%store, n_elements)
+    ELSE
+      CALL create_empty_partlist(partlist)
+
+      DO ipart = 0, n_elements-1
+        CALL create_particle(new_particle)
+        CALL add_particle_to_partlist(partlist, new_particle)
+        NULLIFY(new_particle)
+      ENDDO
+    ENDIF
+
+    partlist%use_store = use_store
 
   END SUBROUTINE create_allocated_partlist
 
@@ -482,14 +496,13 @@ CONTAINS
 
 
   !Update the next free element, e.g. after store gets compacted
-  SUBROUTINE update_store_endpoint(store, list, last_full_slot)
+  SUBROUTINE update_store_endpoint(list, last_full_slot)
 
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle_store), INTENT(INOUT) :: store
     INTEGER(i8) :: last_full_slot
 
-    store%head%first_free_element = last_full_slot + 1
-    store%next_slot => store%head%store(last_full_slot + 1)
+    list%store%head%first_free_element = last_full_slot + 1
+    list%store%next_slot => list%store%head%store(last_full_slot + 1)
 
   END SUBROUTINE
 
@@ -725,37 +738,11 @@ CONTAINS
     ! Check whether particle is head or tail of list and unlink
     IF (ASSOCIATED(partlist%head, TARGET=a_particle)) &
         partlist%head => a_particle%next
+    IF (partlist%use_store) &
+        partlist%store%head%head => a_particle%next
+
     IF (ASSOCIATED(partlist%tail, TARGET=a_particle)) &
         partlist%tail => a_particle%prev
-
-    ! Link particles on either side together
-    IF (ASSOCIATED(a_particle%next)) a_particle%next%prev => a_particle%prev
-    IF (ASSOCIATED(a_particle%prev)) a_particle%prev%next => a_particle%next
-
-    NULLIFY(a_particle%next, a_particle%prev)
-
-    ! Decrement counter
-    partlist%count = partlist%count-1
-
-  END SUBROUTINE remove_particle_from_partlist
-
-
-  !"Removes" the particle from the primary list by flagging it as not-live
-  !Particle exists until the next compacting sweep
-  SUBROUTINE remove_particle_from_list_and_store(list, a_particle)
-
-    TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), POINTER :: a_particle
-
-    ! Check whether particle is head or tail of list and unlink
-    IF (ASSOCIATED(list%head, TARGET=a_particle)) THEN
-      list%store%head%head => a_particle%next
-      list%head => a_particle%next
-    ENDIF
-    IF (ASSOCIATED(list%tail, TARGET=a_particle)) THEN
-      list%tail => a_particle%prev
-    ENDIF
-
 
     ! Link particles on either side together
     IF (ASSOCIATED(a_particle%next)) a_particle%next%prev => a_particle%prev
@@ -765,9 +752,9 @@ CONTAINS
     a_particle%live = 0
 
     ! Decrement counter
-    list%count = list%count - 1
+    partlist%count = partlist%count-1
 
-  END SUBROUTINE remove_particle_from_list_and_store
+  END SUBROUTINE remove_particle_from_partlist
 
 
 
@@ -1334,7 +1321,7 @@ CONTAINS
     ENDDO
 
     CALL relink_partlist(list)
-    CALL update_store_endpoint(store, list, last_placed)
+    CALL update_store_endpoint(list, last_placed)
 
 
   END SUBROUTINE compact_backing_store

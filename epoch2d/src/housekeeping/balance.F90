@@ -1692,7 +1692,7 @@ CONTAINS
         current%processor = part_proc
 #endif
         IF (part_proc /= rank) THEN
-          CALL remove_particle_from_list_and_store(&
+          CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, current)
           CALL add_particle_to_partlist(pointers_send(part_proc), current)
         ENDIF

@@ -1052,7 +1052,7 @@ CONTAINS
 
         IF (out_of_bounds) THEN
           ! Particle has gone forever
-          CALL remove_particle_from_list_and_store(&
+          CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
           IF (track_ejected_particles) THEN
             !Ejected particles should be actually copied to this list
@@ -1061,7 +1061,7 @@ CONTAINS
           ENDIF
         ELSE IF (ABS(xbd) + ABS(ybd) > 0) THEN
           ! Particle has left processor, send it to its neighbour
-         CALL remove_particle_from_list_and_store(&
+         CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
          !Live is now 0 and links are dead
          !This relinks the particle into the new list
