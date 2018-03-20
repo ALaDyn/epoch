@@ -404,7 +404,7 @@ CONTAINS
       npart_per_cell = FLOOR(species%npart_per_cell, KIND=i8)
     ENDIF
     partlist => species%attached_list
-    partstore => species%attached_store
+    partstore => species%attached_list%store
 
     CALL destroy_partlist(partlist)
     CALL destroy_store(partstore)
@@ -449,7 +449,7 @@ CONTAINS
           current%live = 1
           ipart = ipart + 1
 
-          CALL increment_next_free_element(partstore, partlist)
+          CALL increment_next_free_element(partlist)
           current => partstore%next_slot
           current_index = current_index + 1
 
@@ -491,7 +491,7 @@ CONTAINS
         current%part_pos(1) = x(cell_x) + (random() - 0.5_num) * dx
         current%part_pos(2) = y(cell_y) + (random() - 0.5_num) * dy
         current%live = 1
-        CALL increment_next_free_element(partstore, partlist)
+        CALL increment_next_free_element(partlist)
         current => partstore%next_slot
         current_index = current_index + 1
 

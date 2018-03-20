@@ -1693,8 +1693,7 @@ CONTAINS
 #endif
         IF (part_proc /= rank) THEN
           CALL remove_particle_from_list_and_store(&
-              species_list(ispecies)%attached_list, &
-              species_list(ispecies)%attached_store, current)
+              species_list(ispecies)%attached_list, current)
           CALL add_particle_to_partlist(pointers_send(part_proc), current)
         ENDIF
         current => next
@@ -1711,8 +1710,7 @@ CONTAINS
 
       DO iproc = 0, nproc - 1
         CALL add_partlist_to_list_and_store(&
-            species_list(ispecies)%attached_store, pointers_recv(iproc), &
-            species_list(ispecies)%attached_list, .TRUE.)
+            species_list(ispecies)%attached_list, pointers_recv(iproc), .TRUE.)
       ENDDO
     ENDDO
 

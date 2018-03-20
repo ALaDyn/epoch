@@ -239,10 +239,11 @@ CONTAINS
 
    countc = 0
    a_count = 0
-   DO i=1, species%attached_store%total_length
-     IF (species%attached_store%head%store(i)%live > 0) THEN
+   DO i=1, species%attached_list%store%total_length
+     IF (species%attached_list%store%head%store(i)%live > 0) THEN
        countc = countc + 1
-       IF (ASSOCIATED(species%attached_store%head%store(i)%next)) a_count = a_count + 1
+       IF (ASSOCIATED(species%attached_list%store%head%store(i)%next)) &
+           a_count = a_count + 1
      ENDIF
    END DO
    WRITE(100+rank, *)  countc, species%attached_list%count, a_count+1
@@ -400,9 +401,8 @@ CONTAINS
   !Walk the particle store and regenerate a linked list
   !from the slots which hold live particles
   !to make list a valid linked list again
-  SUBROUTINE relink_partlist(store, list)
+  SUBROUTINE relink_partlist(list)
 
-    TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle), POINTER :: current, previous
     INTEGER(i8) :: ipart, cnt
@@ -410,9 +410,9 @@ CONTAINS
     NULLIFY(previous)
 
     cnt = 0
-    DO ipart = 1, store%total_length
+    DO ipart = 1, list%store%total_length
       !PRINT*, 'Linking slot ', ipart
-      current => store%head%store(ipart)
+      current => list%store%head%store(ipart)
       !!!! This will need to increment the sublist when we have those
       !current%next => partlist%head%store(ipart+1)
 !      PRINT*, ipart, current%live, current%part_pos
@@ -444,38 +444,38 @@ CONTAINS
   !ANY CALLER MUST CHECK LIST IS UNCHANGED OR REPOINT!!
   !Once add multiple linked sub_stores and/or more sophisticated
   !trcking of free slots, this must get more clever
-  SUBROUTINE increment_next_free_element(store, list)
+  SUBROUTINE increment_next_free_element(list)
 
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle), DIMENSION(:), POINTER :: new_store
     INTEGER(i8) :: new_size, i
 
 
-    IF(store%head%first_free_element >= store%head%length -1) THEN
+    IF(list%store%head%first_free_element >= list%store%head%length -1) THEN
       !First resort: compact store
-      CALL compact_backing_store(store, list)
-      IF(store%head%first_free_element >= store%head%length -1) THEN
+      CALL compact_backing_store(list%store, list)
+      IF(list%store%head%first_free_element >= list%store%head%length -1) THEN
         !Compacting insufficient, reallocate larger...
         !Allocate a larger store
         !new_size = store%total_length + sublist_size
-        new_size = FLOOR(store%total_length * list_factor)
+        new_size = FLOOR(list%store%total_length * list_factor)
         ALLOCATE(new_store(new_size))
-        new_store(1:store%total_length) = store%head%store
-        DO i = store%total_length + 1, new_size
+        new_store(1:list%store%total_length) = list%store%head%store
+        DO i = list%store%total_length + 1, new_size
           !Make sure new memory is not interpreted as live particles
           new_store(i)%live = 0
           NULLIFY(new_store(i)%prev, new_store(i)%next)
         ENDDO
-        DEALLOCATE(store%head%store)
-        store%head%store => new_store
-        store%total_length = new_size
-        store%head%length = new_size
-        CALL relink_partlist(store, list)
+        DEALLOCATE(list%store%head%store)
+        list%store%head%store => new_store
+        list%store%total_length = new_size
+        list%store%head%length = new_size
+        CALL relink_partlist(list)
       ENDIF
     ENDIF
-    store%head%first_free_element = store%head%first_free_element + 1
-    store%next_slot => store%head%store(store%head%first_free_element)
+    list%store%head%first_free_element = list%store%head%first_free_element + 1
+    list%store%next_slot => &
+        list%store%head%store(list%store%head%first_free_element)
 
   END SUBROUTINE increment_next_free_element
 
@@ -634,9 +634,8 @@ CONTAINS
 
 
   !Take a list and append its content to list-with-store
-  SUBROUTINE add_partlist_to_list_and_store(store, newlist, list, override_live)
+  SUBROUTINE add_partlist_to_list_and_store(list, newlist, override_live)
 
-    TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_list), INTENT(INOUT) :: newlist, list
     LOGICAL, INTENT(IN) :: override_live !Override any live states in newlist
     TYPE(particle), POINTER :: current, next, prev, next_slot
@@ -646,7 +645,7 @@ CONTAINS
     NULLIFY(prev, next)
     IF ( .NOT. ASSOCIATED(list%head) .AND. newlist%count > 0) THEN
       !List was empty, so hook up the head
-      list%head => store%next_slot
+      list%head => list%store%next_slot
     ENDIF
 
     IF (ASSOCIATED(list%tail)) THEN
@@ -659,10 +658,10 @@ CONTAINS
       IF ( override_live .OR. current%live == 1) THEN
 
         !Diagnostic only...
-        next_index = store%head%first_free_element
+        next_index = list%store%head%first_free_element
         !End diagnostic
 
-        next_slot => store%next_slot
+        next_slot => list%store%next_slot
         next => next_slot
         CALL copy_particle(current, next)
         next%live = 1
@@ -673,7 +672,7 @@ CONTAINS
         NULLIFY(next%next)
         list%tail => next
         list%count = list%count + 1
-        CALL increment_next_free_element(store, list)
+        CALL increment_next_free_element(list)
       ENDIF
       prev => list%tail !If relinked, tail was updated, else it =>next
       current => current%next
@@ -743,15 +742,14 @@ CONTAINS
 
   !"Removes" the particle from the primary list by flagging it as not-live
   !Particle exists until the next compacting sweep
-  SUBROUTINE remove_particle_from_list_and_store(list, store, a_particle)
+  SUBROUTINE remove_particle_from_list_and_store(list, a_particle)
 
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle), POINTER :: a_particle
 
     ! Check whether particle is head or tail of list and unlink
     IF (ASSOCIATED(list%head, TARGET=a_particle)) THEN
-      store%head%head => a_particle%next
+      list%store%head%head => a_particle%next
       list%head => a_particle%next
     ENDIF
     IF (ASSOCIATED(list%tail, TARGET=a_particle)) THEN
@@ -1335,7 +1333,7 @@ CONTAINS
       new%live = 0
     ENDDO
 
-    CALL relink_partlist(store, list)
+    CALL relink_partlist(list)
     CALL update_store_endpoint(store, list, last_placed)
 
 

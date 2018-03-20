@@ -583,40 +583,12 @@ MODULE shared_data
   LOGICAL :: use_particle_migration = .FALSE.
   INTEGER :: particle_migration_interval = 1
 
-  ! Object representing a collection of particles
-  ! Used internally by the MPI particle transfer code
-  TYPE particle_list
-    TYPE(particle), POINTER :: head
-    TYPE(particle), POINTER :: tail
-    INTEGER(i8) :: count
-    INTEGER :: id_update
-    ! Pointer is safe if the particles in it are all unambiguously linked
-    LOGICAL :: safe
-
-    TYPE(particle_list), POINTER :: next, prev
-  END TYPE particle_list
-
-  ! Represents the initial conditions of a species
-  TYPE initial_condition_block
-    REAL(num), DIMENSION(:,:), POINTER :: density
-    REAL(num), DIMENSION(:,:,:), POINTER :: temp
-    REAL(num), DIMENSION(:,:,:), POINTER :: drift
-
-    REAL(num) :: density_min
-    REAL(num) :: density_max
-
-    ! Delta-f settings
-    REAL(num) :: temp_back(3)
-    REAL(num) :: drift_back(3)
-    REAL(num) :: density_back
-  END TYPE initial_condition_block
-
   !Type representing a single sublist of partlist
 
   INTEGER(i8), PARAMETER :: sublist_size = 1000 !Size of a sublist. Grow ops allocate a new sublist of this size
   REAL(num), PARAMETER :: sublist_slack = 0.05  !Fractional slack to initially allocate
   REAL(num), PARAMETER :: list_factor = 1.6  !Grow ops allocate to this times previous size
-
+  LOGICAL, PARAMETER :: use_stores = .TRUE.  !Default to using stores for lists
   !Segment of memory storing particles
   !Does not track number of valid particles, only its own length
   TYPE particle_sub_store
@@ -638,6 +610,37 @@ MODULE shared_data
   END TYPE particle_store
 
 
+  ! Object representing a collection of particles
+  ! Used internally by the MPI particle transfer code
+  TYPE particle_list
+    TYPE(particle), POINTER :: head
+    TYPE(particle), POINTER :: tail
+    INTEGER(i8) :: count
+    INTEGER :: id_update
+    ! Pointer is safe if the particles in it are all unambiguously linked
+    LOGICAL :: safe
+
+    TYPE(particle_list), POINTER :: next, prev
+    LOGICAL :: use_store
+    TYPE(particle_store) :: store
+  END TYPE particle_list
+
+  ! Represents the initial conditions of a species
+  TYPE initial_condition_block
+    REAL(num), DIMENSION(:,:), POINTER :: density
+    REAL(num), DIMENSION(:,:,:), POINTER :: temp
+    REAL(num), DIMENSION(:,:,:), POINTER :: drift
+
+    REAL(num) :: density_min
+    REAL(num) :: density_max
+
+    ! Delta-f settings
+    REAL(num) :: temp_back(3)
+    REAL(num) :: drift_back(3)
+    REAL(num) :: density_back
+  END TYPE initial_condition_block
+
+
   ! Object representing a particle species
   TYPE particle_species
     ! Core properties
@@ -652,7 +655,7 @@ MODULE shared_data
     REAL(num) :: weight
     INTEGER(i8) :: count
     TYPE(particle_list) :: attached_list
-    TYPE(particle_store) :: attached_store
+    !TYPE(particle_store) :: attached_store
     LOGICAL :: immobile
 
 #ifndef NO_TRACER_PARTICLES
