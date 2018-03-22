@@ -1061,12 +1061,12 @@ CONTAINS
           ENDIF
         ELSE IF (ABS(xbd) + ABS(ybd) > 0) THEN
           ! Particle has left processor, send it to its neighbour
-         CALL remove_particle_from_partlist(&
+          CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
-         !Live is now 0 and links are dead
-         !This relinks the particle into the new list
-         CALL add_particle_to_partlist(send(xbd, ybd), cur)
-       ENDIF
+          !Live is now 0 and links are dead
+          !This relinks the particle into the new list
+          CALL add_particle_to_partlist(send(xbd, ybd), cur)
+        ENDIF
 
         ! Move to next particle
         cur => next

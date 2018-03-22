@@ -591,21 +591,23 @@ CONTAINS
     TYPE(particle_list), INTENT(INOUT) :: partlist
     TYPE(particle), POINTER :: new_particle, next
     INTEGER(i8) :: ipart
-    !PRINT*, "Destroying on", rank
 
-    ! Go through list and delete all the particles in the list
-    new_particle => partlist%head
-    !PRINT*, rank, ASSOCIATED(new_particle), partlist%count
-    ipart = 0
-    DO WHILE (ipart < partlist%count)
-      next => new_particle%next
-      DEALLOCATE(new_particle)
-      new_particle => next
-      ipart = ipart+1
-    ENDDO
+    IF(partlist%use_store) THEN
+      CALL destroy_store(partlist%store)
+    ELSE
+      ! Go through list and delete all the particles in the list
+      new_particle => partlist%head
+      !PRINT*, rank, ASSOCIATED(new_particle), partlist%count
+      ipart = 0
+      DO WHILE (ipart < partlist%count)
+        next => new_particle%next
+        DEALLOCATE(new_particle)
+        new_particle => next
+        ipart = ipart+1
+      ENDDO
 
-    CALL create_empty_partlist(partlist)
-   ! PRINT*, "Complete on", rank
+      CALL create_empty_partlist(partlist)
+    ENDIF
 
   END SUBROUTINE destroy_partlist
 
@@ -739,10 +741,11 @@ CONTAINS
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
 
     ! Check whether particle is head or tail of list and unlink
-    IF (ASSOCIATED(partlist%head, TARGET=a_particle)) &
-        partlist%head => a_particle%next
-    IF (partlist%use_store) &
-        partlist%store%head%head => a_particle%next
+    IF (ASSOCIATED(partlist%head, TARGET=a_particle)) THEN
+      partlist%head => a_particle%next
+      IF (partlist%use_store) &
+          partlist%store%head%head => a_particle%next
+    ENDIF
 
     IF (ASSOCIATED(partlist%tail, TARGET=a_particle)) &
         partlist%tail => a_particle%prev
