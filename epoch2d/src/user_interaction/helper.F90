@@ -504,13 +504,22 @@ CONTAINS
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
     ! Remove any particles from list that weren't placed
-    !We just have to fix the last actual particle and the list tail
-    IF(ASSOCIATED(current%prev)) THEN
-      !This means current is meant to be a valid particle
-      NULLIFY(current%prev%next)
-      partlist%tail => current%prev
+    IF(partlist%use_store) THEN
+      !We just have to fix the last actual particle and the list tail
+      IF(ASSOCIATED(current%prev)) THEN
+        !This means current is meant to be a valid particle
+        NULLIFY(current%prev%next)
+        partlist%tail => current%prev
+      ENDIF
+    ELSE
+      !Destroy any unplaced particles
+      DO WHILE(ASSOCIATED(current))
+        next => current%next
+        CALL remove_particle_from_partlist(partlist, current)
+        DEALLOCATE(current)
+        current => next
+      ENDDO
     ENDIF
-
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
