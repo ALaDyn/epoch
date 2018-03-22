@@ -735,7 +735,7 @@ CONTAINS
   SUBROUTINE remove_particle_from_partlist(partlist, a_particle)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
-    TYPE(particle), POINTER :: a_particle
+    TYPE(particle), POINTER :: a_particle, tmp_particle
 
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
@@ -759,6 +759,15 @@ CONTAINS
 
     ! Decrement counter
     partlist%count = partlist%count-1
+
+    IF (partlist%use_store) THEN
+      !If a_particle is in a store, make a copy
+      !Then what comes back is a valid, FREE particle
+      CALL create_particle(tmp_particle)
+      CALL copy_particle(a_particle, tmp_particle)
+      a_particle => tmp_particle
+    ENDIF
+
 
   END SUBROUTINE remove_particle_from_partlist
 

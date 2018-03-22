@@ -1055,16 +1055,16 @@ CONTAINS
           CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
           IF (track_ejected_particles) THEN
-            !Ejected particles should be actually copied to this list
-            !CALL add_particle_to_partlist(&
-             !   ejected_list(ispecies)%attached_list, cur)
+            CALL add_particle_to_partlist(&
+                ejected_list(ispecies)%attached_list, cur)
+          ELSE
+            DEALLOCATE(cur)
           ENDIF
         ELSE IF (ABS(xbd) + ABS(ybd) > 0) THEN
           ! Particle has left processor, send it to its neighbour
           CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
           !Live is now 0 and links are dead
-          !This relinks the particle into the new list
           CALL add_particle_to_partlist(send(xbd, ybd), cur)
         ENDIF
 
@@ -1081,15 +1081,6 @@ CONTAINS
 
           CALL partlist_sendrecv(send(ix, iy), recv(ixp, iyp), &
               neighbour(ix, iy), neighbour(ixp, iyp))
-        ENDDO
-      ENDDO
-
-      DO iy = -1, 1
-        DO ix = -1, 1
-          IF (ABS(ix) + ABS(iy) == 0) CYCLE
-          ixp = -ix
-          iyp = -iy
-
           !Since elements of recv are copies of sent particles,
           !their live flag may be 0, so we override it in the add
           CALL add_partlist_to_list_and_store(&
@@ -1099,6 +1090,7 @@ CONTAINS
       DO iy = -1, 1
         DO ix = -1, 1
           IF (ABS(ix) + ABS(iy) == 0) CYCLE
+          CALL destroy_partlist(send(ix, iy))
           CALL destroy_partlist(recv(ix, iy))
         ENDDO
       ENDDO
