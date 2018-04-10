@@ -1709,7 +1709,7 @@ CONTAINS
       CALL redblack(pointers_send, pointers_recv, sendcounts, recvcounts)
 
       DO iproc = 0, nproc - 1
-        CALL add_partlist_to_list_and_store(&
+        CALL append_partlist(&
             species_list(ispecies)%attached_list, pointers_recv(iproc), .TRUE.)
       ENDDO
     ENDDO

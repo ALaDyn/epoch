@@ -152,7 +152,15 @@ CONTAINS
 
     ALLOCATE(store%head%store(store%head%length))
     store%head%head => store%head%store(1)
-    store%next_slot => store%head%head
+    !Next_slot is the next place to ADD a particle
+    !If there's no padding at all, this must be null
+    IF(actual_elements > n_els_min) THEN
+      store%next_slot => store%head%store(n_els_min + 1)
+      store%head%first_free_element = n_els_min + 1
+    ELSE
+      NULLIFY(store%next_slot)
+      store%head%first_free_element = 1
+    ENDIF
 
     DO i_part = 1, actual_elements
       IF (i_part > 1 .AND. i_part < n_els_min .AND. link_el) THEN
@@ -214,6 +222,17 @@ CONTAINS
    INTEGER(i8) :: counta, countb, countc, i, a_count, cell_x, cell_y, countd
    REAL(num) :: idx, idy, part_x, part_y
    INTEGER :: ierr
+
+   DO i = 1, species%attached_list%store%total_length
+     IF(ASSOCIATED(species%attached_list%tail, &
+         TARGET=species%attached_list%store%head%store(i))) &
+         WRITE(100+rank, *) 'Tail is at index ', i
+   ENDDO
+   DO i = 1, species%attached_list%store%total_length
+     IF(ASSOCIATED(species%attached_list%store%next_slot, &
+         TARGET=species%attached_list%store%head%store(i))) &
+         WRITE(100+rank, *) 'Next_slot is at index ', i
+   ENDDO
 
    counta = 0
    current => species%attached_list%head
@@ -399,6 +418,14 @@ CONTAINS
 
     IF (use_store) THEN
       CALL create_particle_store(partlist%store, n_elements)
+      IF(n_elements > 0) THEN
+        !TODO and if not condition??
+        partlist%tail => partlist%store%head%store(n_elements)
+        partlist%head => partlist%store%head%head
+      ELSE
+        NULLIFY(partlist%head, partlist%tail)
+      ENDIF
+      partlist%count = n_elements
     ELSE
       CALL create_empty_partlist(partlist)
 
@@ -626,29 +653,46 @@ CONTAINS
 
 
 
-  SUBROUTINE append_partlist(head, tail)
 
-    TYPE(particle_list), INTENT(INOUT) :: head, tail
+  SUBROUTINE append_partlist(list, newlist, ignore_live_in)
 
-    IF (.NOT. head%safe .OR. .NOT. tail%safe) THEN
+    TYPE(particle_list), INTENT(INOUT) :: list, newlist
+    LOGICAL, INTENT(IN), OPTIONAL :: ignore_live_in
+    LOGICAL :: ignore_live
+
+    IF (.NOT. list%safe .OR. .NOT. newlist%safe) THEN
       IF (rank == 0) &
           PRINT *, 'Unable to append partlists because one is not safe'
       RETURN
     ENDIF
 
-    IF (ASSOCIATED(head%tail)) THEN
-      head%tail%next => tail%head
+    IF(PRESENT(ignore_live_in)) THEN
+      ignore_live = ignore_live_in
     ELSE
-      head%head => tail%head
+      ignore_live = .FALSE.
     ENDIF
-    IF (ASSOCIATED(tail%head)) tail%head%prev => head%tail
-    IF (ASSOCIATED(tail%tail)) head%tail => tail%tail
-    head%count = head%count + tail%count
-    head%id_update = head%id_update + tail%id_update
 
-    CALL create_empty_partlist(tail)
+    !Do the appending
+    !TODO this misses the case of a linked list and a store backed newlist
+    IF (.NOT. (list%use_store .OR. newlist%use_store)) THEN
+      IF (ASSOCIATED(list%tail)) THEN
+        list%tail%next => newlist%head
+      ELSE
+        list%head => newlist%head
+      ENDIF
+      IF (ASSOCIATED(newlist%head)) newlist%head%prev => list%tail
+      IF (ASSOCIATED(newlist%tail)) list%tail => newlist%tail
+      list%count = list%count + newlist%count
+      list%id_update = list%id_update + newlist%id_update
+
+    ELSE
+      CALL add_partlist_to_list_and_store(list, newlist, ignore_live)
+    ENDIF
+    !Clean up newlist
+    CALL create_empty_partlist(newlist)
 
   END SUBROUTINE append_partlist
+
 
 
   !Take a list and append its content to list-with-store
@@ -656,7 +700,7 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: newlist, list
     LOGICAL, INTENT(IN) :: override_live !Override any live states in newlist
-    TYPE(particle), POINTER :: current, next, prev, next_slot
+    TYPE(particle), POINTER :: current, next, prev
     INTEGER(i8) :: add_count, next_index !TODO both temporary diagnostics
 
     current => newlist%head
@@ -679,8 +723,7 @@ CONTAINS
         next_index = list%store%head%first_free_element
         !End diagnostic
 
-        next_slot => list%store%next_slot
-        next => next_slot
+        next => list%store%next_slot
         CALL copy_particle(current, next)
         next%live = 1
         add_count = add_count + 1
@@ -695,6 +738,8 @@ CONTAINS
       prev => list%tail !If relinked, tail was updated, else it =>next
       current => current%next
     END DO
+    list%id_update = list%id_update + newlist%id_update
+
 
   END SUBROUTINE add_partlist_to_list_and_store
 

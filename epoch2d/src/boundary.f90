@@ -1083,7 +1083,7 @@ CONTAINS
               neighbour(ix, iy), neighbour(ixp, iyp))
           !Since elements of recv are copies of sent particles,
           !their live flag may be 0, so we override it in the add
-          CALL add_partlist_to_list_and_store(&
+          CALL append_partlist(&
               species_list(ispecies)%attached_list, recv(ixp, iyp), .TRUE.)
         ENDDO
       ENDDO

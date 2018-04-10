@@ -405,26 +405,15 @@ CONTAINS
     ENDIF
     partlist => species%attached_list
     partstore => species%attached_list%store
-    partlist%use_store = .TRUE.
-    !CALL destroy_partlist(partlist)
-    !CALL destroy_store(partstore)
-    !CALL create_particle_store(partstore, &
-    !      num_new_particles)
     CALL create_allocated_partlist(partlist, num_new_particles, &
         use_store_default)
     !Now have a store with at least one chunk of memory allocated
     !And all linking etc is done
 
-    partlist%count = num_new_particles
     !Randomly place npart_per_cell particles into each valid cell
     npart_left = num_new_particles
 
-    current => partstore%next_slot
-    !TODO the following should be handled in store/list creation
-    IF(num_new_particles > 0) THEN
-      partlist%tail => partstore%head%store(num_new_particles)
-      partlist%head => current
-    ENDIF
+    current => partlist%head
 
     current_index = 1 !TODO Now just diagnostic tracker
     IF (npart_per_cell > 0) THEN
@@ -451,8 +440,7 @@ CONTAINS
           current%live = 1
           ipart = ipart + 1
 
-          CALL increment_next_free_element(partlist)
-          current => partstore%next_slot
+          current => current%next
           current_index = current_index + 1
 
           ! One particle sucessfully placed
@@ -493,8 +481,8 @@ CONTAINS
         current%part_pos(1) = x(cell_x) + (random() - 0.5_num) * dx
         current%part_pos(2) = y(cell_y) + (random() - 0.5_num) * dy
         current%live = 1
-        CALL increment_next_free_element(partlist)
-        current => partstore%next_slot
+
+        current => current%next
         current_index = current_index + 1
 
       ENDDO
@@ -506,10 +494,12 @@ CONTAINS
     ! Remove any particles from list that weren't placed
     IF(partlist%use_store) THEN
       !We just have to fix the last actual particle and the list tail
-      IF(ASSOCIATED(current%prev)) THEN
-        !This means current is meant to be a valid particle
-        NULLIFY(current%prev%next)
-        partlist%tail => current%prev
+      IF(ASSOCIATED(current)) THEN
+        IF(ASSOCIATED(current%prev)) THEN
+          !This means current is meant to be a valid particle
+          NULLIFY(current%prev%next)
+          partlist%tail => current%prev
+        ENDIF
       ENDIF
     ELSE
       !Destroy any unplaced particles
