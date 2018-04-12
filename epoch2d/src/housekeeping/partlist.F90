@@ -188,6 +188,7 @@ CONTAINS
   END SUBROUTINE create_particle_store
 
 
+
   SUBROUTINE destroy_store(store)
 
     TYPE(particle_store), INTENT(INOUT) :: store
@@ -195,23 +196,12 @@ CONTAINS
 
     section => store%head
     IF (.NOT. ASSOCIATED(section)) RETURN
-    DO WHILE(ASSOCIATED(section%next))
+    DO WHILE(ASSOCIATED(section))
       DEALLOCATE(section%store)
       section => section%next
     ENDDO
 
   END SUBROUTINE destroy_store
-
-
-
-  SUBROUTINE destroy_partlist_retain_store(partlist)
-
-    TYPE(particle_list), INTENT(INOUT) :: partlist
-    !PRINT*, "Destroying list only on", rank
-    !Leave alone memory, just nullify list info
-    CALL create_empty_partlist(partlist)
-
-  END SUBROUTINE destroy_partlist_retain_store
 
 
 
@@ -1225,7 +1215,7 @@ CONTAINS
 
     ! No longer need the sending partlist, so destroy it to save some memory
     !Sendlist no longer owns the memory
-    CALL destroy_partlist_retain_store(partlist_send)
+    CALL destroy_partlist(partlist_send)
 
     ! Actual MPI commands
     CALL MPI_SENDRECV(data_send, nsend, mpireal, dest, tag, &
