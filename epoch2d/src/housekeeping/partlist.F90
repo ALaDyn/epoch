@@ -713,17 +713,9 @@ CONTAINS
         next_index = list%store%head%first_free_element
         !End diagnostic
 
-        next => list%store%next_slot
+        CALL create_particle_in_list(next, list)
         CALL copy_particle(current, next)
-        next%live = 1
         add_count = add_count + 1
-        !Link new particle into list, leaving next alone
-        IF ( ASSOCIATED(prev)) prev%next => next
-        next%prev => prev
-        NULLIFY(next%next)
-        list%tail => next
-        list%count = list%count + 1
-        CALL increment_next_free_element(list)
       ENDIF
       prev => list%tail !If relinked, tail was updated, else it =>next
       current => current%next
@@ -908,6 +900,7 @@ CONTAINS
     cpos = cpos+1
 #endif
 #endif
+    a_particle%live = 1 !TODO actually send this info
 
   END SUBROUTINE unpack_particle
 
@@ -997,6 +990,35 @@ CONTAINS
     CALL init_particle(new_particle)
 
   END SUBROUTINE create_particle
+
+
+
+  SUBROUTINE create_particle_in_list(new_particle, list)
+
+    TYPE(particle), POINTER :: new_particle
+    TYPE(particle_list), INTENT(INOUT) :: list
+
+    IF (list%use_store) THEN
+      new_particle => list%store%next_slot
+      CALL init_particle(new_particle)
+      new_particle%live = 1
+      new_particle%prev => list%tail
+      NULLIFY(new_particle%next)
+      list%tail => new_particle
+      IF(ASSOCIATED(new_particle%prev)) new_particle%prev%next => new_particle
+
+      CALL increment_next_free_element(list)
+      new_particle => list%tail !In case reallocation occurred
+    ELSE
+      CALL create_particle(new_particle)
+      new_particle%prev => list%tail
+      NULLIFY(new_particle%next)
+      list%tail => new_particle
+      new_particle%prev%next => new_particle
+    ENDIF
+    list%count = list%count + 1
+
+  END SUBROUTINE
 
 
 
