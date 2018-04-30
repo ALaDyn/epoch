@@ -294,9 +294,9 @@ CONTAINS
    IF(counta /= countb .OR. countb /= countc) &
        CALL MPI_ABORT(comm, 1, ierr)
    IF(countc > 0 .AND. countb /= a_count+1) &
-       CALL MPI_ABORT(comm, 1, ierr)
+       CALL MPI_ABORT(comm, 2, ierr)
    IF(countd /= 0) &
-       CALL MPI_ABORT(comm, 1, ierr)
+       CALL MPI_ABORT(comm, 3, ierr)
 
 
    FLUSH(100+rank)
@@ -483,7 +483,6 @@ CONTAINS
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle), DIMENSION(:), POINTER :: new_store
     INTEGER(i8) :: new_size, i
-
 
     IF(list%store%head%first_free_element >= list%store%head%length -1) THEN
       !First resort: compact store
@@ -995,7 +994,7 @@ CONTAINS
 
   SUBROUTINE create_particle_in_list(new_particle, list)
 
-    TYPE(particle), POINTER :: new_particle
+    TYPE(particle), POINTER, INTENT(INOUT) :: new_particle
     TYPE(particle_list), INTENT(INOUT) :: list
 
     IF (list%use_store) THEN

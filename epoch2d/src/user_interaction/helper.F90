@@ -304,7 +304,13 @@ CONTAINS
     LOGICAL :: sweep
 
     npart_this_species = species%count
-    IF (npart_this_species <= 0) RETURN
+    IF (npart_this_species <= 0) THEN
+     IF (use_store_default) THEN
+       CALL create_empty_partlist(species%attached_list, .TRUE.)
+     ELSE
+       RETURN
+     ENDIF
+    ENDIF
 
     num_valid_cells_local = 0
     DO iy = 1, ny
