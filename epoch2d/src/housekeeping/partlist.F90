@@ -1013,7 +1013,8 @@ CONTAINS
       new_particle%prev => list%tail
       NULLIFY(new_particle%next)
       list%tail => new_particle
-      new_particle%prev%next => new_particle
+      IF(ASSOCIATED(new_particle%prev)) new_particle%prev%next => new_particle
+      IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
     ENDIF
     list%count = list%count + 1
 
