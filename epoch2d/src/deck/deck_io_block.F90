@@ -237,8 +237,6 @@ CONTAINS
             ENDIF
             io_block_list(i)%dt_average = t_end
           ENDIF
-<<<<<<< HEAD
-      IF (io_block_list(i)%any_accumulate) PRINT*,io_block_list(i)%accumulate_counter%dt_acc
           IF (io_block_list(i)%any_accumulate .AND. &
               io_block_list(i)%dt_snapshot &
               / io_block_list(i)%accumulate_counter%dt_acc &
