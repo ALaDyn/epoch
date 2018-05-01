@@ -73,6 +73,7 @@ CONTAINS
     DEALLOCATE(io_list_data, STAT=stat)
     DEALLOCATE(file_prefixes, STAT=stat)
     DEALLOCATE(file_numbers, STAT=stat)
+    DEALLOCATE(file_accum_reset, STAT=stat)
 
     DO i = 1, n_subsets
       DEALLOCATE(subset_list(i)%dumpmask, STAT=stat)

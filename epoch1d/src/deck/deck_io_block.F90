@@ -27,11 +27,11 @@ MODULE deck_io_block
   PUBLIC :: io_block_start, io_block_end
   PUBLIC :: io_block_handle_element, io_block_check
 
-  INTEGER, PARAMETER :: ov = 29
+  INTEGER, PARAMETER :: ov = 31
   INTEGER, PARAMETER :: io_block_elements = num_vars_to_dump + ov
   INTEGER :: block_number, nfile_prefixes
   INTEGER :: rolling_restart_io_block
-  INTEGER :: o1, o2, o3, o4, o5, o6, o7, o8
+  INTEGER :: o1, o2, o3, o4, o5, o6, o7, o8, o9
   LOGICAL, DIMENSION(io_block_elements) :: io_block_done
   LOGICAL, PRIVATE :: got_name, got_dump_source_code, got_dump_input_decks
   LOGICAL, PRIVATE :: warning_printed
@@ -154,11 +154,15 @@ CONTAINS
     io_block_name (i+26) = 'dump_cycle_first_index'
     io_block_name (i+27) = 'filesystem'
     io_block_name (i+28) = 'dump_first_after_restart'
-    io_block_name (i+ov) = 'disabled'
+    io_block_name (i+29) = 'disabled'
+    o9 = ov
+    io_block_name (i+30) = 'dt_accumulate'
+    io_block_name (i+31) = 'nstep_accumulate'
 
     track_ejected_particles = .FALSE.
     dump_absorption = .FALSE.
     averaged_var_block = 0
+    accumulated_var_block = 0
     new_style_io_block = .FALSE.
     n_io_blocks = 0
     rolling_restart_io_block = 0
@@ -224,7 +228,26 @@ CONTAINS
             ENDIF
             io_block_list(i)%dt_average = t_end
           ENDIF
-          IF (io_block%dump_cycle_first_index > io_block%dump_cycle) THEN
+          IF (io_block_list(i)%any_accumulate .AND. &
+              io_block_list(i)%dt_snapshot &
+              / io_block_list(i)%accumulate_counter%dt_acc &
+              >= max_accumulate_steps) THEN
+            io_block_list(i)%accumulate_counter%dt_acc = &
+                io_block_list(i)%dt_snapshot / max_accumulate_steps
+            IF (rank == 0) THEN
+              DO iu = 1, nio_units ! Print to stdout and to file
+                io = io_units(iu)
+                WRITE(io,*) '*** WARNING ***'
+                WRITE(io,*) 'Attempting to accumulate more than', &
+                    max_accumulate_steps, &
+                    'times. Using dt_accumulate of', &
+                    io_block_list(i)%accumulate_counter%dt_acc
+ !               WRITE(io,*) 'To use more rows TBA!!'
+              ENDDO
+            ENDIF
+         ENDIF
+
+         IF (io_block%dump_cycle_first_index > io_block%dump_cycle) THEN
             IF (rank == 0) THEN
               DO iu = 1, nio_units ! Print to stdout and to file
                 io = io_units(iu)
@@ -240,9 +263,11 @@ CONTAINS
 
         ALLOCATE(file_prefixes(nfile_prefixes))
         ALLOCATE(file_numbers(nfile_prefixes))
+        ALLOCATE(file_accum_reset(nfile_prefixes))
         DO i = 1,nfile_prefixes
           file_prefixes(i) = TRIM(io_prefixes(i))
           file_numbers(i) = 0
+          file_accum_reset = .FALSE.
         ENDDO
         DEALLOCATE(io_prefixes)
 
@@ -362,6 +387,7 @@ CONTAINS
     INTEGER, PARAMETER :: c_err_new_style_ignore = 1
     INTEGER, PARAMETER :: c_err_new_style_global = 2
     INTEGER, PARAMETER :: c_err_old_style_ignore = 3
+    LOGICAL :: acc_dt = .FALSE., acc_nstep = .FALSE., done_warning = .FALSE.
 
     errcode = c_err_none
     IF (value == blank) RETURN
@@ -550,6 +576,14 @@ CONTAINS
     CASE(29)
       io_block%dump_first_after_restart = &
           as_logical_print(value, element, errcode)
+    CASE(30)
+      io_block%accumulate_counter%dt_acc = &
+          as_real_print(value, element, errcode)
+      acc_dt = .TRUE.
+    CASE(31)
+      io_block%accumulate_counter%nstep_acc = &
+          as_integer_print(value, element, errcode)
+      acc_nstep = .TRUE.
     END SELECT
 
     IF (style_error == c_err_old_style_ignore) THEN
@@ -592,7 +626,20 @@ CONTAINS
         ENDDO
       ENDIF
     ENDIF
-
+    IF (acc_dt .AND. acc_nstep .AND. .NOT. done_warning) THEN
+      done_warning = .TRUE.
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** WARNING ***', iu
+          WRITE(io,*) 'Setting both dt_accumulate and' &
+              // ' nstep_accumulate may give unpredictable behaviour.' &
+              // 'Using nstep_accumulate value!'
+        ENDDO
+      ENDIF
+      io_block%accumulate_counter%dt_acc = -1
+    ENDIF
     IF (elementselected > num_vars_to_dump) RETURN
 
     mask_element = elementselected
@@ -660,6 +707,38 @@ CONTAINS
           ENDIF
           mask = IAND(mask, NOT(c_io_species))
           mask = IOR(mask, c_io_no_sum)
+        ENDIF
+      ENDIF
+
+      IF (IAND(mask, c_io_accumulate) /= 0) THEN
+        bad = .TRUE.
+        ! Check for sensible accumulated variables
+        IF (mask_element == c_dump_ex) bad = .FALSE.
+        IF (mask_element == c_dump_ey) bad = .FALSE.
+        IF (mask_element == c_dump_ez) bad = .FALSE.
+        IF (mask_element == c_dump_bx) bad = .FALSE.
+        IF (mask_element == c_dump_by) bad = .FALSE.
+        IF (mask_element == c_dump_bz) bad = .FALSE.
+        IF (mask_element == c_dump_jx) bad = .FALSE.
+        IF (mask_element == c_dump_jy) bad = .FALSE.
+        IF (mask_element == c_dump_jz) bad = .FALSE.
+        IF (bad) THEN
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*) '*** WARNING ***'
+              WRITE(io,*) 'Attempting to set accumulate property for "' &
+                  // TRIM(element) // '" which'
+              WRITE(io,*) 'does not support this property. Ignoring.'
+            ENDDO
+          ENDIF
+          mask = IAND(mask, NOT(c_io_accumulate))
+        ELSE
+          any_accumulate = .TRUE.
+          io_block%any_accumulate = .TRUE.
+          IF (IAND(mask, c_io_accumulate_single) /= 0 .AND. num /= r4) THEN
+            io_block%accumulated_data(mask_element)%dump_single = .TRUE.
+          ENDIF
         ENDIF
       ENDIF
 
@@ -807,6 +886,7 @@ CONTAINS
     io_block%restart = .FALSE.
     io_block%dump = .FALSE.
     io_block%any_average = .FALSE.
+    io_block%any_accumulate = .FALSE.
     io_block%dump_first = .TRUE.
     io_block%dump_last = .TRUE.
     io_block%dump_source_code = .FALSE.
@@ -826,6 +906,7 @@ CONTAINS
     NULLIFY(io_block%dump_at_times)
     DO i = 1, num_vars_to_dump
       io_block%averaged_data(i)%dump_single = .FALSE.
+      io_block%accumulated_data(i)%dump_single = .FALSE.
     ENDDO
 
   END SUBROUTINE init_io_block

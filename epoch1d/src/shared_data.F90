@@ -119,6 +119,8 @@ MODULE constants
   INTEGER, PARAMETER :: c_io_dump_single = 2**8
   INTEGER, PARAMETER :: c_io_average_single = 2**9
   INTEGER, PARAMETER :: c_io_never = 2**10
+  INTEGER, PARAMETER :: c_io_accumulate = 2**11
+  INTEGER, PARAMETER :: c_io_accumulate_single = 2**12
 
   ! Maxwell Solvers
   INTEGER, PARAMETER :: c_maxwell_solver_yee = 0
@@ -376,6 +378,8 @@ MODULE shared_parser_data
   INTEGER, PARAMETER :: c_const_io_snapshot = 67
   INTEGER, PARAMETER :: c_const_io_dump_single = 68
   INTEGER, PARAMETER :: c_const_io_average_single = 69
+  INTEGER, PARAMETER :: c_const_io_accumulate = 70
+  INTEGER, PARAMETER :: c_const_io_accumulate_single = 71
 
   INTEGER, PARAMETER :: c_const_dir_x = 80
   INTEGER, PARAMETER :: c_const_dir_y = 81
@@ -737,6 +741,28 @@ MODULE shared_data
   INTEGER, PARAMETER :: num_vars_to_dump         = 48
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
+
+  !----------------------------------------------------------------------------
+  ! Accumulated IO
+  !----------------------------------------------------------------------------
+
+  TYPE accumulator_type
+    INTEGER :: nsteps, current_step, dump_step
+    INTEGER :: nstep_acc, last_accumulate_step
+    REAL(num) :: last_accumulate_time, dt_acc
+    REAL(num), DIMENSION(:), ALLOCATABLE :: time
+    LOGICAL :: reset
+  END TYPE accumulator_type
+
+  TYPE accumulated_data_block
+    REAL(num), DIMENSION(:,:), POINTER :: array
+    REAL(r4), DIMENSION(:,:), POINTER :: r4array
+    LOGICAL :: dump_single, array_assoc
+  END TYPE accumulated_data_block
+
+  LOGICAL :: any_accumulate = .FALSE.
+  INTEGER :: max_accumulate_steps = 512
+
   !----------------------------------------------------------------------------
   ! Time averaged IO
   !----------------------------------------------------------------------------
@@ -761,21 +787,25 @@ MODULE shared_data
     INTEGER :: dump_cycle_first_index
     LOGICAL :: restart, dump, any_average, dump_first, dump_last
     LOGICAL :: dump_source_code, dump_input_decks, rolling_restart
-    LOGICAL :: dump_first_after_restart
+    LOGICAL :: dump_first_after_restart, any_accumulate
     LOGICAL :: disabled
     INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
     TYPE(averaged_data_block), DIMENSION(num_vars_to_dump) :: averaged_data
+    TYPE(accumulator_type) :: accumulate_counter
+    TYPE(accumulated_data_block), DIMENSION(num_vars_to_dump) :: accumulated_data
   END TYPE io_block_type
 
   TYPE(io_block_type), POINTER :: io_block_list(:)
   INTEGER :: n_io_blocks
   LOGICAL :: track_ejected_particles, new_style_io_block
   INTEGER, DIMENSION(num_vars_to_dump) :: averaged_var_block
+  INTEGER, DIMENSION(num_vars_to_dump) :: accumulated_var_block
   REAL(num) :: time_start, time_stop
   INTEGER :: nstep_start, nstep_stop
   CHARACTER(LEN=c_id_length), ALLOCATABLE :: file_prefixes(:)
   INTEGER, ALLOCATABLE :: file_numbers(:)
   INTEGER(i8) :: sdf_buffer_size
+  LOGICAL, ALLOCATABLE :: file_accum_reset(:)
 
   !----------------------------------------------------------------------------
   ! Extended IO information
@@ -825,7 +855,7 @@ MODULE shared_data
     LOGICAL :: use_charge_min, use_charge_max
     LOGICAL :: use_mass_min, use_mass_max
     LOGICAL :: use_id_min, use_id_max
-    LOGICAL :: space_restrictions
+    LOGICAL :: space_restrictions, dump_acc_grid
     LOGICAL :: skip, dump_field_grid
     REAL(num) :: gamma_min, gamma_max, random_fraction
     REAL(num) :: x_min, x_max
@@ -835,6 +865,7 @@ MODULE shared_data
     REAL(num) :: mass_min, mass_max
     INTEGER(i8) :: id_min, id_max
     INTEGER :: subtype, subarray, subtype_r4, subarray_r4
+    INTEGER :: acc_subtype, acc_subarray, acc_subtype_r4, acc_subarray_r4
     INTEGER, DIMENSION(c_ndims) :: skip_dir, n_local, n_global, n_start
 
     ! Pointer to next subset

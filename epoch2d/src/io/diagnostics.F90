@@ -1895,14 +1895,6 @@ CONTAINS
 
           i0 = ran_no_ng(1,1); i1 = ran_no_ng(2,1) - 1
           j0 = ran_no_ng(1,2); j1 = ran_no_ng(2,2) - 1
-          IF (i1 < i0) THEN
-            i0 = 1
-            i1 = i0
-          ENDIF
-          IF (j1 < j0) THEN
-            j0 = 1
-            j1 = j0
-          ENDIF
 
           IF (i1 < i0) THEN
             i0 = 1

@@ -208,6 +208,7 @@ CONTAINS
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: temp_sum
     REAL(r4), DIMENSION(:,:), ALLOCATABLE :: r4temp_sum
     REAL(num), DIMENSION(:), ALLOCATABLE :: temp, temp2
+    TYPE(accumulator_type), POINTER :: counter
     INTEGER :: i, ispecies, io, id, nspec_local, mask
 
     nx_new = new_domain(1,2) - new_domain(1,1) + 1
@@ -382,6 +383,50 @@ CONTAINS
         DEALLOCATE(temp_sum)
       ENDIF
     ENDDO
+
+    !Accumulated fields
+    counter => io_block_list(1)%accumulate_counter
+    DO id = 1, num_vars_to_dump
+      io = 1
+      IF (io_block_list(io)%accumulated_data(id)%dump_single) THEN
+        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%r4array)) CYCLE
+
+        ALLOCATE(r4temp_sum(1-ng:nx_new+ng, counter%nsteps))
+
+        DO i = 1, counter%nsteps
+          CALL remap_field_r4(&
+              io_block_list(io)%accumulated_data(id)%r4array(:,i), &
+              r4temp_sum(:,i))
+        ENDDO
+
+        DEALLOCATE(io_block_list(io)%accumulated_data(id)%r4array)
+        ALLOCATE(io_block_list(io)%accumulated_data(id)&
+            %r4array(1-ng:nx_new+ng, counter%nsteps))
+
+        io_block_list(io)%accumulated_data(id)%r4array = r4temp_sum
+
+        DEALLOCATE(r4temp_sum)
+      ELSE
+        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%array)) CYCLE
+
+        ALLOCATE(temp_sum(1-ng:nx_new+ng, counter%nsteps))
+
+        DO i = 1, counter%nsteps
+          CALL remap_field(&
+              io_block_list(io)%accumulated_data(id)%array(:,i), &
+              temp_sum(:,i))
+        ENDDO
+
+        DEALLOCATE(io_block_list(io)%accumulated_data(id)%array)
+        ALLOCATE(io_block_list(io)%accumulated_data(id)&
+            %array(1-ng:nx_new+ng, counter%nsteps))
+
+        io_block_list(io)%accumulated_data(id)%array = temp_sum
+
+        DEALLOCATE(temp_sum)
+      ENDIF
+    ENDDO
+
 
   END SUBROUTINE redistribute_fields
 
