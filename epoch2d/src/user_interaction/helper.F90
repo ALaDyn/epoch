@@ -38,19 +38,19 @@ CONTAINS
 
       ! Set temperature at boundary for thermal bcs.
 
-      IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
+      IF (species%bc_particle(c_bd_x_min) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_x_min(:,:) = &
             species_list(ispecies)%initial_conditions%temp(1,:,:)
       ENDIF
-      IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
+      IF (species%bc_particle(c_bd_x_max) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_x_max(:,:) = &
             species_list(ispecies)%initial_conditions%temp(nx,:,:)
       ENDIF
-      IF (bc_particle(c_bd_y_min) == c_bc_thermal) THEN
+      IF (species%bc_particle(c_bd_y_min) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_y_min(:,:) = &
             species_list(ispecies)%initial_conditions%temp(:,1,:)
       ENDIF
-      IF (bc_particle(c_bd_y_max) == c_bc_thermal) THEN
+      IF (species%bc_particle(c_bd_y_max) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_y_max(:,:) = &
             species_list(ispecies)%initial_conditions%temp(:,ny,:)
       ENDIF
@@ -297,35 +297,29 @@ CONTAINS
     INTEGER(i8) :: cell_x
     INTEGER(i8) :: cell_y
     INTEGER(i8) :: i, ipos
-    INTEGER :: ix, iy, ix_min, ix_max, iy_min, iy_max, nx_e
+    INTEGER :: ix, iy, nx_e
+    INTEGER :: ix_min, ix_max, iy_min, iy_max
     CHARACTER(LEN=15) :: string
     LOGICAL :: sweep
 
     npart_this_species = species%count
     IF (npart_this_species <= 0) RETURN
 
-    IF (x_min_boundary .AND. species%fill_ghosts) THEN
-      ix_min = -1
-    ELSE
-      ix_min = 1
-    ENDIF
-    IF (x_max_boundary .AND. species%fill_ghosts) THEN
-      ix_max = nx + 2
-    ELSE
-      ix_max = nx
-    ENDIF
-    nx_e = ix_max - ix_min
+    ix_min = 1
+    ix_max = nx
 
-    IF (y_min_boundary .AND. species%fill_ghosts) THEN
-      iy_min = -1
-    ELSE
-      iy_min = 1
+    iy_min = 1
+    iy_max = ny
+
+    IF (species%fill_ghosts) THEN
+      IF (x_min_boundary) ix_min = ix_min - png
+      IF (x_max_boundary) ix_max = ix_max + png
+
+      IF (y_min_boundary) iy_min = iy_min - png
+      IF (y_max_boundary) iy_max = iy_max + png
     ENDIF
-    IF (y_max_boundary .AND. species%fill_ghosts) THEN
-      iy_max = ny + 2
-    ELSE
-      iy_max = ny
-    ENDIF
+
+    nx_e = ix_max - ix_min
 
     num_valid_cells_local = 0
     DO iy = iy_min, iy_max
@@ -488,14 +482,24 @@ CONTAINS
         ipos = INT(random() * (num_valid_cells_local - 1)) + 1
         ipos = valid_cell_list(ipos)
 
-        PRINT *,ipos
-
         cell_y = ipos / nx_e
         ipos = ipos - nx_e * cell_y
         cell_y = cell_y + iy_min
 
         cell_x = ipos + ix_min
 
+#ifdef PER_PARTICLE_CHARGE_MASS
+        ! Even if particles have per particle charge and mass, assume
+        ! that initially they all have the same charge and mass (user
+        ! can easily over_ride)
+        current%charge = species%charge
+        current%mass = species%mass
+#endif
+#ifdef DELTAF_METHOD
+        ! Store the number of particles per cell to allow calculation
+        ! of phase space volume later
+        current%pvol = npart_per_cell
+#endif
         current%part_pos(1) = x(cell_x) + (random() - 0.5_num) * dx
         current%part_pos(2) = y(cell_y) + (random() - 0.5_num) * dy
 
@@ -548,7 +552,7 @@ CONTAINS
 #ifdef PARTICLE_SHAPE_TOPHAT
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: rpart_in_cell
 #endif
-    REAL(num) :: wdata
+    REAL(num) :: wdata, x0, x1, y0, y1
     TYPE(particle_list), POINTER :: partlist
     INTEGER :: ix, iy, i, j, isubx, isuby
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: density
@@ -638,7 +642,7 @@ CONTAINS
 
     rpart_in_cell = npart_in_cell
     CALL processor_summation_bcs(rpart_in_cell, ng)
-    npart_in_cell = rpart_in_cell
+    npart_in_cell = INT(rpart_in_cell)
 
     DEALLOCATE(rpart_in_cell)
 #endif
@@ -664,18 +668,24 @@ CONTAINS
 
     DEALLOCATE(npart_in_cell)
 
-    !If you are filling ghost cells to meet an injector
-    !Then you have overfilled by half a cell but need those particles
-    !To calculate weights correctly. Now delete those particles that
-    !Overlap with the injection region
+    ! If you are filling ghost cells to meet an injector
+    ! Then you have overfilled by half a cell but need those particles
+    ! To calculate weights correctly. Now delete those particles that
+    ! Overlap with the injection region
     IF (species%fill_ghosts) THEN
-      current=>partlist%head
+      x1 = 0.5_num * dx * png
+      x0 = x_min - x1
+      x1 = x_max + x1
+
+      y1 = 0.5_num * dy * png
+      y0 = y_min - y1
+      y1 = y_max + y1
+
+      current => partlist%head
       DO WHILE(ASSOCIATED(current))
         next => current%next
-        IF (current%part_pos(1) < x_min - dx * png / 2.0_num &
-            .OR. current%part_pos(1) > x_max + dx * png / 2.0_num &
-            .OR. current%part_pos(2) < y_min - dy * png / 2.0_num &
-            .OR. current%part_pos(2) > y_max + dy * png / 2.0_num) THEN
+        IF (current%part_pos(1) < x0 .OR. current%part_pos(1) >= x1 &
+            .OR. current%part_pos(2) < y0 .OR. current%part_pos(2) >= y1) THEN
           CALL remove_particle_from_partlist(partlist, current)
           DEALLOCATE(current)
         ENDIF
@@ -742,7 +752,7 @@ CONTAINS
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
     INTEGER(KIND=i4), DIMENSION(:), POINTER :: idbuf4
     INTEGER(KIND=i8), DIMENSION(:), POINTER :: idbuf8
-    INTEGER :: id_offset
+    INTEGER :: i, id_offset
     INTEGER, DIMENSION(:), POINTER :: part_counts
 #endif
     TYPE(particle_species), POINTER :: species
@@ -824,14 +834,13 @@ CONTAINS
       ENDIF
 
 ! This is needed to get the IDs assigned properly
-#if defined(PARTICLEID) || defined(PARTICLE_ID4)
+#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
       IF (.NOT.curr_loader%id_data_given) THEN
         ALLOCATE(part_counts(0:nproc-1))
         CALL MPI_ALLGATHER(part_count, 1, MPI_INTEGER4, part_counts, 1, &
-            MPI_INTEGER4, comm)
+            MPI_INTEGER4, comm, errcode)
         id_offset = 0
-        i = 0
-        DO WHILE (i < rank)
+        DO i = 0, rank
           id_offset = id_offset + part_counts(i)
         ENDDO
       ENDIF
@@ -844,7 +853,9 @@ CONTAINS
         ! Insert data to particle
         new_particle%part_pos(1) = xbuf(read_count)
         new_particle%part_pos(2) = ybuf(read_count)
+#if !defined(PER_SPECIES_WEIGHT) || defined (PHOTONS)
         new_particle%weight = wbuf(read_count)
+#endif
         IF (curr_loader%px_data_given) THEN
           new_particle%part_p(1) = pxbuf(read_count)
         ENDIF

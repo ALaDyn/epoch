@@ -54,7 +54,7 @@ CONTAINS
     ! Properties of the current particle. Copy out of particle arrays for speed
     REAL(num) :: part_x
     REAL(num) :: part_ux, part_uy, part_uz
-    REAL(num) :: part_q, part_mc, ipart_mc, part_weight, part_fm
+    REAL(num) :: part_q, part_mc, ipart_mc, part_weight
 
     ! Used for particle probes (to see of probe conditions are satisfied)
 #ifndef NO_PARTICLE_PROBES
@@ -101,12 +101,13 @@ CONTAINS
     REAL(num) :: idtf, idxf
     REAL(num) :: idt, dto2, dtco2
     REAL(num) :: fcx, fcy, fjx, fjy, fjz
-    REAL(num) :: root, dtfac, gamma_rel, gamma_rel_m1, part_u2
+    REAL(num) :: root, dtfac, gamma_rel, part_u2
     REAL(num) :: delta_x, part_vy, part_vz
     INTEGER :: ispecies, ix, dcellx, cx
     INTEGER(i8) :: ipart
 #ifndef NO_PARTICLE_PROBES
     LOGICAL :: probes_for_species
+    REAL(num) :: gamma_rel_m1
 #endif
 #ifndef NO_TRACER_PARTICLES
     LOGICAL :: not_tracer_species
@@ -209,7 +210,6 @@ CONTAINS
         part_ux = current%part_p(1) * ipart_mc
         part_uy = current%part_p(2) * ipart_mc
         part_uz = current%part_p(3) * ipart_mc
-        part_fm = 1.0_num !current%force_multiplier
 
         ! Calculate v(t) from p(t)
         ! See PSC manual page (25-27)
@@ -275,9 +275,9 @@ CONTAINS
 #endif
 
         ! update particle momenta using weighted fields
-        uxm = part_ux + cmratio * ex_part * part_fm
-        uym = part_uy + cmratio * ey_part * part_fm
-        uzm = part_uz + cmratio * ez_part * part_fm
+        uxm = part_ux + cmratio * ex_part
+        uym = part_uy + cmratio * ey_part
+        uzm = part_uz + cmratio * ez_part
 
         ! Half timestep, then use Boris1970 rotation, see Birdsall and Langdon
         root = ccmratio / SQRT(uxm**2 + uym**2 + uzm**2 + 1.0_num)
@@ -303,9 +303,9 @@ CONTAINS
             + (tauz * tauy - taux) * uym)) * tau
 
         ! Rotation over, go to full timestep
-        part_ux = uxp + cmratio * ex_part * part_fm
-        part_uy = uyp + cmratio * ey_part * part_fm
-        part_uz = uzp + cmratio * ez_part * part_fm
+        part_ux = uxp + cmratio * ex_part
+        part_uy = uyp + cmratio * ey_part
+        part_uz = uzp + cmratio * ez_part
 
         ! Calculate particle velocity from particle momentum
         part_u2 = part_ux**2 + part_uy**2 + part_uz**2
@@ -445,17 +445,11 @@ CONTAINS
 #endif
         current => next
       ENDDO
-      CALL current_bcs(ispecies = ispecies, do_mpi = safe_periods)
+      CALL current_bcs(species=ispecies)
     ENDDO
 
     IF (.NOT.use_field_ionisation) THEN
-      IF (.NOT. safe_periods) THEN 
-        CALL current_bcs
-      ELSE IF (smooth_currents) THEN
-        CALL field_bc(jx, ng)
-        CALL field_bc(jy, ng)
-        CALL field_bc(jz, ng)
-      ENDIF
+      CALL current_bcs
       CALL particle_bcs
 
       IF (smooth_currents) CALL smooth_current()

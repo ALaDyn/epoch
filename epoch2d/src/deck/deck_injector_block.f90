@@ -74,7 +74,6 @@ CONTAINS
 
     CHARACTER(*), INTENT(IN) :: element, value
     INTEGER :: errcode, i
-    REAL(num) :: dummy
     INTEGER :: io, iu
 
     errcode = c_err_none
@@ -119,6 +118,12 @@ CONTAINS
       RETURN
     ENDIF
 
+    IF (str_cmp(element, 'use_flux_maxwellian')) THEN
+      working_injector%use_flux_injector = as_logical_print(value, element, &
+          errcode)
+      RETURN
+    ENDIF
+
     IF (str_cmp(element, 'npart_per_cell')) THEN
       working_injector%npart_per_cell = as_integer_print(value, element, &
           errcode)
@@ -137,21 +142,21 @@ CONTAINS
     ENDIF
 
     IF (str_cmp(element, 'temp_x')) THEN
-      i=1
+      i = 1
       CALL initialise_stack(working_injector%temperature_function(i))
       CALL tokenize(value, working_injector%temperature_function(i), errcode)
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'temp_y')) THEN
-      i=2
+      i = 2
       CALL initialise_stack(working_injector%temperature_function(i))
       CALL tokenize(value, working_injector%temperature_function(i), errcode)
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'temp_z')) THEN
-      i=3
+      i = 3
       CALL initialise_stack(working_injector%temperature_function(i))
       CALL tokenize(value, working_injector%temperature_function(i), errcode)
     ENDIF
@@ -159,28 +164,27 @@ CONTAINS
     IF (str_cmp(element, 'temp')) THEN
       DO i = 1, 3
         CALL initialise_stack(working_injector%temperature_function(i))
-        CALL tokenize(value, working_injector%temperature_function(i), &
-            errcode)
+        CALL tokenize(value, working_injector%temperature_function(i), errcode)
       ENDDO
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'drift_x')) THEN
-      i=1
+      i = 1
       CALL initialise_stack(working_injector%drift_function(i))
       CALL tokenize(value, working_injector%drift_function(i), errcode)
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'drift_y')) THEN
-      i=2
+      i = 2
       CALL initialise_stack(working_injector%drift_function(i))
       CALL tokenize(value, working_injector%drift_function(i), errcode)
       RETURN
     ENDIF
 
     IF (str_cmp(element, 'drift_z')) THEN
-      i=3
+      i = 3
       CALL initialise_stack(working_injector%drift_function(i))
       CALL tokenize(value, working_injector%drift_function(i), errcode)
       RETURN
@@ -202,29 +206,29 @@ CONTAINS
     error = 0
     current => injector_x_min
     DO WHILE(ASSOCIATED(current))
-      IF (current%species ==-1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error,2)
+      IF (current%species == -1) error = IOR(error, 1)
+      IF (.NOT. current%density_function%init) error = IOR(error, 2)
       current => current%next
     ENDDO
 
     current => injector_x_max
     DO WHILE(ASSOCIATED(current))
-      IF (current%species ==-1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error,2)
+      IF (current%species == -1) error = IOR(error, 1)
+      IF (.NOT. current%density_function%init) error = IOR(error, 2)
       current => current%next
     ENDDO
 
     current => injector_y_min
     DO WHILE(ASSOCIATED(current))
-      IF (current%species ==-1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error,2)
+      IF (current%species == -1) error = IOR(error, 1)
+      IF (.NOT. current%density_function%init) error = IOR(error, 2)
       current => current%next
     ENDDO
 
     current => injector_y_max
     DO WHILE(ASSOCIATED(current))
-      IF (current%species ==-1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error,2)
+      IF (current%species == -1) error = IOR(error, 1)
+      IF (.NOT. current%density_function%init) error = IOR(error, 2)
       current => current%next
     ENDDO
 

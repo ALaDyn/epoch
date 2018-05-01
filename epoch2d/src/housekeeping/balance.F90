@@ -782,10 +782,10 @@ CONTAINS
 
     ! Slice in X-direction with an additional index
 
-    IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
-      IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:ny_new+ng, 3))
+    DO ispecies = 1, n_species
+      IF (species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_thermal) THEN
+        IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:ny_new+ng, 3))
 
-      DO ispecies = 1, n_species
         DO i = 1, 3
           CALL remap_field_slice(c_dir_x, &
               species_list(ispecies)%ext_temp_x_min(:,i), temp(:,i))
@@ -795,13 +795,11 @@ CONTAINS
         ALLOCATE(species_list(ispecies)%ext_temp_x_min(1-ng:ny_new+ng, 3))
 
         species_list(ispecies)%ext_temp_x_min = temp
-      ENDDO
-    ENDIF
+      ENDIF
 
-    IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
-      IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:ny_new+ng, 3))
+      IF (species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_thermal) THEN
+        IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:ny_new+ng, 3))
 
-      DO ispecies = 1, n_species
         DO i = 1, 3
           CALL remap_field_slice(c_dir_x, &
               species_list(ispecies)%ext_temp_x_max(:,i), temp(:,i))
@@ -811,17 +809,17 @@ CONTAINS
         ALLOCATE(species_list(ispecies)%ext_temp_x_max(1-ng:ny_new+ng, 3))
 
         species_list(ispecies)%ext_temp_x_max = temp
-      ENDDO
-    ENDIF
+      ENDIF
+    ENDDO
 
     IF (ALLOCATED(temp)) DEALLOCATE(temp)
 
     ! Slice in Y-direction with an additional index
 
-    IF (bc_particle(c_bd_y_min) == c_bc_thermal) THEN
-      IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:nx_new+ng, 3))
+    DO ispecies = 1, n_species
+      IF (species_list(ispecies)%bc_particle(c_bd_y_min) == c_bc_thermal) THEN
+        IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:nx_new+ng, 3))
 
-      DO ispecies = 1, n_species
         DO i = 1, 3
           CALL remap_field_slice(c_dir_y, &
               species_list(ispecies)%ext_temp_y_min(:,i), temp(:,i))
@@ -831,13 +829,11 @@ CONTAINS
         ALLOCATE(species_list(ispecies)%ext_temp_y_min(1-ng:nx_new+ng, 3))
 
         species_list(ispecies)%ext_temp_y_min = temp
-      ENDDO
-    ENDIF
+      ENDIF
 
-    IF (bc_particle(c_bd_y_max) == c_bc_thermal) THEN
-      IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:nx_new+ng, 3))
+      IF (species_list(ispecies)%bc_particle(c_bd_y_max) == c_bc_thermal) THEN
+        IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:nx_new+ng, 3))
 
-      DO ispecies = 1, n_species
         DO i = 1, 3
           CALL remap_field_slice(c_dir_y, &
               species_list(ispecies)%ext_temp_y_max(:,i), temp(:,i))
@@ -847,8 +843,8 @@ CONTAINS
         ALLOCATE(species_list(ispecies)%ext_temp_y_max(1-ng:nx_new+ng, 3))
 
         species_list(ispecies)%ext_temp_y_max = temp
-      ENDDO
-    ENDIF
+      ENDIF
+    ENDDO
 
     IF (ALLOCATED(temp)) DEALLOCATE(temp)
 
@@ -1582,8 +1578,7 @@ CONTAINS
       current => species_list(ispecies)%attached_list%head
       DO WHILE(ASSOCIATED(current))
         ! Want global position, so x_grid_min, NOT x_grid_min_local
-        cell = FLOOR((current%part_pos(1) - x_grid_min) / dx + REAL(ng, num) &
-            + 0.5_num)
+        cell = FLOOR((current%part_pos(1) - x_grid_min) / dx + 1.5_num) + ng
 
         load(cell) = load(cell) + 1
         current => current%next
@@ -1622,8 +1617,7 @@ CONTAINS
       current => species_list(ispecies)%attached_list%head
       DO WHILE(ASSOCIATED(current))
         ! Want global position, so y_grid_min, NOT y_grid_min_local
-        cell = FLOOR((current%part_pos(2) - y_grid_min) / dy + REAL(ng, num) &
-            + 0.5_num)
+        cell = FLOOR((current%part_pos(2) - y_grid_min) / dy + 1.5_num) + ng
 
         load(cell) = load(cell) + 1
         current => current%next
@@ -1741,14 +1735,14 @@ CONTAINS
 
     DO iproc = 0, nprocx - 1
       IF (iproc == 0) THEN
-        minpos = x_grid_mins(iproc) - dx * ng
+        minpos = x_grid_mins(iproc) - dx * (0.5_num + png)
       ELSE
-        minpos = x_grid_mins(iproc) - dx / 2.0_num
+        minpos = x_grid_mins(iproc) - dx * 0.5_num
       ENDIF
       IF (iproc == nprocx - 1) THEN
-        maxpos = x_grid_maxs(iproc) + dx * ng
+        maxpos = x_grid_maxs(iproc) + dx * (0.5_num + png)
       ELSE
-        maxpos = x_grid_maxs(iproc) + dx / 2.0_num
+        maxpos = x_grid_maxs(iproc) + dx * 0.5_num
       ENDIF
       IF (part%part_pos(1) >= minpos .AND. part%part_pos(1) < maxpos) THEN
         coords(c_ndims) = iproc
@@ -1758,14 +1752,14 @@ CONTAINS
 
     DO iproc = 0, nprocy - 1
       IF (iproc == 0) THEN
-        minpos = y_grid_mins(iproc) - dy * ng
+        minpos = y_grid_mins(iproc) - dy * (0.5_num + png)
       ELSE
-        minpos = y_grid_mins(iproc) - dy / 2.0_num
+        minpos = y_grid_mins(iproc) - dy * 0.5_num
       ENDIF
       IF (iproc == nprocy - 1) THEN
-        maxpos = y_grid_maxs(iproc) + dy * ng
+        maxpos = y_grid_maxs(iproc) + dy * (0.5_num + png)
       ELSE
-        maxpos = y_grid_maxs(iproc) + dy / 2.0_num
+        maxpos = y_grid_maxs(iproc) + dy * 0.5_num
       ENDIF
       IF (part%part_pos(2) >= minpos .AND. part%part_pos(2) < maxpos) THEN
         coords(c_ndims-1) = iproc
