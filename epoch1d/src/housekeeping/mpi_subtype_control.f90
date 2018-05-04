@@ -207,9 +207,8 @@ CONTAINS
       sub => subset_list(i)
 
       ranges = cell_global_ranges(global_ranges(sub))
-      n_global(1:c_ndims) = (/ ranges(2,1) - ranges(1,1) /)
+      n_global = (/ ranges(2,1) - ranges(1,1), n_times /)
       ranges = cell_local_ranges(global_ranges(sub))
-
       ! These calculations rely on the original domain size, so will be wrong
       ! for skipped sets as yet
       proc_outside_range = .FALSE.
