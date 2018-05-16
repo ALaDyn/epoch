@@ -291,10 +291,18 @@ CONTAINS
    END DO
    WRITE(100+rank, *) "Positions Done"
 
-   IF(counta /= countb .OR. countb /= countc) &
-       CALL MPI_ABORT(comm, 1, ierr)
-   IF(countc > 0 .AND. countb /= a_count+1) &
-       CALL MPI_ABORT(comm, 2, ierr)
+   IF (species%attached_list%use_store) THEN
+     IF(counta /= countb .OR. countb /= countc) &
+         CALL MPI_ABORT(comm, 1, ierr)
+     IF(counta /= species%attached_list%count) &
+         CALL MPI_ABORT(comm, 1, ierr)
+     IF(countc > 0 .AND. countb /= a_count+1) &
+         CALL MPI_ABORT(comm, 2, ierr)
+   ELSE
+     IF(counta /= countb .OR. countb /= species%attached_list%count) &
+         CALL MPI_ABORT(comm, 1, ierr)
+   ENDIF
+
    IF(countd /= 0) &
        CALL MPI_ABORT(comm, 3, ierr)
 
@@ -435,11 +443,12 @@ CONTAINS
   !Walk the particle store and regenerate a linked list
   !from the slots which hold live particles
   !to make list a valid linked list again
-  SUBROUTINE relink_partlist(list)
+  SUBROUTINE relink_partlist(list, recount)
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle), POINTER :: current, previous
     INTEGER(i8) :: ipart, cnt
+    LOGICAL, INTENT(IN) :: recount
 
     NULLIFY(previous)
 
@@ -466,6 +475,8 @@ CONTAINS
       NULLIFY(previous%next)
       list%tail => previous
     ENDIF
+
+    IF(recount) list%count = cnt
 
   END SUBROUTINE relink_partlist
 
@@ -503,7 +514,7 @@ CONTAINS
         list%store%head%store => new_store
         list%store%total_length = new_size
         list%store%head%length = new_size
-        CALL relink_partlist(list)
+        CALL relink_partlist(list, .FALSE.)
       ENDIF
     ENDIF
     list%store%head%first_free_element = list%store%head%first_free_element + 1
@@ -758,13 +769,28 @@ CONTAINS
 
 
 
-  SUBROUTINE remove_particle_from_partlist(partlist, a_particle)
+  SUBROUTINE remove_particle_from_partlist(partlist, a_particle, &
+      fromstore_in, nocopy_in)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     TYPE(particle), POINTER :: a_particle, tmp_particle
+    LOGICAL, INTENT(IN), OPTIONAL :: fromstore_in, nocopy_in
+    LOGICAL :: fromstore, nocopy
 
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
+
+    IF (PRESENT(fromstore_in)) THEN
+      fromstore = fromstore_in
+    ELSE
+      fromstore = .TRUE.
+    ENDIF
+    IF (PRESENT(nocopy_in)) THEN
+      nocopy = nocopy_in
+    ELSE
+      nocopy = .FALSE.
+    ENDIF
+
 
     ! Check whether particle is head or tail of list and unlink
     IF (ASSOCIATED(partlist%head, TARGET=a_particle)) THEN
@@ -781,12 +807,11 @@ CONTAINS
     IF (ASSOCIATED(a_particle%prev)) a_particle%prev%next => a_particle%next
 
     NULLIFY(a_particle%next, a_particle%prev)
-    a_particle%live = 0
-
+    IF (fromstore) a_particle%live = 0
     ! Decrement counter
     partlist%count = partlist%count-1
 
-    IF (partlist%use_store) THEN
+    IF (partlist%use_store .AND. .NOT. nocopy) THEN
       !If a_particle is in a store, make a copy
       !Then what comes back is a valid, FREE particle
       CALL create_particle(tmp_particle)
@@ -1392,10 +1417,29 @@ CONTAINS
       new%live = 0
     ENDDO
 
-    CALL relink_partlist(list)
+    CALL relink_partlist(list, .FALSE.)
     CALL update_store_endpoint(list, last_placed)
 
 
   END SUBROUTINE compact_backing_store
+
+
+  !Completely relink all particle lists
+  !Slow, for test purposes
+  SUBROUTINE relink_partlists
+
+    INTEGER(i8) :: ispecies
+    TYPE(particle_list), POINTER :: list
+
+    DO ispecies = 1, n_species
+
+      list => species_list(ispecies)%attached_list
+
+      CALL relink_partlist(list, .TRUE.)
+
+    ENDDO
+
+
+  END SUBROUTINE
 
 END MODULE partlist

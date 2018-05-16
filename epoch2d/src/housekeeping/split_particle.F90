@@ -57,7 +57,7 @@ CONTAINS
         cell_y = FLOOR((current%part_pos(2) - y_grid_min_local) / dy + 1.5_num)
 
         CALL remove_particle_from_partlist(&
-            species_list(ispecies)%attached_list, current)
+            species_list(ispecies)%attached_list, current, .FALSE.)
         CALL add_particle_to_partlist(&
             species_list(ispecies)%secondary_list(cell_x,cell_y), current)
         current => next
@@ -78,15 +78,18 @@ CONTAINS
     i1 = 1 - i0
 
     DO ispecies = 1, n_species
-      DO iy = i0, ny + i1
-        DO ix = i0, nx + i1
-          CALL append_partlist(species_list(ispecies)%attached_list, &
-              species_list(ispecies)%secondary_list(ix,iy))
+      IF (.NOT. species_list(ispecies)%attached_list%use_store) THEN
+        DO iy = i0, ny + i1
+          DO ix = i0, nx + i1
+            CALL append_partlist(species_list(ispecies)%attached_list, &
+                species_list(ispecies)%secondary_list(ix,iy))
+          ENDDO
         ENDDO
-      ENDDO
+      ELSE
+        CALL relink_partlist(species_list(ispecies)%attached_list, .TRUE.)
+      ENDIF
       DEALLOCATE(species_list(ispecies)%secondary_list)
     ENDDO
-
     CALL particle_bcs
 
   END SUBROUTINE reattach_particles_to_mainlist

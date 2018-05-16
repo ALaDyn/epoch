@@ -522,7 +522,7 @@ CONTAINS
 
     species%count = npart_this_species
 
-    IF (rank == 0) THEN
+    IF (rank == 0 .AND. npart_this_species > 0) THEN
       CALL integer_as_string(npart_this_species, string)
       WRITE(*,*) 'Loaded ', TRIM(ADJUSTL(string)), &
           ' particles of species ', '"' // TRIM(species%name) // '"'
