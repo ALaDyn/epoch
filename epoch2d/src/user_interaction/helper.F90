@@ -346,12 +346,20 @@ CONTAINS
 
       IF (num_valid_cells_global == 0) THEN
         IF (rank == 0) THEN
-          WRITE(*,*) '*** ERROR ***'
-          WRITE(*,*) 'Intial condition settings mean that there are no cells ' &
-              // 'where particles may'
-          WRITE(*,*) 'validly be placed for species "' // TRIM(species%name) &
-              // '". ', 'Code will now terminate.'
-          CALL abort_code(c_err_bad_setup)
+          IF (move_window) THEN
+            WRITE(*,*) '*** WARNING ***'
+            WRITE(*,*) 'Intial condition settings mean that there are no ' &
+                // 'cells where particles may'
+            WRITE(*,*) 'validly be placed for species "' // TRIM(species%name) &
+                // '". ', 'This may be an error.'
+          ELSE
+            WRITE(*,*) '*** ERROR ***'
+            WRITE(*,*) 'Intial condition settings mean that there are no ' &
+                // 'cells where particles may'
+            WRITE(*,*) 'validly be placed for species "' // TRIM(species%name) &
+                // '". ', 'Code will now terminate.'
+            CALL abort_code(c_err_bad_setup)
+          ENDIF
         ENDIF
       ENDIF
 
