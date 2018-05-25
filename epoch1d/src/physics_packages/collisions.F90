@@ -1187,27 +1187,26 @@ CONTAINS
 
     ! New orthonormal basis vectors for calculating scattering angles:
     ! c1 = v / |v|
-    ! c2 = (v x e1) / |v x e1|
-    ! c3 = ((v x e1) x v) / |(v x e1) x v|
+    ! c2 = (z x c1) / |z x c1|
+    ! c3 = (c1 x c2) / |c1 x c2|
     ! where e1 is a unit vector parallel to x-axis. I.e., e1 = (1,0,0)
     ! New x-axis, c1, is parallel to the input vector
-    ! New y-axis, c2, is perpendicular to c1 and the x-axis
-    ! New z-axis ,c3, is perpendicular to c1 and c2
+    ! New y-axis, c2, is perpendicular to c1 and the z-axis
+    ! New z-axis, c3, is perpendicular to c1 and c2
     REAL(num), DIMENSION(3), INTENT(IN) :: vector
     REAL(num), DIMENSION(3), INTENT(OUT) :: c1, c2, c3
-    REAL(num) :: vtrans, vmag
+    REAL(num) :: c1_mag, c2_mag, c3_mag
 
-    vmag = SQRT(DOT_PRODUCT(vector, vector))
-    vtrans = SQRT(vector(2)**2 + vector(3)**2)
+    c1_mag = SQRT(DOT_PRODUCT(vector, vector))
+    c2_mag = SQRT(vector(1)**2 + vector(2)**2)
+    c3_mag = c1_mag * c2_mag
 
-    IF (vtrans > c_tiny) THEN
-      c1 = vector / vmag
-      c2 = (/ 0.0_num, vector(3), -vector(2) /)
-      c2 = c2 / vtrans
-      c3 = (/ vtrans**2, &
-          -(vector(1) * vector(2)), &
-          -(vector(1) * vector(3)) /)
-      c3 = c3 / (vmag * vtrans)
+    IF (c2_mag > c_tiny) THEN
+      c1 = vector / c1_mag
+      c2 = (/ -vector(2), vector(1), 0.0_num /) / c2_mag
+      c3 = (/ -(vector(1) * vector(3)), &
+          -(vector(2) * vector(3)), &
+          (vector(1)**2 + vector(2)**2) /) / c3_mag
     ELSE
       c1 = (/ 1.0_num, 0.0_num, 0.0_num /)
       c2 = (/ 0.0_num, 1.0_num, 0.0_num /)
