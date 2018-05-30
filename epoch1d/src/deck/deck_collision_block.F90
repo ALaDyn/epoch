@@ -114,6 +114,11 @@ CONTAINS
       RETURN
     ENDIF
 
+    IF (str_cmp(element, 'supercycle_count')) THEN
+      collision_supercycle = as_integer_print(value, element, errcode)
+      RETURN
+    ENDIF
+
     IF (str_cmp(element, 'collisional_ionisation') &
         .OR. str_cmp(element, 'collisional_ionization')) THEN
       use_collisional_ionisation = as_logical_print(value, element, errcode)

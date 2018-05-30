@@ -997,6 +997,9 @@ MODULE shared_data
   LOGICAL :: use_field_ionisation, use_collisional_ionisation
   LOGICAL :: use_multiphoton, use_bsi
 
+  REAL(num) :: collision_super_multiplier = 1.0
+  INTEGER :: collision_supercycle = 1
+
   INTEGER :: maxwell_solver = c_maxwell_solver_yee
 
   !----------------------------------------------------------------------------

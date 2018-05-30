@@ -950,6 +950,7 @@ CONTAINS
     ! Collision frequency
     nu = coll_freq(vrabs, log_lambda, m1, m2, q1, q2, itemp, jtemp, jdens)
     nu = 2.0_num * nu * factor * dt
+    nu = nu * collision_super_multiplier
 
 !    m_red = mass1 * mass2 / (mass1 + mass2)
 !    nu = ((idens * (charge1 * charge2)**2 * log_lambda) &
@@ -1552,6 +1553,8 @@ CONTAINS
     coll_pairs = 1.0_num
     coll_sort_array_size = 1
     ALLOCATE(coll_sort_array(coll_sort_array_size))
+
+    collision_super_multiplier = REAL(collision_supercycle)
 
   END SUBROUTINE setup_collisions
 
