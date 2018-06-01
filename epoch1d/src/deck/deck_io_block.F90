@@ -234,23 +234,25 @@ CONTAINS
             io_block_list(i)%dt_average = t_end
           ENDIF
           IF (io_block_list(i)%any_accumulate .AND. &
-              io_block_list(i)%dt_snapshot &
-              / io_block_list(i)%accumulate_counter%dt_acc &
-              >= max_accumulate_steps) THEN
-            io_block_list(i)%accumulate_counter%dt_acc = &
+              io_block_list(i)%accumulate_counter%dt_acc > 0) THEN
+            IF(io_block_list(i)%dt_snapshot &
+                / io_block_list(i)%accumulate_counter%dt_acc &
+                >= max_accumulate_steps) THEN
+                io_block_list(i)%accumulate_counter%dt_acc = &
                 io_block_list(i)%dt_snapshot / max_accumulate_steps
-            IF (rank == 0) THEN
-              DO iu = 1, nio_units ! Print to stdout and to file
-                io = io_units(iu)
-                WRITE(io,*) '*** WARNING ***'
-                WRITE(io,*) 'Attempting to accumulate more than', &
-                    max_accumulate_steps, &
-                    'times. Using dt_accumulate of', &
-                    io_block_list(i)%accumulate_counter%dt_acc
- !               WRITE(io,*) 'To use more rows TBA!!'
-              ENDDO
+              IF (rank == 0) THEN
+                DO iu = 1, nio_units ! Print to stdout and to file
+                  io = io_units(iu)
+                  WRITE(io,*) '*** WARNING ***'
+                  WRITE(io,*) 'Attempting to accumulate more than', &
+                      max_accumulate_steps, &
+                      'times. Using dt_accumulate of', &
+                      io_block_list(i)%accumulate_counter%dt_acc
+ !                    WRITE(io,*) 'To use more rows TBA!!'
+                ENDDO
+              ENDIF
             ENDIF
-         ENDIF
+          ENDIF
 
           IF (io_block_list(i)%dump_cycle_first_index &
                 > io_block_list(i)%dump_cycle) THEN

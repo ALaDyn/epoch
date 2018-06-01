@@ -750,8 +750,8 @@ MODULE shared_data
 
   TYPE accumulator_type
     INTEGER :: nsteps, current_step, dump_step
-    INTEGER :: nstep_acc, last_accumulate_step
-    REAL(num) :: last_accumulate_time, dt_acc
+    INTEGER :: nstep_acc = 0, last_accumulate_step
+    REAL(num) :: last_accumulate_time, dt_acc = 0.0
     REAL(num), DIMENSION(:), ALLOCATABLE :: time
     LOGICAL :: reset
   END TYPE accumulator_type
