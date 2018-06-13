@@ -103,29 +103,26 @@ CONTAINS
     partlist%safe = .TRUE.
     partlist%use_store = use_store
     IF (use_store) &
-        CALL create_particle_store(partlist%store, sublist_size, .TRUE., .TRUE.)
+        CALL create_particle_store(partlist%store, sublist_size, .FALSE., .TRUE.)
 
   END SUBROUTINE create_empty_partlist
 
 
 
-  !TODO This should actually call function to create a section
-  !which should take care of linking and all that
   SUBROUTINE create_particle_store(store, n_els_min, &
       link_el_in, no_pad_store)
 
 
     TYPE(particle_store), INTENT(INOUT) :: store
     INTEGER(i8), INTENT(IN) :: n_els_min
-    INTEGER(i8) :: actual_elements, i_part
+    INTEGER(i8) :: actual_elements, i_part, els_allocated
+    INTEGER(i8) :: i_sub, n_subs, last, link_to
+    INTEGER(i8), DIMENSION(:), ALLOCATABLE :: els_to_allocate
     LOGICAL, INTENT(IN), OPTIONAL :: link_el_in, no_pad_store
     LOGICAL :: link_el
 
-    IF (ASSOCIATED(store%head)) THEN
-      !If sublists, need to deallocate any
-      IF(ASSOCIATED(store%head%store)) DEALLOCATE(store%head%store)
-      DEALLOCATE(store%head)
-    ENDIF
+    !If sublists, need to deallocate any
+    CALL destroy_store(store)
 
     !Allocate one sublist of correct size
     actual_elements = FLOOR(MAX(n_els_min, sublist_size) &
@@ -135,58 +132,132 @@ CONTAINS
         actual_elements = MAX(n_els_min, sublist_size)
       ENDIF
     ENDIF
+    actual_elements = MAX(n_els_min, sublist_size)
 
     link_el = .TRUE.
     IF(present(link_el_in)) THEN
       link_el = link_el_in
     ENDIF
 
-    store%total_length = actual_elements
-    store%n_subs = 1
-    ALLOCATE(store%head)
+    !TODO Here goes logic on how to split up actual request
+    !Not sure if we want to allocate a large chunk and then add
+    !pieces, or all in pieces, or other
+    !For now, all pieces
 
-    store%head%length = actual_elements
-    store%head%first_free_element = 1
-    NULLIFY(store%head%previous)
-    NULLIFY(store%head%next)
+    !TODO respect link_el
 
-    ALLOCATE(store%head%store(store%head%length))
-    store%head%head => store%head%store(1)
-    !Next_slot is the next place to ADD a particle
-    !If there's no padding at all, this must be null
-    IF(actual_elements > n_els_min) THEN
-      store%next_slot => store%head%store(n_els_min + 1)
-      store%head%first_free_element = n_els_min + 1
-    ELSE
-      NULLIFY(store%next_slot)
-      store%head%first_free_element = 1
-    ENDIF
+    n_subs = CEILING(FLOAT(actual_elements)/FLOAT(sublist_size))
+    ALLOCATE(els_to_allocate(n_subs))
+    els_to_allocate = sublist_size
 
-    DO i_part = 1, actual_elements
-      IF (i_part > 1 .AND. i_part < n_els_min .AND. link_el) THEN
-        !Each particle slot should be linked up
-        store%head%store(i_part)%prev => store%head%store(i_part-1)
-        store%head%store(i_part)%next => store%head%store(i_part+1)
-      ELSE
-        !Nullify pointers
-        NULLIFY(store%head%store(i_part)%prev, &
-            store%head%store(i_part)%next)
+    DO i_sub = 1, n_subs
+      link_to = els_to_allocate(i_sub)
+      IF(.NOT. link_el) link_to = 0
+      IF(i_sub == n_subs) THEN
+        last = actual_elements - SUM(els_to_allocate(1:n_subs-1))
+        IF(link_to > 0) link_to = last
+        !TODO This might be off by 1??
       ENDIF
-      !And not-live state
-      store%head%store(i_part)%live = -1
-      !Don't strictly need to nullify, but helps during development
-      store%head%store(i_part)%part_p = 0
-      store%head%store(i_part)%part_pos = 0
+      CALL create_substore(store, els_to_allocate(i_sub), link_to)
     ENDDO
 
-    IF(link_el .AND. n_els_min > 1) THEN
-      !Correct links for 0th and n_elements-th particles
-      store%head%store(1)%next => store%head%store(2)
-      store%head%store(n_els_min)%prev => store%head%store(n_els_min-1)
+    store%next_slot => store%tail%store(store%tail%first_free_element)
+    IF(store%tail%first_free_element > 1) THEN
+      store%next_slot%prev => store%tail%store(store%tail%first_free_element-1)
+    ELSE IF(ASSOCIATED(store%tail%prev)) THEN
+      !TODO this wont work properly in general, e.g. if prev is also empty
+      !Do we ever need to consider this case?
+      store%next_slot%prev => store%tail%prev%store(store%tail%prev%first_free_element-1)
+    ELSE
+      NULLIFY(store%next_slot%prev)
     ENDIF
 
   END SUBROUTINE create_particle_store
 
+
+  !Create and a new store segment object
+  !in given store
+  !Takes total_size, link_upto
+
+  SUBROUTINE create_substore(store, total_size, link_upto_in)
+
+    TYPE(particle_store), INTENT(INOUT) :: store
+    TYPE(particle_sub_store), POINTER :: substore, tmp1, tmp2
+    INTEGER(i8), INTENT(IN) :: total_size, link_upto_in
+    INTEGER(i8) :: link_upto
+    TYPE(particle), POINTER :: current, prev
+    INTEGER(i8) :: i_part
+
+    IF(total_size <= 0) RETURN
+
+    link_upto = link_upto_in
+    IF(link_upto_in > total_size) link_upto = total_size
+
+    ALLOCATE(substore)
+    substore%length = total_size
+    NULLIFY(substore%prev, substore%next)
+    ALLOCATE(substore%store(total_size))
+    substore%head => substore%store(1)
+
+    IF(link_upto > 0) THEN
+      substore%first_free_element = link_upto + 1
+    ELSE
+      substore%first_free_element = 1
+    ENDIF
+
+    DO i_part = 1, total_size
+      IF (i_part > 1 .AND. i_part < link_upto) THEN
+        !Each particle slot should be linked up
+        substore%store(i_part)%prev => substore%store(i_part-1)
+        substore%store(i_part)%next => substore%store(i_part+1)
+      ELSE
+        !Nullify pointers
+        NULLIFY(substore%store(i_part)%prev, &
+            substore%store(i_part)%next)
+      ENDIF
+      !And not-live state
+      substore%store(i_part)%live = -1
+    ENDDO
+
+    IF(link_upto > 1) THEN
+      !Correct links for 0th and n_elements-th particles
+      substore%store(1)%next => substore%store(2)
+      IF(total_size > 1 .AND. link_upto >= total_size) &
+          substore%store(total_size)%prev => substore%store(total_size-1)
+    ENDIF
+
+    IF(ASSOCIATED(store%tail)) THEN
+      !Now link substore into store
+      tmp1 => store%tail
+      tmp2 => store%tail%next
+      store%tail%next => substore
+      tmp2 => store%tail%next
+
+      substore%prev => store%tail
+      tmp2 => substore%prev
+      !And create link in partlist between prior last particle
+      !and first particle of new sub
+      IF(link_upto > 1) THEN
+        IF(store%tail%first_free_element > 1) THEN
+          prev => store%tail%store(store%tail%first_free_element-1)
+        ELSE
+          !Have a completely empty sub... why??
+        ENDIF
+        current => substore%head
+        prev%next => current
+        current%prev => prev
+      ENDIF
+      store%tail => substore
+      tmp2 => store%tail
+      NULLIFY(substore%next)
+    ELSE
+      store%tail => substore
+    ENDIF
+    IF(.NOT. ASSOCIATED(store%head)) store%head => substore
+    store%n_subs = store%n_subs + 1
+    store%total_length = store%total_length + total_size
+
+  END SUBROUTINE create_substore
 
 
   SUBROUTINE destroy_store(store)
@@ -200,6 +271,9 @@ CONTAINS
       DEALLOCATE(section%store)
       section => section%next
     ENDDO
+    NULLIFY(store%head, store%tail)
+    store%n_subs = 0
+    store%total_length = 0
 
   END SUBROUTINE destroy_store
 
@@ -207,73 +281,111 @@ CONTAINS
 
   SUBROUTINE test_store(species)
 
-   TYPE(particle_species), INTENT(IN) :: species
-   TYPE(particle), POINTER :: current
-   INTEGER(i8) :: counta, countb, countc, i, a_count, cell_x, cell_y, countd
-   REAL(num) :: idx, idy, part_x, part_y
-   INTEGER :: ierr
+    TYPE(particle_species), INTENT(IN) :: species
+    TYPE(particle), POINTER :: current
+    TYPE(particle_sub_store), POINTER :: sub
+    INTEGER(i8) :: counta, countb, countc, i, a_count, cell_x, cell_y, countd, j
+    REAL(num) :: idx, idy, part_x, part_y
+    INTEGER :: ierr
 
-   DO i = 1, species%attached_list%store%total_length
-     IF(ASSOCIATED(species%attached_list%tail, &
-         TARGET=species%attached_list%store%head%store(i))) &
-         WRITE(100+rank, *) 'Tail is at index ', i
-   ENDDO
-   DO i = 1, species%attached_list%store%total_length
-     IF(ASSOCIATED(species%attached_list%store%next_slot, &
-         TARGET=species%attached_list%store%head%store(i))) &
-         WRITE(100+rank, *) 'Next_slot is at index ', i
-   ENDDO
+    !First check general integrity
+    counta = 0
+    countb = 0
+    i = 0
+    sub => species%attached_list%store%head
+    DO WHILE(ASSOCIATED(sub))
+      i = i + 1
+      IF(ASSOCIATED(sub%store)) THEN
+        counta = counta + 1
+      ELSE
+        WRITE(100+rank, *) 'Bad substore', i
+      ENDIF
+      IF(ASSOCIATED(species%attached_list%store%tail, TARGET = sub)) &
+        countb = i
+      sub => sub%next
+    ENDDO
+    WRITE(100+rank, *) 'Number of sublists ', &
+        species%attached_list%store%n_subs, counta
+    FLUSH(100+rank)
+    IF (species%attached_list%use_store) THEN
+      IF(counta /= species%attached_list%store%n_subs) &
+          CALL MPI_ABORT(comm, 7, ierr)
+    ENDIF
 
-   counta = 0
-   current => species%attached_list%head
-   DO WHILE (ASSOCIATED(current))
-     counta = counta + 1
-     current => current%next
-   END DO
+    sub => species%attached_list%store%head
+    j = 1
+    DO WHILE(ASSOCIATED(sub))
+      DO i = 1, sub%length
+        IF(ASSOCIATED(species%attached_list%tail, &
+            TARGET=sub%store(i))) &
+            WRITE(100+rank, *) 'Tail is at index ', i, 'in', j
+      ENDDO
+      sub => sub%next
+      j = j + 1
+    ENDDO
+    sub => species%attached_list%store%head
+    j = 1
+    DO WHILE(ASSOCIATED(sub))
+      DO i = 1, sub%length
+        IF(ASSOCIATED(species%attached_list%store%next_slot, &
+            TARGET=sub%store(i))) &
+            WRITE(100+rank, *) 'Next slot is at index ', i, 'in', j
+      ENDDO
+      sub => sub%next
+      j = j + 1
+    ENDDO
 
-   WRITE(100+rank, *)  "Checking partlists"
-   WRITE(100+rank, *) counta, species%attached_list%count
-   FLUSH(100+rank)
+    counta = 0
+    current => species%attached_list%head
+    DO WHILE (ASSOCIATED(current))
+      counta = counta + 1
+      current => current%next
+    END DO
 
-   countb = 0
-   current => species%attached_list%head
-   DO i=1, species%attached_list%count
-    IF (ASSOCIATED(current)) THEN
-       countb = countb + 1
-       current => current%next
-     ELSE
-       CONTINUE
-     ENDIF
-     IF (ASSOCIATED(current, species%attached_list%tail)) CONTINUE
-   END DO
-   WRITE(100+rank, *) countb, ASSOCIATED(current)
-   FLUSH(100+rank)
+    WRITE(100+rank, *)  "Checking partlists"
+    WRITE(100+rank, *) counta, species%attached_list%count
+    FLUSH(100+rank)
 
-   countc = 0
-   a_count = 0
-   DO i=1, species%attached_list%store%total_length
-     IF (species%attached_list%store%head%store(i)%live > 0) THEN
-       countc = countc + 1
-       IF (ASSOCIATED(species%attached_list%store%head%store(i)%next)) &
-           a_count = a_count + 1
-     ENDIF
-   END DO
-   WRITE(100+rank, *)  countc, species%attached_list%count, a_count+1
-   FLUSH(100+rank)
+    countb = 0
+    current => species%attached_list%head
+    DO i=1, species%attached_list%count
+      IF (ASSOCIATED(current)) THEN
+        countb = countb + 1
+        current => current%next
+      ELSE
+        CONTINUE
+      ENDIF
+      IF (ASSOCIATED(current, species%attached_list%tail)) CONTINUE
+    ENDDO
+    WRITE(100+rank, *) countb, ASSOCIATED(current)
+    FLUSH(100+rank)
 
+    countc = 0
+    a_count = 0
+    sub => species%attached_list%store%head
+    DO WHILE(ASSOCIATED(sub))
+      DO i = 1, sub%length
+        IF (sub%store(i)%live > 0) THEN
+        countc = countc + 1
+        IF (ASSOCIATED(sub%store(i)%next)) &
+            a_count = a_count + 1
+       ENDIF
+      ENDDO
+      sub => sub%next
+    ENDDO
+    WRITE(100+rank, *)  countc, species%attached_list%count, a_count+1
+    FLUSH(100+rank)
 
     idx = 1.0_num / dx
     idy = 1.0_num / dy
 
 
-   WRITE(100+rank, *) 'Checking all positions'
-   FLUSH(100+rank)
-   current => species%attached_list%head
+    WRITE(100+rank, *) 'Checking all positions'
+    FLUSH(100+rank)
+    current => species%attached_list%head
 
-   countd = 0
-   DO WHILE (ASSOCIATED(current))
-     ! part_x  = current%part_pos(1) - x_grid_min_local
-     ! part_y  = current%part_pos(2) - y_grid_min_local
+    countd = 0
+    DO WHILE (ASSOCIATED(current))
       part_x  = current%part_pos(1)
       part_y  = current%part_pos(2)
       cell_x = part_x * idx
@@ -288,26 +400,27 @@ CONTAINS
       ENDIF
       current => current%next
 
-   END DO
-   WRITE(100+rank, *) "Positions Done"
+    END DO
+    WRITE(100+rank, *) "Positions Done"
+    WRITE(100+rank, *) "Checking Counts"
 
-   IF (species%attached_list%use_store) THEN
-     IF(counta /= countb .OR. countb /= countc) &
-         CALL MPI_ABORT(comm, 1, ierr)
-     IF(counta /= species%attached_list%count) &
-         CALL MPI_ABORT(comm, 1, ierr)
-     IF(countc > 0 .AND. countb /= a_count+1) &
-         CALL MPI_ABORT(comm, 2, ierr)
-   ELSE
-     IF(counta /= countb .OR. countb /= species%attached_list%count) &
-         CALL MPI_ABORT(comm, 1, ierr)
-   ENDIF
+    IF (species%attached_list%use_store) THEN
+      IF(counta /= countb .OR. countb /= countc) &
+          CALL MPI_ABORT(comm, 1, ierr)
+      IF(counta /= species%attached_list%count) &
+          CALL MPI_ABORT(comm, 1, ierr)
+      IF(countc > 0 .AND. countb /= a_count+1) &
+          CALL MPI_ABORT(comm, 2, ierr)
+    ELSE
+      IF(counta /= countb .OR. countb /= species%attached_list%count) &
+          CALL MPI_ABORT(comm, 1, ierr)
+    ENDIF
 
-   IF(countd /= 0) &
-       CALL MPI_ABORT(comm, 3, ierr)
+    IF(countd /= 0) &
+        CALL MPI_ABORT(comm, 3, ierr)
 
+    FLUSH(100+rank)
 
-   FLUSH(100+rank)
   END SUBROUTINE test_store
 
 
@@ -342,6 +455,83 @@ CONTAINS
    WRITE(100+rank, *) "Positions Done"
 
   END SUBROUTINE test_list_positions
+
+
+  SUBROUTINE test_store_walk(store)
+
+    TYPE(particle_store), INTENT(IN) :: store
+    TYPE(particle), POINTER :: current
+    TYPE(particle_sub_store), POINTER :: sub
+    INTEGER(i8) :: counta, countb, countc, i, a_count, cell_x, cell_y, countd, j
+    INTEGER :: ierr
+
+     WRITE(100+rank, *) 'Walking'
+    !First check general integrity
+    counta = 0
+    countb = 0
+    i = 0
+    sub => store%head
+    DO WHILE(ASSOCIATED(sub))
+      i = i + 1
+      IF(ASSOCIATED(sub%store)) THEN
+        counta = counta + 1
+      ELSE
+        WRITE(100+rank, *) 'Bad substore', i
+      ENDIF
+      IF(ASSOCIATED(store%tail, TARGET = sub)) &
+        countb = i
+      sub => sub%next
+    ENDDO
+    WRITE(100+rank, *) 'Number of sublists ', &
+        store%n_subs, counta
+    FLUSH(100+rank)
+    IF(store%n_subs > 0 .AND. counta /= store%n_subs) &
+          CALL MPI_ABORT(comm, 7, ierr)
+
+    sub => store%head
+    j = 1
+    DO WHILE(ASSOCIATED(sub))
+      DO i = 1, sub%length
+        IF(ASSOCIATED(store%next_slot, &
+            TARGET=sub%store(i))) &
+            WRITE(100+rank, *) 'Next slot is at index ', i, 'in', j
+      ENDDO
+      sub => sub%next
+      j = j + 1
+    ENDDO
+
+    counta = 0
+    current => store%head%head
+    DO WHILE (ASSOCIATED(current))
+      counta = counta + 1
+      current => current%next
+    END DO
+
+    WRITE(100+rank, *)  "Checking store"
+    WRITE(100+rank, *) counta
+    FLUSH(100+rank)
+
+    countc = 0
+    a_count = 0
+    sub => store%head
+    DO WHILE(ASSOCIATED(sub))
+      DO i = 1, sub%length
+        IF (sub%store(i)%live > 0) THEN
+        countc = countc + 1
+        IF (ASSOCIATED(sub%store(i)%next)) &
+            a_count = a_count + 1
+       ENDIF
+      ENDDO
+      sub => sub%next
+    ENDDO
+    WRITE(100+rank, *)  countc, a_count+1
+    WRITE(100+rank, *) 'Walk complete'
+    FLUSH(100+rank)
+    IF(countc /= 0 .AND. counta /= countc .OR. counta /= a_count+1) &
+          CALL MPI_ABORT(comm, 5, ierr)
+
+
+  END SUBROUTINE test_store_walk
 
 
 
@@ -418,7 +608,8 @@ CONTAINS
       CALL create_particle_store(partlist%store, n_elements)
       IF(n_elements > 0) THEN
         !TODO and if not condition??
-        partlist%tail => partlist%store%head%store(n_elements)
+        !TODO actually the following MAY NOT be list tail, should do better
+        partlist%tail => partlist%store%next_slot%prev
         partlist%head => partlist%store%head%head
       ELSE
         NULLIFY(partlist%head, partlist%tail)
@@ -447,34 +638,36 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle), POINTER :: current, previous
-    INTEGER(i8) :: ipart, cnt
+    TYPE(particle_sub_store), POINTER :: sub
+    INTEGER(i8) ::cnt, icurr
     LOGICAL, INTENT(IN) :: recount
 
     NULLIFY(previous)
 
     cnt = 0
-    DO ipart = 1, list%store%total_length
-      !PRINT*, 'Linking slot ', ipart
-      current => list%store%head%store(ipart)
-      !!!! This will need to increment the sublist when we have those
-      !current%next => partlist%head%store(ipart+1)
-!      PRINT*, ipart, current%live, current%part_pos
+    sub => list%store%head
+    DO WHILE(ASSOCIATED(sub))
+      DO icurr = 1, sub%length
+      current => sub%store(icurr)
       IF (current%live > 0) THEN
         cnt = cnt + 1
         IF (ASSOCIATED(previous)) THEN
           previous%next => current
         ELSE
           list%head => current
-        END IF
+        ENDIF
         current%prev => previous
         previous => current
-      END IF
-    END DO
+      ENDIF
+      ENDDO
+      sub => sub%next
+    ENDDO
 
     IF (ASSOCIATED(previous)) THEN
       NULLIFY(previous%next)
       list%tail => previous
     ENDIF
+    list%store%head%head => list%head
 
     IF(recount) list%count = cnt
 
@@ -492,34 +685,22 @@ CONTAINS
   SUBROUTINE increment_next_free_element(list)
 
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), DIMENSION(:), POINTER :: new_store
+    TYPE(particle), DIMENSION(:), POINTER :: store
     INTEGER(i8) :: new_size, i
 
-    IF(list%store%head%first_free_element >= list%store%head%length -1) THEN
+    IF(list%store%tail%first_free_element >= list%store%tail%length -1) THEN
       !First resort: compact store
-      CALL compact_backing_store(list%store, list)
-      IF(list%store%head%first_free_element >= list%store%head%length -1) THEN
-        !Compacting insufficient, reallocate larger...
-        !Allocate a larger store
-        !new_size = store%total_length + sublist_size
-        new_size = FLOOR(list%store%total_length * list_factor)
-        ALLOCATE(new_store(new_size))
-        new_store(1:list%store%total_length) = list%store%head%store
-        DO i = list%store%total_length + 1, new_size
-          !Make sure new memory is not interpreted as live particles
-          new_store(i)%live = 0
-          NULLIFY(new_store(i)%prev, new_store(i)%next)
-        ENDDO
-        DEALLOCATE(list%store%head%store)
-        list%store%head%store => new_store
-        list%store%total_length = new_size
-        list%store%head%length = new_size
-        CALL relink_partlist(list, .FALSE.)
+      IF(list%count > 0) CALL compact_backing_store(list%store, list)
+      IF(list%store%tail%first_free_element >= list%store%tail%length -1) THEN
+        !Compacting insufficient, must grow
+
+        CALL create_substore(list%store, sublist_size, 1_i8)
       ENDIF
     ENDIF
-    list%store%head%first_free_element = list%store%head%first_free_element + 1
+
+    list%store%tail%first_free_element = list%store%tail%first_free_element + 1
     list%store%next_slot => &
-        list%store%head%store(list%store%head%first_free_element)
+        list%store%tail%store(list%store%tail%first_free_element)
 
   END SUBROUTINE increment_next_free_element
 
@@ -531,8 +712,8 @@ CONTAINS
     TYPE(particle_list), INTENT(INOUT) :: list
     INTEGER(i8) :: last_full_slot
 
-    list%store%head%first_free_element = last_full_slot + 1
-    list%store%next_slot => list%store%head%store(last_full_slot + 1)
+    list%store%tail%first_free_element = last_full_slot + 1
+    list%store%next_slot => list%store%tail%store(last_full_slot + 1)
 
   END SUBROUTINE
 
@@ -700,20 +881,18 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: newlist, list
     LOGICAL, INTENT(IN) :: override_live !Override any live states in newlist
-    TYPE(particle), POINTER :: current, next, prev
+    TYPE(particle), POINTER :: current, next
     INTEGER(i8) :: add_count, next_index !TODO both temporary diagnostics
 
+    IF(newlist%count < 1) RETURN
+
     current => newlist%head
-    NULLIFY(prev, next)
+    NULLIFY(next)
     IF ( .NOT. ASSOCIATED(list%head) .AND. newlist%count > 0) THEN
       !List was empty, so hook up the head
       list%head => list%store%next_slot
     ENDIF
 
-    IF (ASSOCIATED(list%tail)) THEN
-      !Will link into to previous tail
-      prev => list%tail
-    ENDIF
     add_count = 0
     DO WHILE(ASSOCIATED(current))
       !Only consider live particles, unless overrriding
@@ -724,10 +903,11 @@ CONTAINS
         !End diagnostic
 
         CALL create_particle_in_list(next, list)
+        next%live = 1
         CALL copy_particle(current, next)
         add_count = add_count + 1
       ENDIF
-      prev => list%tail !If relinked, tail was updated, else it =>next
+
       current => current%next
     END DO
     list%id_update = list%id_update + newlist%id_update
@@ -1039,11 +1219,11 @@ CONTAINS
       NULLIFY(new_particle%next)
       list%tail => new_particle
       IF(ASSOCIATED(new_particle%prev)) new_particle%prev%next => new_particle
-      IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
     ENDIF
+    IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
     list%count = list%count + 1
 
-  END SUBROUTINE
+  END SUBROUTINE create_particle_in_list
 
 
 
@@ -1379,44 +1559,47 @@ CONTAINS
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: section
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), POINTER :: original, new, current
-    INTEGER(i8) :: i, last_placed, count, moved
+    TYPE(particle), POINTER :: original, new
+    INTEGER(i8) :: i, last_placed, count, moved, j
 
-    !TODO also loop over all stores. Should we compact between them?
+    !TODO Should we compact between stores?
+    !TODO remove moved diagnostic
     section => store%head
     last_placed = 1
     count = 0
     moved = 0
-    current => list%head
 
-    DO WHILE(ASSOCIATED(current))
-      count = count + 1
-      current => current%next
-    !  IF (ASSOCIATED(current, list%tail)) EXIT
-    END DO
+    !TODO is there any point compacting the segments or should we
+    ! just remove them when they become empty?
+    !We can compact the last chunk, but if we do the above this might be pointless too
 
-    count = 0
+    DO j = 1, store%n_subs
+      !We're doing before we update first_free_element, so it may contain particle
+      last_placed = 1
 
-    !We're doing before we update first_free_element, so it may contain particle
-    DO i = 1, section%first_free_element
-      IF(section%store(i)%live > 0) THEN
-        count = count + 1
-      ENDIF
-      IF(section%store(i)%live > 0 .AND. i - last_placed > 1) THEN
-        moved = moved + 1
-        original => section%store(i)
-        new => section%store(last_placed + 1)
-        CALL copy_particle(original, new)
-        last_placed = last_placed + 1
-      ELSE IF(section%store(i)%live > 0) THEN
-        last_placed = i
-      ENDIF
+      DO i = 1, section%first_free_element
+        IF( i > section%length) EXIT
+        IF(section%store(i)%live > 0) THEN
+          count = count + 1
+        ENDIF
+        IF(section%store(i)%live > 0 .AND. i - last_placed > 1) THEN
+          moved = moved + 1
+          original => section%store(i)
+          new => section%store(last_placed + 1)
+          CALL copy_particle(original, new)
+          last_placed = last_placed + 1
+        ELSE IF(section%store(i)%live > 0) THEN
+          last_placed = i
+        ENDIF
+      ENDDO
+
+      DO i = last_placed+1 , section%length
+        new => section%store(i)
+        new%live = 0
+      ENDDO
+      section%head => section%store(1)
+      section => section%next
     ENDDO
-    DO i = last_placed+1 , section%length
-      new => section%store(i)
-      new%live = 0
-    ENDDO
-
     CALL relink_partlist(list, .FALSE.)
     CALL update_store_endpoint(list, last_placed)
 

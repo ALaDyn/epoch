@@ -411,8 +411,13 @@ CONTAINS
     ENDIF
     partlist => species%attached_list
     partstore => species%attached_list%store
-    CALL create_allocated_partlist(partlist, num_new_particles, &
+    IF(num_new_particles > 0) THEN
+      CALL &
+        create_allocated_partlist(partlist, num_new_particles, &
         use_store_default)
+    ELSE
+      CALL create_empty_partlist(partlist)
+    ENDIF
     !Now have a store with at least one chunk of memory allocated
     !And all linking etc is done
 

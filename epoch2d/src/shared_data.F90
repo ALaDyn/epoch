@@ -594,8 +594,8 @@ MODULE shared_data
   TYPE particle_sub_store
     INTEGER(i8) :: length
     INTEGER(i8) :: first_free_element
-    TYPE(particle_sub_store), POINTER :: previous, next
-    TYPE(particle), POINTER :: head !First live particle in store, i.e. head of list
+    TYPE(particle_sub_store), POINTER :: prev, next
+    TYPE(particle), POINTER :: head !First live particle in chunk, i.e. head of list
     TYPE(particle), DIMENSION(:), POINTER :: store => NULL() !Actual memory
   END TYPE particle_sub_store
 
@@ -604,9 +604,9 @@ MODULE shared_data
   !Currently a single chunk, will extend to multiples
   TYPE particle_store
     INTEGER(i8) :: total_length !Sum of sublist lengths, for convenience, ==number of potential slots
-    INTEGER(i8) :: n_subs ! n_subs stored for convenience only
+    INTEGER(i8) :: n_subs ! n_subs stored for convenience
     TYPE(particle), POINTER :: next_slot  !Next place to insert a new particle
-    TYPE(particle_sub_store), POINTER :: head => NULL() !Currently head should be the only chunk
+    TYPE(particle_sub_store), POINTER :: head => NULL(), tail => NULL()
   END TYPE particle_store
 
 
