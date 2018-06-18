@@ -6,23 +6,20 @@ before_script:
 
 test_ubuntu_gfortran:
   script:
-    - export COMPILER=gfortran
-    - scripts/run-tests-epoch-all.sh
+    - COMPILER=gfortran scripts/run-tests-epoch-all.sh
   tags:
     - ubuntu
     - gfortran
 
 test_ubuntu_intel:
   script:
-    - export COMPILER=intel
-    - scripts/run-tests-epoch-all.sh
+    - COMPILER=intel scripts/run-tests-epoch-all.sh -b
   tags:
     - ubuntu
     - intel
 
 test_osx:
   script:
-    - export COMPILER=gfortran
-    - scripts/run-tests-epoch-all.sh
+    - COMPILER=gfortran scripts/run-tests-epoch-all.sh -b
   tags:
     - osx
