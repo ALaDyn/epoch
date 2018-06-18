@@ -5,6 +5,8 @@ before_script:
   - git submodule update --recursive --init SDF
 
 test_ubuntu_gfortran:
+  only:
+    - branches@EPOCH/epoch
   script:
     - export COMPILER=gfortran
     - scripts/run-tests-epoch-all.sh
@@ -13,6 +15,8 @@ test_ubuntu_gfortran:
     - gfortran
 
 test_ubuntu_intel:
+  only:
+    - branches@EPOCH/epoch
   script:
     - export COMPILER=intel
     - scripts/run-tests-epoch-all.sh
