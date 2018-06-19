@@ -122,7 +122,7 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL :: link_el_in, no_pad_store
     LOGICAL :: link_el
 
-    store: ASSOCIATE (store => partlist%store)
+    store_acc: ASSOCIATE (store => partlist%store)
     !If sublists, need to deallocate any
     CALL destroy_store(store)
 
@@ -179,7 +179,7 @@ CONTAINS
     ELSE
       NULLIFY(partlist%head, partlist%tail)
     ENDIF
-  END ASSOCIATE store
+  END ASSOCIATE store_acc
   END SUBROUTINE create_particle_store
 
 
