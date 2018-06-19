@@ -103,17 +103,18 @@ CONTAINS
     partlist%safe = .TRUE.
     partlist%use_store = use_store
     IF (use_store) &
-        CALL create_particle_store(partlist%store, sublist_size, .FALSE., .TRUE.)
+        CALL create_particle_store(partlist, sublist_size, .FALSE., .TRUE.)
 
   END SUBROUTINE create_empty_partlist
 
 
 
-  SUBROUTINE create_particle_store(store, n_els_min, &
+  SUBROUTINE create_particle_store(partlist, n_els_min, &
       link_el_in, no_pad_store)
 
 
-    TYPE(particle_store), INTENT(INOUT) :: store
+    TYPE(particle_list), INTENT(INOUT) :: partlist
+    TYPE(particle_store) :: store
     INTEGER(i8), INTENT(IN) :: n_els_min
     INTEGER(i8) :: actual_elements, i_part, els_allocated
     INTEGER(i8) :: i_sub, n_subs, last, link_to
@@ -121,6 +122,7 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL :: link_el_in, no_pad_store
     LOGICAL :: link_el
 
+    store: ASSOCIATE (store => partlist%store)
     !If sublists, need to deallocate any
     CALL destroy_store(store)
 
@@ -144,8 +146,6 @@ CONTAINS
     !pieces, or all in pieces, or other
     !For now, all pieces
 
-    !TODO respect link_el
-
     n_subs = CEILING(FLOAT(actual_elements)/FLOAT(sublist_size))
     ALLOCATE(els_to_allocate(n_subs))
     els_to_allocate = sublist_size
@@ -154,11 +154,11 @@ CONTAINS
       link_to = els_to_allocate(i_sub)
       IF(.NOT. link_el) link_to = 0
       IF(i_sub == n_subs) THEN
-        last = actual_elements - SUM(els_to_allocate(1:n_subs-1))
+        last = n_els_min - SUM(els_to_allocate(1:n_subs-1))
         IF(link_to > 0) link_to = last
         !TODO This might be off by 1??
       ENDIF
-      CALL create_substore(store, els_to_allocate(i_sub), link_to)
+      CALL create_linked_substore(store, els_to_allocate(i_sub), link_to)
     ENDDO
 
     store%next_slot => store%tail%store(store%tail%first_free_element)
@@ -172,6 +172,14 @@ CONTAINS
       NULLIFY(store%next_slot%prev)
     ENDIF
 
+    IF(link_to > 0) THEN
+      !TODO actually the following MAY NOT be list tail, should do better
+      partlist%tail => partlist%store%next_slot%prev
+      partlist%head => partlist%store%head%head
+    ELSE
+      NULLIFY(partlist%head, partlist%tail)
+    ENDIF
+  END ASSOCIATE store
   END SUBROUTINE create_particle_store
 
 
@@ -179,7 +187,10 @@ CONTAINS
   !in given store
   !Takes total_size, link_upto
 
-  SUBROUTINE create_substore(store, total_size, link_upto_in)
+  !Called in two circumstances
+  !Creating a list at first
+  !And adding a chunk to a list
+  SUBROUTINE create_linked_substore(store, total_size, link_upto_in)
 
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: substore, tmp1, tmp2
@@ -188,17 +199,23 @@ CONTAINS
     TYPE(particle), POINTER :: current, prev
     INTEGER(i8) :: i_part
 
+    !Nothing to do
     IF(total_size <= 0) RETURN
 
     link_upto = link_upto_in
     IF(link_upto_in > total_size) link_upto = total_size
 
+    !Allocate substore object
     ALLOCATE(substore)
+    !Set length, nullify links
     substore%length = total_size
     NULLIFY(substore%prev, substore%next)
+    !Allocate backing memory
     ALLOCATE(substore%store(total_size))
     substore%head => substore%store(1)
-
+    !If creating list, we can link it all up already
+    !And setup the list
+    !Then calling code just sets positions etc
     IF(link_upto > 0) THEN
       substore%first_free_element = link_upto + 1
     ELSE
@@ -207,7 +224,7 @@ CONTAINS
 
     DO i_part = 1, total_size
       IF (i_part > 1 .AND. i_part < link_upto) THEN
-        !Each particle slot should be linked up
+        !Each particle slot up to request length should be linked up
         substore%store(i_part)%prev => substore%store(i_part-1)
         substore%store(i_part)%next => substore%store(i_part+1)
       ELSE
@@ -215,7 +232,7 @@ CONTAINS
         NULLIFY(substore%store(i_part)%prev, &
             substore%store(i_part)%next)
       ENDIF
-      !And not-live state
+      !Set not-live state
       substore%store(i_part)%live = -1
     ENDDO
 
@@ -235,15 +252,17 @@ CONTAINS
 
       substore%prev => store%tail
       tmp2 => substore%prev
+
       !And create link in partlist between prior last particle
       !and first particle of new sub
       IF(link_upto > 1) THEN
         IF(store%tail%first_free_element > 1) THEN
           prev => store%tail%store(store%tail%first_free_element-1)
         ELSE
-          !Have a completely empty sub... why??
-        ENDIF
-        current => substore%head
+          !Have a completely empty sub before this one
+          !Probably means it's been compacted out?
+       ENDIF
+        current => substore%store(1)
         prev%next => current
         current%prev => prev
       ENDIF
@@ -257,7 +276,60 @@ CONTAINS
     store%n_subs = store%n_subs + 1
     store%total_length = store%total_length + total_size
 
-  END SUBROUTINE create_substore
+  END SUBROUTINE create_linked_substore
+
+
+  SUBROUTINE create_empty_substore(store, total_size)
+
+    TYPE(particle_store), INTENT(INOUT) :: store
+    TYPE(particle_sub_store), POINTER :: substore, tmp1, tmp2
+    INTEGER(i8), INTENT(IN) :: total_size
+    TYPE(particle), POINTER :: current, prev
+    INTEGER(i8) :: i_part
+
+    !Nothing to do
+    IF(total_size <= 0) RETURN
+
+    !Allocate substore object
+    ALLOCATE(substore)
+    !Set length, nullify links
+    substore%length = total_size
+    NULLIFY(substore%prev, substore%next)
+    !Allocate backing memory
+    ALLOCATE(substore%store(total_size))
+
+    substore%first_free_element = 1
+
+    DO i_part = 1, total_size
+      !Nullify pointers
+      NULLIFY(substore%store(i_part)%prev, &
+          substore%store(i_part)%next)
+      !Set not-live state
+      substore%store(i_part)%live = 0
+    ENDDO
+
+    IF(ASSOCIATED(store%tail)) THEN
+      !Now link substore into store
+      tmp1 => store%tail
+      tmp2 => store%tail%next
+      store%tail%next => substore
+      tmp2 => store%tail%next
+
+      substore%prev => store%tail
+      tmp2 => substore%prev
+
+      store%tail => substore
+      tmp2 => store%tail
+      NULLIFY(substore%next)
+    ELSE
+      store%tail => substore
+    ENDIF
+    IF(.NOT. ASSOCIATED(store%head)) store%head => substore
+    store%n_subs = store%n_subs + 1
+    store%total_length = store%total_length + total_size
+
+  END SUBROUTINE create_empty_substore
+
 
 
   SUBROUTINE destroy_store(store)
@@ -605,15 +677,15 @@ CONTAINS
     ENDIF
 
     IF (use_store) THEN
-      CALL create_particle_store(partlist%store, n_elements)
-      IF(n_elements > 0) THEN
-        !TODO and if not condition??
-        !TODO actually the following MAY NOT be list tail, should do better
-        partlist%tail => partlist%store%next_slot%prev
-        partlist%head => partlist%store%head%head
-      ELSE
-        NULLIFY(partlist%head, partlist%tail)
-      ENDIF
+      CALL create_particle_store(partlist, n_elements)
+    !  IF(n_elements > 0) THEN
+    !    !TODO and if not condition??
+    !    !TODO actually the following MAY NOT be list tail, should do better
+    !    partlist%tail => partlist%store%next_slot%prev
+    !    partlist%head => partlist%store%head%head
+    !  ELSE
+    !    NULLIFY(partlist%head, partlist%tail)
+    !  ENDIF
       partlist%count = n_elements
     ELSE
       CALL create_empty_partlist(partlist)
@@ -685,7 +757,6 @@ CONTAINS
   SUBROUTINE increment_next_free_element(list)
 
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), DIMENSION(:), POINTER :: store
     INTEGER(i8) :: new_size, i
 
     IF(list%store%tail%first_free_element >= list%store%tail%length -1) THEN
@@ -693,12 +764,14 @@ CONTAINS
       IF(list%count > 0) CALL compact_backing_store(list%store, list)
       IF(list%store%tail%first_free_element >= list%store%tail%length -1) THEN
         !Compacting insufficient, must grow
-
-        CALL create_substore(list%store, sublist_size, 1_i8)
+     WRITE(100+rank, *) "Adding new sub"
+        CALL create_empty_substore(list%store, sublist_size)
       ENDIF
+    ELSE
+      !Do this only if we've not created anything new
+      list%store%tail%first_free_element = list%store%tail%first_free_element + 1
     ENDIF
-
-    list%store%tail%first_free_element = list%store%tail%first_free_element + 1
+    !Do this always, as if we grew, we have a nice empty, valid substore
     list%store%next_slot => &
         list%store%tail%store(list%store%tail%first_free_element)
 
@@ -805,7 +878,6 @@ CONTAINS
     ELSE
       ! Go through list and delete all the particles in the list
       new_particle => partlist%head
-      !PRINT*, rank, ASSOCIATED(new_particle), partlist%count
       ipart = 0
       DO WHILE (ipart < partlist%count)
         next => new_particle%next
@@ -841,6 +913,7 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL :: ignore_live_in
     LOGICAL :: ignore_live
 
+    IF(newlist%count == 0) RETURN
     IF (.NOT. list%safe .OR. .NOT. newlist%safe) THEN
       IF (rank == 0) &
           PRINT *, 'Unable to append partlists because one is not safe'

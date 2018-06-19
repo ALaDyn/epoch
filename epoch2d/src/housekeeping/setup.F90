@@ -965,7 +965,7 @@ CONTAINS
       species => species_list(ispecies)
       npart_local = npart_locals(ispecies)
 
-      CALL create_particle_store(species%attached_list%store, &
+      CALL create_particle_store(species%attached_list, &
           npart_local)
       npart_global = npart_global + nparts(ispecies)
       species%count = nparts(ispecies)
