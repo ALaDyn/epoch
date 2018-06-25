@@ -8,8 +8,11 @@ test_ubuntu_gfortran:
   only:
     - branches@EPOCH/epoch
     - web
+    - hook
   except:
-    - master@EPOCH/epoch
+    - master
+    - wip/*
+    - tag
   script:
     - COMPILER=gfortran scripts/run-tests-epoch-all.sh
   tags:
@@ -20,8 +23,11 @@ test_ubuntu_intel:
   only:
     - branches@EPOCH/epoch
     - web
+    - hook
   except:
-    - master@EPOCH/epoch
+    - master
+    - wip/*
+    - tag
   script:
     - COMPILER=intel scripts/run-tests-epoch-all.sh -b
   tags:
@@ -32,8 +38,11 @@ test_ubuntu_pgi:
   only:
     - branches@EPOCH/epoch
     - web
+    - hook
   except:
-    - master@EPOCH/epoch
+    - master
+    - wip/*
+    - tag
   script:
     - COMPILER=pgi MODE=debug scripts/run-tests-epoch-all.sh -b
   tags:
@@ -44,8 +53,11 @@ test_osx:
   only:
     - branches@EPOCH/epoch
     - web
+    - hook
   except:
-    - master@EPOCH/epoch
+    - master
+    - wip/*
+    - tag
   script:
     - COMPILER=gfortran MODE=debug scripts/run-tests-epoch-all.sh -b
   tags:
