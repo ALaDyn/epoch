@@ -114,7 +114,6 @@ CONTAINS
 
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
-    TYPE(particle_store) :: store
     INTEGER(i8), INTENT(IN) :: n_els_min
     INTEGER(i8) :: actual_elements, i_part, els_allocated
     INTEGER(i8) :: i_sub, n_subs, last, link_to
@@ -122,9 +121,8 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL :: link_el_in, no_pad_store
     LOGICAL :: link_el
 
-    store_acc: ASSOCIATE (store => partlist%store)
     !If sublists, need to deallocate any
-    CALL destroy_store(store)
+    CALL destroy_store(partlist%store)
 
     !Allocate one sublist of correct size
     actual_elements = FLOOR(MAX(n_els_min, sublist_size) &
@@ -158,18 +156,23 @@ CONTAINS
         IF(link_to > 0) link_to = last
         !TODO This might be off by 1??
       ENDIF
-      CALL create_linked_substore(store, els_to_allocate(i_sub), link_to)
+      CALL create_linked_substore(partlist%store, els_to_allocate(i_sub),&
+          link_to)
     ENDDO
 
-    store%next_slot => store%tail%store(store%tail%first_free_element)
-    IF(store%tail%first_free_element > 1) THEN
-      store%next_slot%prev => store%tail%store(store%tail%first_free_element-1)
-    ELSE IF(ASSOCIATED(store%tail%prev)) THEN
+    partlist%store%next_slot => partlist%store%tail%store(&
+        partlist%store%tail%first_free_element)
+    IF(partlist%store%tail%first_free_element > 1) THEN
+      partlist%store%next_slot%prev &
+          => partlist%store%tail%store(partlist%store%tail%first_free_element-1)
+    ELSE IF(ASSOCIATED(partlist%store%tail%prev)) THEN
       !TODO this wont work properly in general, e.g. if prev is also empty
       !Do we ever need to consider this case?
-      store%next_slot%prev => store%tail%prev%store(store%tail%prev%first_free_element-1)
+      partlist%store%next_slot%prev &
+          => partlist%store%tail%prev%store(&
+            partlist%store%tail%prev%first_free_element-1)
     ELSE
-      NULLIFY(store%next_slot%prev)
+      NULLIFY(partlist%store%next_slot%prev)
     ENDIF
 
     IF(link_to > 0) THEN
@@ -179,7 +182,6 @@ CONTAINS
     ELSE
       NULLIFY(partlist%head, partlist%tail)
     ENDIF
-  END ASSOCIATE store_acc
   END SUBROUTINE create_particle_store
 
 
