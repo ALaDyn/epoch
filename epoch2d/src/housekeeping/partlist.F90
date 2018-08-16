@@ -241,8 +241,11 @@ CONTAINS
     IF(link_upto > 1) THEN
       !Correct links for 0th and n_elements-th particles
       substore%store(1)%next => substore%store(2)
-      IF(total_size > 1 .AND. link_upto >= total_size) &
-          substore%store(total_size)%prev => substore%store(total_size-1)
+      IF(total_size > 1 .AND. link_upto >= total_size) THEN
+        substore%store(total_size)%prev => substore%store(total_size-1)
+      ELSE IF(link_upto > 1) THEN
+        substore%store(link_upto)%prev => substore%store(link_upto-1)
+      ENDIF
     ENDIF
 
     IF(ASSOCIATED(store%tail)) THEN
@@ -1071,6 +1074,8 @@ CONTAINS
       !Then what comes back is a valid, FREE particle
       CALL create_particle(tmp_particle)
       CALL copy_particle(a_particle, tmp_particle)
+      !Return a live particle
+      tmp_particle%live = 1
       a_particle => tmp_particle
     ENDIF
 
@@ -1676,6 +1681,7 @@ CONTAINS
       section => section%next
     ENDDO
     CALL relink_partlist(list, .FALSE.)
+    !CALL update_store_endpoint(list, last_placed-1)
     CALL update_store_endpoint(list, last_placed)
 
 
