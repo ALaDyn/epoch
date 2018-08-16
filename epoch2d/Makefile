@@ -55,10 +55,10 @@ endif
 # gfortran
 # ========
 ifeq ($(strip $(COMPILER)),gfortran)
-  FFLAGS = -O3 -g
+  FFLAGS = -O0 -g
   ifeq ($(strip $(MODE)),debug)
     FFLAGS = -O0 -g -Wall -Wextra -pedantic -fbounds-check \
-             -ffpe-trap=invalid,zero,overflow -Wno-unused-parameter
+             -ffpe-trap=overflow,invalid -Wno-unused-parameter
     #FFLAGS += -ffpe-trap=underflow,denormal
 
     GNUVER := $(shell gfortran -dumpversion | head -1 \
@@ -182,7 +182,7 @@ DEFINES := $(DEFINE)
 
 # Include a unique global particle ID. The first flag defines the ID using
 # an 8-byte integer, the second uses 4-bytes.
-#DEFINES += $(D)PARTICLE_ID
+DEFINES += $(D)PARTICLE_ID
 #DEFINES += $(D)PARTICLE_ID4
 
 # Keep global particle counts up to date.
@@ -216,7 +216,7 @@ DEFINES := $(DEFINE)
 # Perform checks on evaluated deck expressions.
 # This slows down the code but may be required if floating point exceptions
 # are enabled.
-#DEFINES += $(D)PARSER_CHECKING
+DEFINES += $(D)PARSER_CHECKING
 
 # Use compiler extension ISATTY to enable coloured welcome banner
 #DEFINES += $(D)USE_ISATTY
@@ -455,7 +455,7 @@ particle_pointer_advance.o: particle_pointer_advance.f90 shared_data.o
 particle_temperature.o: particle_temperature.F90 random_generator.o \
   shared_data.o
 particles.o: particles.F90 boundary.o current_smooth.o partlist.o prefetch.o
-partlist.o: partlist.F90 random_generator.o shared_data.o
+partlist.o: partlist.F90 random_generator.o shared_data.o utilities.o
 photons.o: photons.F90 partlist.o
 prefetch.o: prefetch.F90 shared_data.o
 probes.o: probes.F90 partlist.o $(SDFMOD)

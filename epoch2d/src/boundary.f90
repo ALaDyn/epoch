@@ -1065,6 +1065,7 @@ CONTAINS
           CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
           !Live is now 0 and links are dead
+          !If we used stores, we've got a copy now
           CALL add_particle_to_partlist(send(xbd, ybd), cur)
         ENDIF
 

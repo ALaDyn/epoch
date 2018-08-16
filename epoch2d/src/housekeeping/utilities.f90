@@ -145,4 +145,19 @@ CONTAINS
 
   END SUBROUTINE abort_code
 
+
+  SUBROUTINE abort_with_trace(errcode)
+
+    USE mpi
+
+    INTEGER, INTENT(IN) :: errcode
+    INTEGER :: i, newcode, ierr
+
+    PRINT*, errcode
+    newcode = SQRT(REAL(-1*errcode))
+    CALL MPI_ABORT(MPI_COMM_WORLD, errcode, ierr)
+
+  END SUBROUTINE abort_with_trace
+
+
 END MODULE utilities

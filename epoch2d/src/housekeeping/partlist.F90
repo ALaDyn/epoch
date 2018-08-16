@@ -20,6 +20,7 @@ MODULE partlist
 #ifdef PHOTONS
   USE random_generator
 #endif
+  USE utilities
 
   IMPLICIT NONE
 
@@ -385,11 +386,16 @@ CONTAINS
         species%attached_list%store%n_subs, counta
     FLUSH(100+rank)
     IF (species%attached_list%use_store) THEN
-      IF(counta /= species%attached_list%store%n_subs) &
-          CALL MPI_ABORT(comm, 7, ierr)
+      IF(species%attached_list%store%n_subs .GT. 0 .AND. &
+          counta /= species%attached_list%store%n_subs) &
+          CALL abort_with_trace(7)
     ENDIF
 
     sub => species%attached_list%store%head
+
+    WRITE(100+rank, *) "Head matches ", &
+        ASSOCIATED(sub%head, TARGET=species%attached_list%head)
+
     j = 1
     DO WHILE(ASSOCIATED(sub))
       DO i = 1, sub%length
@@ -468,7 +474,8 @@ CONTAINS
       cell_x = part_x * idx
       cell_y = part_y * idy
       IF( part_x .GT. x_max_local  .OR. part_x .LT. x_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, x', cell_x
+        WRITE(100+rank, *) 'Error, particle out of range, x', cell_x, part_x, &
+            x_min_local, x_max_local, current%live, current%id
         countd = countd + 1
       ENDIF
       IF(part_y .GT. y_max_local  .OR. part_y .LT. y_min_local) THEN
@@ -482,19 +489,21 @@ CONTAINS
     WRITE(100+rank, *) "Checking Counts"
 
     IF (species%attached_list%use_store) THEN
-      IF(counta /= countb .OR. countb /= countc) &
-          CALL MPI_ABORT(comm, 1, ierr)
+      IF(counta /= countb .OR. countb /= countc) THEN
+        CALL abort_with_trace(1)
+      ENDIF
       IF(counta /= species%attached_list%count) &
-          CALL MPI_ABORT(comm, 1, ierr)
-      IF(countc > 0 .AND. countb /= a_count+1) &
-          CALL MPI_ABORT(comm, 2, ierr)
+        CALL abort_with_trace(2)
+      IF(countc > 0 .AND. countb /= a_count+1) THEN
+          CALL abort_with_trace(3)
+      ENDIF
     ELSE
       IF(counta /= countb .OR. countb /= species%attached_list%count) &
-          CALL MPI_ABORT(comm, 1, ierr)
+          CALL abort_with_trace(4)
     ENDIF
 
     IF(countd /= 0) &
-        CALL MPI_ABORT(comm, 3, ierr)
+        CALL abort_with_trace(5)
 
     FLUSH(100+rank)
 
@@ -537,12 +546,12 @@ CONTAINS
   SUBROUTINE test_store_walk(store)
 
     TYPE(particle_store), INTENT(IN) :: store
-    TYPE(particle), POINTER :: current
+    TYPE(particle), POINTER :: current, prev
     TYPE(particle_sub_store), POINTER :: sub
     INTEGER(i8) :: counta, countb, countc, i, a_count, cell_x, cell_y, countd, j
     INTEGER :: ierr
 
-     WRITE(100+rank, *) 'Walking'
+    WRITE(100+rank, *) 'Walking'
     !First check general integrity
     counta = 0
     countb = 0
@@ -563,7 +572,7 @@ CONTAINS
         store%n_subs, counta
     FLUSH(100+rank)
     IF(store%n_subs > 0 .AND. counta /= store%n_subs) &
-          CALL MPI_ABORT(comm, 7, ierr)
+          CALL abort_with_trace(11)
 
     sub => store%head
     j = 1
@@ -602,10 +611,27 @@ CONTAINS
       sub => sub%next
     ENDDO
     WRITE(100+rank, *)  countc, a_count+1
+
+    current => store%head%head
+    NULLIFY(prev)
+    i = 1
+    WRITE(100+rank, *) "Checking prevs"
+    DO WHILE (ASSOCIATED(current))
+      IF(ASSOCIATED(prev) .AND. .NOT. ASSOCIATED(current%prev, TARGET=prev)) THEN
+        WRITE(100+rank, *) "Bad prev in walk at ", i
+        FLUSH(100+rank)
+        CALL abort_with_trace(12)
+      ENDIF
+      prev => current
+      current => current%next
+      i = i + 1
+    END DO
+
+
     WRITE(100+rank, *) 'Walk complete'
     FLUSH(100+rank)
     IF(countc /= 0 .AND. counta /= countc .OR. counta /= a_count+1) &
-          CALL MPI_ABORT(comm, 5, ierr)
+          CALL abort_with_trace(13)
 
 
   END SUBROUTINE test_store_walk
@@ -999,12 +1025,14 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     TYPE(particle), POINTER :: new_particle
+    INTEGER :: ierr
 
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
 
     ! if (!particle) return;
     IF (.NOT. ASSOCIATED(new_particle)) RETURN
+    IF (partlist%use_store) CALL abort_code(8)
     NULLIFY(new_particle%next, new_particle%prev)
 
     ! Add particle count
