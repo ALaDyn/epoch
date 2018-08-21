@@ -104,6 +104,7 @@ MODULE constants
   INTEGER, PARAMETER :: c_err_pp_options_wrong = 2**14
   INTEGER, PARAMETER :: c_err_io_error = 2**15
   INTEGER, PARAMETER :: c_err_bad_setup = 2**16
+  INTEGER, PARAMETER :: c_err_window = 2**17
 
   INTEGER, PARAMETER :: c_ds_first = 1
   INTEGER, PARAMETER :: c_ds_last = 2
@@ -123,21 +124,18 @@ MODULE constants
   INTEGER, PARAMETER :: c_io_never = 2**10
 
   ! Maxwell Solvers
+  INTEGER, PARAMETER :: c_maxwell_solver_custom = -1
   INTEGER, PARAMETER :: c_maxwell_solver_yee = 0
   INTEGER, PARAMETER :: c_maxwell_solver_lehe = 1
-  INTEGER, PARAMETER :: c_maxwell_solver_cowan = 2
-  INTEGER, PARAMETER :: c_maxwell_solver_pukhov = 3
+  INTEGER, PARAMETER :: c_maxwell_solver_lehe_x = 2
+  INTEGER, PARAMETER :: c_maxwell_solver_lehe_y = 3
+  INTEGER, PARAMETER :: c_maxwell_solver_lehe_z = 4
+  INTEGER, PARAMETER :: c_maxwell_solver_cowan = 5
+  INTEGER, PARAMETER :: c_maxwell_solver_pukhov = 6
 
   ! domain codes
   INTEGER, PARAMETER :: c_do_full = 0
   INTEGER, PARAMETER :: c_do_decomposed = 1
-
-  ! Load balance codes
-  INTEGER, PARAMETER :: c_lb_x = 1
-  INTEGER, PARAMETER :: c_lb_y = 2
-  INTEGER, PARAMETER :: c_lb_z = 4
-  INTEGER, PARAMETER :: c_lb_all = c_lb_x + c_lb_y + c_lb_z
-  INTEGER, PARAMETER :: c_lb_auto = c_lb_all + 1
 
   ! Taken from http://physics.nist.gov/cuu/Constants (05/07/2012)
   REAL(num), PARAMETER :: pi = 3.141592653589793238462643383279503_num
@@ -229,6 +227,10 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_prefetch = 2**17
   INTEGER(i8), PARAMETER :: c_def_mpi_debug = 2**18
   INTEGER(i8), PARAMETER :: c_def_parser_checking = 2**19
+  INTEGER(i8), PARAMETER :: c_def_deltaf_method = 2**20
+  INTEGER(i8), PARAMETER :: c_def_deltaf_debug = 2**21
+  INTEGER(i8), PARAMETER :: c_def_work_done_integrated = 2**22
+  INTEGER(i8), PARAMETER :: c_def_hc_push = 2**23
 
   ! Stagger types
   INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
@@ -394,8 +396,12 @@ MODULE shared_parser_data
 
   INTEGER, PARAMETER :: c_const_maxwell_solver_yee = 100
   INTEGER, PARAMETER :: c_const_maxwell_solver_lehe = 101
-  INTEGER, PARAMETER :: c_const_maxwell_solver_cowan = 102
-  INTEGER, PARAMETER :: c_const_maxwell_solver_pukhov = 103
+  INTEGER, PARAMETER :: c_const_maxwell_solver_lehe_x = 102
+  INTEGER, PARAMETER :: c_const_maxwell_solver_lehe_y = 103
+  INTEGER, PARAMETER :: c_const_maxwell_solver_lehe_z = 104
+  INTEGER, PARAMETER :: c_const_maxwell_solver_cowan = 105
+  INTEGER, PARAMETER :: c_const_maxwell_solver_pukhov = 106
+  INTEGER, PARAMETER :: c_const_maxwell_solver_custom = 107
 
   ! Custom constants
   INTEGER, PARAMETER :: c_const_deck_lowbound = 4096
@@ -442,6 +448,7 @@ MODULE shared_parser_data
   INTEGER, PARAMETER :: c_func_driftx = 44
   INTEGER, PARAMETER :: c_func_drifty = 45
   INTEGER, PARAMETER :: c_func_driftz = 46
+  INTEGER, PARAMETER :: c_func_arctan2 = 47
 
   INTEGER, PARAMETER :: c_func_custom_lowbound = 4096
 
@@ -559,6 +566,14 @@ MODULE shared_data
 #endif
 #ifdef COLLISIONS_TEST
     INTEGER :: coll_count
+#endif
+#ifdef WORK_DONE_INTEGRATED
+    REAL(num) :: work_x
+    REAL(num) :: work_y
+    REAL(num) :: work_z
+    REAL(num) :: work_x_total
+    REAL(num) :: work_y_total
+    REAL(num) :: work_z_total
 #endif
 #ifdef PHOTONS
     REAL(num) :: optical_depth
@@ -746,7 +761,17 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_part_proc0        = 55
   INTEGER, PARAMETER :: c_dump_ppc               = 56
   INTEGER, PARAMETER :: c_dump_average_weight    = 57
+#ifdef WORK_DONE_INTEGRATED
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 58
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 59
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 60
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 61
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 62
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 63
+  INTEGER, PARAMETER :: num_vars_to_dump         = 63
+#else
   INTEGER, PARAMETER :: num_vars_to_dump         = 57
+#endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
   !----------------------------------------------------------------------------
@@ -766,7 +791,10 @@ MODULE shared_data
     REAL(num) :: dt_snapshot, time_prev, time_first
     REAL(num) :: dt_average, dt_min_average, average_time, average_time_start
     REAL(num) :: time_start, time_stop
+    REAL(num) :: walltime_interval, walltime_prev
+    REAL(num) :: walltime_start, walltime_stop
     REAL(num), POINTER :: dump_at_times(:)
+    REAL(num), POINTER :: dump_at_walltimes(:)
     INTEGER, POINTER :: dump_at_nsteps(:)
     INTEGER :: nstep_snapshot, nstep_prev, nstep_first, nstep_average
     INTEGER :: nstep_start, nstep_stop, dump_cycle, prefix_index
@@ -784,6 +812,7 @@ MODULE shared_data
   LOGICAL :: track_ejected_particles, new_style_io_block
   INTEGER, DIMENSION(num_vars_to_dump) :: averaged_var_block
   REAL(num) :: time_start, time_stop
+  REAL(num) :: walltime_start, walltime_stop
   INTEGER :: nstep_start, nstep_stop
   CHARACTER(LEN=c_id_length), ALLOCATABLE :: file_prefixes(:)
   INTEGER, ALLOCATABLE :: file_numbers(:)
@@ -966,6 +995,7 @@ MODULE shared_data
   LOGICAL :: use_particle_lists = .FALSE.
   LOGICAL :: use_particle_count_update = .FALSE.
   LOGICAL :: use_accurate_n_zeros = .FALSE.
+  LOGICAL :: use_injectors = .FALSE.
 
   REAL(num) :: dt, t_end, time, dt_multiplier, dt_laser, dt_plasma_frequency
   REAL(num) :: dt_from_restart
@@ -1017,17 +1047,22 @@ MODULE shared_data
   LOGICAL :: use_multiphoton, use_bsi
 
   INTEGER :: maxwell_solver = c_maxwell_solver_yee
+  REAL(num) :: dt_custom
 
   !----------------------------------------------------------------------------
   ! Moving window
   !----------------------------------------------------------------------------
-  LOGICAL :: move_window, inject_particles
+  LOGICAL :: move_window, inject_particles, window_started
   TYPE(primitive_stack), SAVE :: window_v_x_stack
   LOGICAL :: use_window_stack
   REAL(num) :: window_v_x
-  REAL(num) :: window_start_time
+  REAL(num) :: window_start_time, window_stop_time
   INTEGER :: bc_x_min_after_move
   INTEGER :: bc_x_max_after_move
+  INTEGER :: bc_y_min_after_move
+  INTEGER :: bc_y_max_after_move
+  INTEGER :: bc_z_min_after_move
+  INTEGER :: bc_z_max_after_move
   REAL(num), DIMENSION(3) :: window_shift
 
 #ifdef PHOTONS
@@ -1071,12 +1106,14 @@ MODULE shared_data
   LOGICAL :: x_min_boundary, x_max_boundary
   LOGICAL :: y_min_boundary, y_max_boundary
   LOGICAL :: z_min_boundary, z_max_boundary
+  LOGICAL :: any_open
 
   !----------------------------------------------------------------------------
   ! domain and loadbalancing
   !----------------------------------------------------------------------------
-  LOGICAL :: use_balance
+  LOGICAL :: use_balance, balance_first
   REAL(num) :: dlb_threshold
+  INTEGER :: dlb_maximum_interval, dlb_force_interval
   INTEGER(i8), PARAMETER :: npart_per_it = 1000000
   REAL(num), DIMENSION(:), ALLOCATABLE :: x_global, y_global, z_global
   REAL(num), DIMENSION(:), ALLOCATABLE :: xb_global, yb_global, zb_global
@@ -1092,7 +1129,6 @@ MODULE shared_data
   INTEGER :: ny_global_min, ny_global_max
   INTEGER :: nz_global_min, nz_global_max
   INTEGER :: n_global_min(c_ndims), n_global_max(c_ndims)
-  INTEGER :: balance_mode
   LOGICAL :: debug_mode
 
   !----------------------------------------------------------------------------
@@ -1112,6 +1148,7 @@ MODULE shared_data
     TYPE(primitive_stack) :: drift_function(3)
 
     REAL(num) :: t_start, t_end
+    LOGICAL :: has_t_end
     REAL(num), DIMENSION(:,:), POINTER :: depth, dt_inject
 
     TYPE(injector_block), POINTER :: next
@@ -1158,10 +1195,12 @@ MODULE shared_data
   INTEGER(i4) :: run_date
   INTEGER(i8) :: defines
 
-  REAL(num) :: walltime_start, real_walltime_start
+  REAL(num) :: walltime_started, real_walltime_start
   REAL(num) :: stop_at_walltime
+  REAL(num) :: elapsed_time = 0.0_num
+  REAL(num) :: old_elapsed_time = 0.0_num
   INTEGER :: stdout_frequency, check_stop_frequency
-  LOGICAL :: check_walltime, print_eta_string
+  LOGICAL :: check_walltime, print_eta_string, reset_walltime
 
   LOGICAL, DIMENSION(c_dir_x:c_dir_z,0:c_stagger_max) :: stagger
   INTEGER(i8) :: push_per_field = 5

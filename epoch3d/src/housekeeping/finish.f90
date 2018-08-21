@@ -26,6 +26,8 @@ MODULE finish
   USE collisions
   USE dist_fn
   USE ionise
+  USE injectors
+  USE probes
 
   IMPLICIT NONE
 
@@ -67,12 +69,14 @@ CONTAINS
     DEALLOCATE(ex_z_min, ex_z_max, ey_z_min, ey_z_max, ez_z_min, ez_z_max)
     DEALLOCATE(bx_z_min, bx_z_max, by_z_min, by_z_max, bz_z_min, bz_z_max)
 
+    CALL deallocate_probes
+
     DO i = 1, n_species
       CALL deallocate_stack(species_list(i)%density_function)
       DO n = 1, 3
         CALL deallocate_stack(species_list(i)%temperature_function(n))
         CALL deallocate_stack(species_list(i)%drift_function(n))
-      ENDDO
+      END DO
       CALL destroy_partlist(species_list(i)%attached_list)
       DEALLOCATE(species_list(i)%ext_temp_x_min, STAT=stat)
       DEALLOCATE(species_list(i)%ext_temp_x_max, STAT=stat)
@@ -80,10 +84,16 @@ CONTAINS
       DEALLOCATE(species_list(i)%ext_temp_y_max, STAT=stat)
       DEALLOCATE(species_list(i)%ext_temp_z_min, STAT=stat)
       DEALLOCATE(species_list(i)%ext_temp_z_max, STAT=stat)
-    ENDDO
+    END DO
 
     DEALLOCATE(species_list, STAT=stat)
 
+    DO i = 1, n_io_blocks
+      IF (ASSOCIATED(io_block_list(i)%dump_at_times)) &
+          DEALLOCATE(io_block_list(i)%dump_at_times, STAT=stat)
+      IF (ASSOCIATED(io_block_list(i)%dump_at_nsteps)) &
+          DEALLOCATE(io_block_list(i)%dump_at_nsteps, STAT=stat)
+    END DO
     DEALLOCATE(io_block_list, STAT=stat)
     DEALLOCATE(io_list_data, STAT=stat)
     DEALLOCATE(file_prefixes, STAT=stat)
@@ -92,12 +102,12 @@ CONTAINS
     DO i = 1, n_subsets
       DEALLOCATE(subset_list(i)%dumpmask, STAT=stat)
       DEALLOCATE(subset_list(i)%use_species, STAT=stat)
-    ENDDO
+    END DO
     DEALLOCATE(subset_list, STAT=stat)
 
     DO i = 1, n_deck_constants
       CALL deallocate_stack(deck_constant_list(i)%execution_stream)
-    ENDDO
+    END DO
     DEALLOCATE(deck_constant_list, STAT=stat)
 
     CALL deallocate_input_deck_buffer
@@ -109,6 +119,7 @@ CONTAINS
     CALL deallocate_ionisation
     CALL deallocate_partlists
     CALL deallocate_eval_stack
+    CALL deallocate_injectors
 
     CALL MPI_COMM_FREE(comm, errcode)
 

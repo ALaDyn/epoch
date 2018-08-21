@@ -44,7 +44,7 @@ CONTAINS
     DO ispecies = 1, n_species
       get_total_local_particles = get_total_local_particles &
           + species_list(ispecies)%attached_list%count
-    ENDDO
+    END DO
 
   END FUNCTION get_total_local_particles
 
@@ -108,7 +108,7 @@ CONTAINS
           sub%n_local(j) = npd - npdm
           sub%n_start(j) = n0 + npdm * rd - n_min
           starts(j) = npdm
-        ENDDO
+        END DO
 
         mpitype = MPI_DATATYPE_NULL
         CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims, sub%n_global, sub%n_local, &
@@ -145,7 +145,7 @@ CONTAINS
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims, sub%n_global, sub%n_local, &
               starts, MPI_ORDER_FORTRAN, mpireal, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%subtype = mpitype
@@ -155,7 +155,7 @@ CONTAINS
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims, sub%n_global, sub%n_local, &
               starts, MPI_ORDER_FORTRAN, MPI_REAL4, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%subtype_r4 = mpitype
@@ -167,7 +167,7 @@ CONTAINS
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims, sub%n_local, sub%n_local, &
               starts, MPI_ORDER_FORTRAN, mpireal, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%subarray = mpitype
@@ -178,12 +178,12 @@ CONTAINS
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims, sub%n_local, sub%n_local, &
               starts, MPI_ORDER_FORTRAN, MPI_REAL4, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%subarray_r4 = mpitype
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     IF(any_accumulate) CALL create_accum_subtypes
 
@@ -293,7 +293,7 @@ CONTAINS
       CALL MPI_TYPE_FREE(sub%subarray, errcode)
       CALL MPI_TYPE_FREE(sub%subtype_r4, errcode)
       CALL MPI_TYPE_FREE(sub%subarray_r4, errcode)
-    ENDDO
+    END DO
 
     IF ( any_accumulate ) THEN
       DO i = 1, n_subsets
@@ -326,7 +326,7 @@ CONTAINS
       basetype = basetype_in
     ELSE
       basetype = mpireal
-    ENDIF
+    END IF
 
     create_current_field_subtype = &
         create_field_subtype(basetype, nx, nx_global_min)
@@ -351,7 +351,7 @@ CONTAINS
       basetype = basetype_in
     ELSE
       basetype = mpireal
-    ENDIF
+    END IF
 
     create_current_field_subarray = create_field_subarray(basetype, ng, nx)
 
@@ -388,7 +388,7 @@ CONTAINS
     DO i = 1,n_species
       CALL create_particle_subtypes(species_list(i)%attached_list%count, &
           species_subtypes(i), species_subtypes_i4(i), species_subtypes_i8(i))
-    ENDDO
+    END DO
 
   END SUBROUTINE create_subtypes_for_load
 
@@ -416,7 +416,7 @@ CONTAINS
       CALL MPI_TYPE_FREE(species_subtypes(i), errcode)
       CALL MPI_TYPE_FREE(species_subtypes_i4(i), errcode)
       CALL MPI_TYPE_FREE(species_subtypes_i8(i), errcode)
-    ENDDO
+    END DO
     DEALLOCATE(species_subtypes)
     DEALLOCATE(species_subtypes_i4)
     DEALLOCATE(species_subtypes_i8)
@@ -453,12 +453,12 @@ CONTAINS
     particles_to_skip = 0
     DO i = 1, rank
       particles_to_skip = particles_to_skip + npart_each_rank(i)
-    ENDDO
+    END DO
 
     total_particles = particles_to_skip
     DO i = rank+1, nproc
       total_particles = total_particles + npart_each_rank(i)
-    ENDDO
+    END DO
 
     DEALLOCATE(npart_each_rank)
 
@@ -712,16 +712,16 @@ CONTAINS
     IF (PRESENT(n2)) THEN
       n_local(2) = n2
       ndim = 2
-    ENDIF
+    END IF
     IF (PRESENT(n3)) THEN
       n_local(3) = n3
       ndim = 3
-    ENDIF
+    END IF
 
     DO i = 1, ndim
       start(i) = 1 + ng
       n_global(i) = n_local(i) + 2 * ng
-    ENDDO
+    END DO
 
     IF (PRESENT(n3)) THEN
       create_field_subarray = &
@@ -732,7 +732,7 @@ CONTAINS
     ELSE
       create_field_subarray = &
           create_1d_array_subtype(basetype, n_local, n_global, start)
-    ENDIF
+    END IF
 
   END FUNCTION create_field_subarray
 
@@ -762,7 +762,7 @@ CONTAINS
     IF (global_ranges(2,1) < global_ranges(1,1)) THEN
       global_ranges = 0
       RETURN
-    ENDIF
+    END IF
 
     ! Correct to domain size
     global_ranges(1,1) = &

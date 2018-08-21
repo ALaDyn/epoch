@@ -36,6 +36,7 @@ CONTAINS
     injector%boundary = boundary
     injector%t_start = 0.0_num
     injector%t_end = t_end
+    injector%has_t_end = .FALSE.
     injector%density_min = 0.0_num
     injector%use_flux_injector = .FALSE.
 
@@ -58,7 +59,7 @@ CONTAINS
       CALL attach_injector_to_list(injector_x_min, injector)
     ELSE IF (boundary == c_bd_x_max) THEN
       CALL attach_injector_to_list(injector_x_max, injector)
-    ENDIF
+    END IF
 
   END SUBROUTINE attach_injector
 
@@ -75,13 +76,47 @@ CONTAINS
       current => list
       DO WHILE(ASSOCIATED(current%next))
         current => current%next
-      ENDDO
+      END DO
       current%next => injector
     ELSE
       list => injector
-    ENDIF
+    END IF
 
   END SUBROUTINE attach_injector_to_list
+
+
+
+  SUBROUTINE deallocate_injectors
+
+    CALL deallocate_injector_list(injector_x_min)
+    CALL deallocate_injector_list(injector_x_max)
+
+  END SUBROUTINE deallocate_injectors
+
+
+
+  SUBROUTINE deallocate_injector_list(list)
+
+    TYPE(injector_block), POINTER :: list
+    TYPE(injector_block), POINTER :: current, next
+    INTEGER :: i
+
+    current => list
+    DO WHILE(ASSOCIATED(current))
+      next => current%next
+      IF (current%density_function%init) &
+          CALL deallocate_stack(current%density_function)
+      DO i = 1, 3
+        IF (current%temperature_function(i)%init) &
+            CALL deallocate_stack(current%temperature_function(i))
+        IF (current%drift_function(i)%init) &
+            CALL deallocate_stack(current%drift_function(i))
+      END DO
+      DEALLOCATE(current)
+      current => next
+    END DO
+
+  END SUBROUTINE deallocate_injector_list
 
 
 
@@ -94,16 +129,16 @@ CONTAINS
       DO WHILE(ASSOCIATED(current))
         CALL run_single_injector(current, c_bd_x_min)
         current => current%next
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     IF (x_max_boundary) THEN
       current => injector_x_max
       DO WHILE(ASSOCIATED(current))
         CALL run_single_injector(current, c_bd_x_max)
         current => current%next
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
   END SUBROUTINE run_injectors
 
@@ -127,6 +162,11 @@ CONTAINS
 
     IF (time < injector%t_start .OR. time > injector%t_end) RETURN
 
+    ! If you have a moving window that has started moving then unless you
+    ! EXPLICITLY give a t_end value to the injector stop the injector
+    IF (move_window .AND. window_started .AND. .NOT. injector%has_t_end) &
+        RETURN
+
     flux_fn = .FALSE.
     dir_mult = 1.0_num
 
@@ -137,7 +177,7 @@ CONTAINS
       bdy_space = -dx
       IF (injector%use_flux_injector) THEN
         flux_fn = .TRUE.
-        dir_mult(idir) = 1.0_num
+        dir_mult(dir_index) = 1.0_num
       END IF
     ELSE IF (direction == c_bd_x_max) THEN
       parameters%pack_ix = nx
@@ -146,11 +186,11 @@ CONTAINS
       bdy_space = dx
       IF (injector%use_flux_injector) THEN
         flux_fn = .TRUE.
-        dir_mult(idir) = -1.0_num
+        dir_mult(dir_index) = -1.0_num
       END IF
     ELSE
       RETURN
-    ENDIF
+    END IF
 
     vol = ABS(bdy_space)
 
@@ -170,7 +210,7 @@ CONTAINS
       IF (injector%depth >= 0.0_num) RETURN
     ELSE
       first_inject = .TRUE.
-    ENDIF
+    END IF
 
     CALL populate_injector_properties(injector, parameters, density_grid, &
         temperature, drift)
@@ -195,7 +235,7 @@ CONTAINS
           * (1.0_num - npart_ideal / REAL(injector%npart_per_cell, num)))) &
           + npart_ideal
       injector%depth = injector%depth - itemp
-    ENDIF
+    END IF
 
     parts_this_time = FLOOR(ABS(injector%depth - 1.0_num))
     injector%depth = injector%depth + REAL(parts_this_time, num)
@@ -220,8 +260,8 @@ CONTAINS
         ELSE
           new%part_p(idir) = momentum_from_temperature(mass, &
               temperature(idir), drift(idir))
-        ENDIF
-      ENDDO
+        END IF
+      END DO
 #ifdef PER_PARTICLE_CHARGE_MASS
       new%charge = species_list(injector%species)%charge
       new%mass = mass
@@ -230,7 +270,7 @@ CONTAINS
       new%weight = vol * density / REAL(injector%npart_per_cell, num)
 #endif
       CALL add_particle_to_partlist(plist, new)
-    ENDDO
+    END DO
 
     CALL append_partlist(species_list(injector%species)%attached_list, plist)
 
@@ -259,15 +299,15 @@ CONTAINS
                 parameters, errcode), 0.0_num)
       ELSE
         temperature(i) = 0.0_num
-      ENDIF
+      END IF
       IF (injector%drift_function(i)%init) THEN
         drift(i) = &
             evaluate_with_parameters(injector%drift_function(i), &
                                      parameters, errcode)
       ELSE
         drift(i) = 0.0_num
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     IF (errcode /= c_err_none) CALL abort_code(errcode)
 

@@ -35,8 +35,8 @@ CONTAINS
     INTEGER(i8) :: local_count
     INTEGER :: i0, i1
 
-    i0 = 1
-    IF (use_field_ionisation) i0 = 0
+    i0 = 1 - ng
+    IF (use_field_ionisation) i0 = -ng
     i1 = 1 - i0
 
     DO ispecies = 1, n_species
@@ -48,25 +48,30 @@ CONTAINS
         DO ix = i0, nx + i1
           CALL create_empty_partlist(&
               species_list(ispecies)%secondary_list(ix,iy))
-        ENDDO
-      ENDDO
+        END DO
+      END DO
       current => species_list(ispecies)%attached_list%head
       DO WHILE(ASSOCIATED(current))
         next => current%next
+#ifdef PARTICLE_SHAPE_TOPHAT
+        cell_x = FLOOR((current%part_pos(1) - x_grid_min_local) / dx) + 1
+        cell_y = FLOOR((current%part_pos(2) - y_grid_min_local) / dy) + 1
+#else
         cell_x = FLOOR((current%part_pos(1) - x_grid_min_local) / dx + 1.5_num)
         cell_y = FLOOR((current%part_pos(2) - y_grid_min_local) / dy + 1.5_num)
         IF(cell_x < 1 .OR. cell_x > nx .OR. cell_y < 1 .OR. cell_y > ny) THEN
           current => next
           CYCLE
         ENDIF
- 
+#endif
+
         CALL remove_particle_from_partlist(&
             species_list(ispecies)%attached_list, current)
         CALL add_particle_to_partlist(&
             species_list(ispecies)%secondary_list(cell_x,cell_y), current)
         current => next
-      ENDDO
-    ENDDO
+      END DO
+    END DO
 
   END SUBROUTINE reorder_particles_to_grid
 
@@ -77,8 +82,8 @@ CONTAINS
     INTEGER :: ispecies, ix, iy
     INTEGER :: i0, i1
 
-    i0 = 1
-    IF (use_field_ionisation) i0 = 0
+    i0 = 1 - ng
+    IF (use_field_ionisation) i0 = -ng
     i1 = 1 - i0
 
     DO ispecies = 1, n_species
@@ -86,10 +91,10 @@ CONTAINS
         DO ix = i0, nx + i1
           CALL append_partlist(species_list(ispecies)%attached_list, &
               species_list(ispecies)%secondary_list(ix,iy))
-        ENDDO
-      ENDDO
+        END DO
+      END DO
       DEALLOCATE(species_list(ispecies)%secondary_list)
-    ENDDO
+    END DO
 
     CALL particle_bcs
 
@@ -107,8 +112,8 @@ CONTAINS
       IF (species_list(ispecies)%split) THEN
         use_split = .TRUE.
         EXIT
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     use_particle_lists = use_particle_lists .OR. use_split
     IF (use_split) need_random_state = .TRUE.
@@ -128,8 +133,8 @@ CONTAINS
     REAL(num) :: jitter_x, jitter_y
     INTEGER :: i0, i1
 
-    i0 = 1
-    IF (use_field_ionisation) i0 = 0
+    i0 = 1 - ng
+    IF (use_field_ionisation) i0 = -ng
     i1 = 1 - i0
 
     DO ispecies = 1, n_species
@@ -170,13 +175,13 @@ CONTAINS
               current%part_pos(1) = current%part_pos(1) - jitter_x
               current%part_pos(2) = current%part_pos(2) - jitter_y
               current => current%next
-            ENDDO
-          ENDIF
-        ENDDO
-      ENDDO
+            END DO
+          END IF
+        END DO
+      END DO
 
       CALL append_partlist(species_list(ispecies)%attached_list, append_list)
-    ENDDO
+    END DO
 #endif
 
   END SUBROUTINE split_particles

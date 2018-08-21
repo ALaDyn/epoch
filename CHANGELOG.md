@@ -1,4 +1,53 @@
-## v4.11.0 to v4.12.0
+## v4.12.0 to v4.14.0 (2018-08-13)
+
+ * Added the Higuera-Cary relativistic particle push. This is enabled by
+   compiling with the flag -DHC_PUSH
+
+ * Added sanity check for binary file size
+
+ * Fixed the ETA string on restart
+
+ * Added control block option "reset_walltime" to reset the walltime
+   to zero when restarting
+
+ * Added the ability to request output dumps at runtime by touching a file
+   named "DUMP"
+
+ * Made the x-coordinate a time-dependent input deck variable when the moving
+   window is enabled
+
+ * Added "window_stop_time" parameter to the window block
+
+ * Added example SDF reader code
+
+ * Added "atan2" function to the deck parser
+
+ * Omit redundant dimension in dist_fn output
+
+ * Modified load balance calculation so that a perfectly balanced problem has
+   a value of one
+
+ * Only redistribute the simulation if it would result in an improvement to
+   the load balance
+
+ * Improvements to the load balancing calculations
+
+ * Added dlb_maximum_interval parameter to the input deck
+
+ * Added dlb_force_interval parameter to the input deck
+
+ * Added balance_first parameter to the input deck
+
+ * Added y and z versions of the bc_x_{min,max}_after_move parameters to
+   the input deck
+
+ * Added "dump_at_walltimes" flag to the io block
+
+ * Added "walltime_interval", "walltime_start" and "walltime_stop" flags to
+   the io block
+
+
+## v4.11.0 to v4.12.0 (2018-06-16)
 
  * Fixes for exact restarts
 
@@ -15,6 +64,37 @@
 
  * Added "use_accurate_n_zeros" control block flag to enable finding the
    exact number of output that are generated
+
+ * Prevent duplicated final dump
+
+ * Added "use_flux_maxwellian" option to the injector block
+
+ * Added warnings for BCs that are incompatible with moving windows
+
+ * Added y,z versions of the Lehe Maxwell solver
+
+ * Added "stencil" block for specifying a Maxwell solver with custom
+   coefficients
+
+ * Added "work_{x,y,z}" and "work_{x,y,z}_total" dumpmasks for tracking the
+   work done on each particle by the electric field.
+
+ * Various bugfixes
+
+ * Updated the SDF submodule:
+   SDF/FORTRAN
+   - Improve Fortran error handling
+
+   SDF/utilities
+   - Added support for SDF_BLOCKTYPE_POINT_DERIVED to sdffilter
+   - Make sdffilter print all point mesh components
+   - Return non-zero code for unsupported blocks in sdffilter
+   - Fixed station file column order in sdffilter
+   - Return an error for failed python builds
+
+   SDF/VisIt
+   - Add an option for disabling obstacle boundaries in VisIt
+   - Don't generate boundary meshes when requested in VisIt
 
 
 ## v4.10.0 to v4.11.0 (2018-04-13)
