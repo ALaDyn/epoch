@@ -310,8 +310,8 @@ CONTAINS
        CALL create_empty_partlist(species%attached_list, .TRUE.)
      ELSE
        RETURN
-     ENDIF
-    ENDIF
+     END IF
+    END IF
 
     ix_min = 1
     ix_max = nx
@@ -435,7 +435,7 @@ CONTAINS
         use_store_default)
     ELSE
       CALL create_empty_partlist(partlist)
-    ENDIF
+    END IF
     !Now have a store with at least one chunk of memory allocated
     !And all linking etc is done
 
