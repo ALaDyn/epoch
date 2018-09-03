@@ -58,7 +58,10 @@ CONTAINS
     ! Properties of the current particle. Copy out of particle arrays for speed
     REAL(num) :: part_x, part_y, part_z
     REAL(num) :: part_ux, part_uy, part_uz
-    REAL(num) :: part_q, part_mc, ipart_mc, part_weight
+    REAL(num) :: part_q, part_mc, ipart_mc, part_weight, part_m
+#ifdef HC_PUSH
+    REAL(num) :: beta_x, beta_y, beta_z, beta2, beta_dot_u, alpha, sigma
+#endif
 
     ! Used for particle probes (to see of probe conditions are satisfied)
 #ifndef NO_PARTICLE_PROBES
@@ -107,14 +110,19 @@ CONTAINS
     REAL(num) :: idtyz, idtxz, idtxy
     REAL(num) :: idt, dto2, dtco2
     REAL(num) :: fcx, fcy, fcz, fjx, fjy, fjz
-    REAL(num) :: root, dtfac, gamma_rel, gamma_rel_m1, part_u2, third
+    REAL(num) :: root, dtfac, gamma_rel, part_u2, third
     REAL(num) :: delta_x, delta_y, delta_z
     REAL(num) :: xfac1, xfac2, yfac1, yfac2, zfac1, zfac2
     REAL(num) :: gz_iz, hz_iz, hygz, hyhz, hzyfac1, hzyfac2, yzfac
     INTEGER :: ispecies, ix, iy, iz, dcellx, dcelly, dcellz, cx, cy, cz
     INTEGER(i8) :: ipart
+#ifdef WORK_DONE_INTEGRATED
+    REAL(num) :: tmp_x, tmp_y, tmp_z
+    REAL(num) :: work_x, work_y, work_z
+#endif
 #ifndef NO_PARTICLE_PROBES
     LOGICAL :: probes_for_species
+    REAL(num) :: gamma_rel_m1
 #endif
 #ifndef NO_TRACER_PARTICLES
     LOGICAL :: not_tracer_species
@@ -170,7 +178,7 @@ CONTAINS
         IF (photon_dynamics) CALL push_photons(ispecies)
 #endif
         CYCLE
-      ENDIF
+      END IF
 #ifndef NO_PARTICLE_PROBES
       current_probe => species_list(ispecies)%attached_probes
       probes_for_species = ASSOCIATED(current_probe)
@@ -187,6 +195,7 @@ CONTAINS
 #endif
 #ifndef PER_PARTICLE_CHARGE_MASS
       part_q   = species_list(ispecies)%charge
+      part_m   = species_list(ispecies)%mass
       part_mc  = c * species_list(ispecies)%mass
       ipart_mc = 1.0_num / part_mc
       cmratio  = part_q * dtfac * ipart_mc
@@ -214,6 +223,7 @@ CONTAINS
 #endif
 #ifdef PER_PARTICLE_CHARGE_MASS
         part_q   = current%charge
+        part_m   = current%mass
         part_mc  = c * current%mass
         ipart_mc = 1.0_num / part_mc
         cmratio  = part_q * dtfac * ipart_mc
@@ -232,12 +242,23 @@ CONTAINS
 
         ! Calculate v(t) from p(t)
         ! See PSC manual page (25-27)
-        root = dtco2 / SQRT(part_ux**2 + part_uy**2 + part_uz**2 + 1.0_num)
+        gamma_rel = SQRT(part_ux**2 + part_uy**2 + part_uz**2 + 1.0_num)
+        root = dtco2 / gamma_rel
 
         ! Move particles to half timestep position to first order
         part_x = part_x + part_ux * root
         part_y = part_y + part_uy * root
         part_z = part_z + part_uz * root
+
+#ifdef WORK_DONE_INTEGRATED
+        ! This is the actual total work done by the fields: Results correspond
+        ! with the electron's gamma factor
+        root = cmratio / gamma_rel
+
+        tmp_x = part_ux * root
+        tmp_y = part_uy * root
+        tmp_z = part_uz * root
+#endif
 
         ! Grid cell position as a fraction.
 #ifdef PARTICLE_SHAPE_TOPHAT
@@ -322,8 +343,24 @@ CONTAINS
         uym = part_uy + cmratio * ey_part
         uzm = part_uz + cmratio * ez_part
 
+#ifdef HC_PUSH
+        ! Half timestep, then use Higuera-Cary push see
+        ! https://aip.scitation.org/doi/10.1063/1.4979989
+        gamma_rel = uxm**2 + uym**2 + uzm**2 + 1.0_num
+        alpha = 0.5_num * part_q * dt / part_m
+        beta_x = alpha * bx_part
+        beta_y = alpha * by_part
+        beta_z = alpha * bz_part
+        beta2 = beta_x**2 + beta_y**2 + beta_z**2
+        sigma = gamma_rel - beta2
+        beta_dot_u = beta_x * uxm + beta_y * uym + beta_z * uzm
+        gamma_rel = sigma + SQRT(sigma**2 + 4.0_num * (beta2 + beta_dot_u**2))
+        gamma_rel = SQRT(0.5_num * gamma_rel)
+#else
         ! Half timestep, then use Boris1970 rotation, see Birdsall and Langdon
-        root = ccmratio / SQRT(uxm**2 + uym**2 + uzm**2 + 1.0_num)
+        gamma_rel = SQRT(uxm**2 + uym**2 + uzm**2 + 1.0_num)
+#endif
+        root = ccmratio / gamma_rel
 
         taux = bx_part * root
         tauy = by_part * root
@@ -369,6 +406,23 @@ CONTAINS
         current%part_pos = (/ part_x + x_grid_min_local, &
             part_y + y_grid_min_local, part_z + z_grid_min_local /)
         current%part_p   = part_mc * (/ part_ux, part_uy, part_uz /)
+
+#ifdef WORK_DONE_INTEGRATED
+        ! This is the actual total work done by the fields: Results correspond
+        ! with the electron's gamma factor
+        root = cmratio / gamma_rel
+
+        work_x = ex_part * (tmp_x + part_ux * root)
+        work_y = ey_part * (tmp_y + part_uy * root)
+        work_z = ez_part * (tmp_z + part_uz * root)
+
+        current%work_x = work_x
+        current%work_y = work_y
+        current%work_z = work_z
+        current%work_x_total = current%work_x_total + work_x
+        current%work_y_total = current%work_y_total + work_y
+        current%work_z_total = current%work_z_total + work_z
+#endif
 
 #ifndef NO_PARTICLE_PROBES
         final_part_x = current%part_pos(1)
@@ -498,11 +552,11 @@ CONTAINS
                 jx(cx, cy, cz) = jx(cx, cy, cz) + jxh
                 jy(cx, cy, cz) = jy(cx, cy, cz) + jyh(ix)
                 jz(cx, cy, cz) = jz(cx, cy, cz) + jzh(ix, iy)
-              ENDDO
-            ENDDO
-          ENDDO
+              END DO
+            END DO
+          END DO
 #ifndef NO_TRACER_PARTICLES
-        ENDIF
+        END IF
 #endif
 #ifndef NO_PARTICLE_PROBES
         IF (probes_for_species) THEN
@@ -536,24 +590,23 @@ CONTAINS
                   CALL add_particle_to_partlist(&
                       current_probe%sampled_particles, particle_copy)
                   NULLIFY(particle_copy)
-                ENDIF
+                END IF
 
-              ENDIF
-            ENDIF
+              END IF
+            END IF
             current_probe => current_probe%next
-          ENDDO
-        ENDIF
+          END DO
+        END IF
 #endif
         current => next
-      ENDDO
-    ENDDO
+      END DO
+      CALL current_bcs(species=ispecies)
+    END DO
 
-    IF (.NOT.use_field_ionisation) THEN
-      CALL current_bcs
-      CALL particle_bcs
+    CALL current_bcs
+    CALL particle_bcs
 
-      IF (smooth_currents) CALL smooth_current()
-    END IF
+    IF (smooth_currents) CALL smooth_current()
 
     IF (use_current_correction) THEN
       jx = jx - initial_jx
@@ -600,7 +653,7 @@ CONTAINS
        f0 = norm * EXP(-f0_exponent)
     ELSE
        f0 = 0.0_num
-    ENDIF
+    END IF
 
   END FUNCTION f0
 
@@ -683,17 +736,17 @@ CONTAINS
                 CALL add_particle_to_partlist(&
                     current_probe%sampled_particles, particle_copy)
                 NULLIFY(particle_copy)
-              ENDIF
+              END IF
 
-            ENDIF
-          ENDIF
+            END IF
+          END IF
           current_probe => current_probe%next
-        ENDDO
-      ENDIF
+        END DO
+      END IF
 #endif
 
       current => current%next
-    ENDDO
+    END DO
 
   END SUBROUTINE push_photons
 #endif

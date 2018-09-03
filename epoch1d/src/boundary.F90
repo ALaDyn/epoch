@@ -26,24 +26,64 @@ MODULE boundary
 
 CONTAINS
 
-  SUBROUTINE setup_particle_boundaries
+  SUBROUTINE setup_boundaries
 
-    INTEGER :: i
+    INTEGER :: i, ispecies
     LOGICAL :: error
     CHARACTER(LEN=5), DIMENSION(2*c_ndims) :: &
         boundary = (/ 'x_min', 'x_max' /)
+    CHARACTER(LEN=2*c_max_string_length) :: bc_error
 
     ! For some types of boundary, fields and particles are treated in
     ! different ways, deal with that here
 
+    any_open = .FALSE.
     cpml_boundaries = .FALSE.
     DO i = 1, 2*c_ndims
-      IF (bc_particle(i) == c_bc_other) bc_particle(i) = c_bc_reflect
       IF (bc_field(i) == c_bc_other) bc_field(i) = c_bc_clamp
       IF (bc_field(i) == c_bc_cpml_laser &
           .OR. bc_field(i) == c_bc_cpml_outflow) cpml_boundaries = .TRUE.
-      IF (bc_field(i) == c_bc_simple_laser) add_laser(i) = .TRUE.
-    ENDDO
+      IF (bc_field(i) == c_bc_simple_laser) THEN
+        add_laser(i) = .TRUE.
+        any_open = .TRUE.
+      END IF
+
+      ! Note: reflecting EM boundaries not yet implemented.
+      IF (bc_field(i) == c_bc_reflect) bc_field(i) = c_bc_clamp
+      IF (bc_field(i) == c_bc_open) bc_field(i) = c_bc_simple_outflow
+      IF (bc_field(i) == c_bc_simple_outflow) any_open = .TRUE.
+    END DO
+
+    error = .FALSE.
+    DO ispecies = 1, n_species
+      DO i = 1, 2*c_ndims
+        bc_error = 'Unrecognised "' // TRIM(boundary(i)) // '" boundary for ' &
+            // 'species "' // TRIM(species_list(ispecies)%name) // '"'
+        error = error .OR. setup_particle_boundary(&
+            species_list(ispecies)%bc_particle(i), bc_error)
+      END DO
+    END DO
+
+    IF (error) THEN
+      errcode = c_err_bad_value
+      CALL abort_code(errcode)
+    END IF
+
+  END SUBROUTINE setup_boundaries
+
+
+
+  FUNCTION setup_particle_boundary(boundary, bc_error) RESULT(error)
+
+    INTEGER, INTENT(INOUT) :: boundary
+    CHARACTER(LEN=*), INTENT(IN) :: bc_error
+    LOGICAL :: error
+
+    ! For some types of boundary, fields and particles are treated in
+    ! different ways, deal with that here
+
+    IF (boundary == c_bc_other .OR. boundary == c_bc_conduct) &
+        boundary = c_bc_reflect
 
     ! Note, for laser bcs to work, the main bcs must be set IN THE CODE to
     ! simple_laser (or outflow) and the field bcs to c_bc_clamp. Particles
@@ -52,40 +92,27 @@ CONTAINS
     ! (or outflow).
 
     ! Laser boundaries assume open particles unless otherwise specified.
-    DO i = 1, 2*c_ndims
-      IF (bc_particle(i) == c_bc_simple_laser &
-          .OR. bc_particle(i) == c_bc_simple_outflow &
-          .OR. bc_particle(i) == c_bc_cpml_laser &
-          .OR. bc_particle(i) == c_bc_cpml_outflow) &
-              bc_particle(i) = c_bc_open
-    ENDDO
-
-    ! Note: reflecting EM boundaries not yet implemented.
-    DO i = 1, 2*c_ndims
-      IF (bc_field(i) == c_bc_reflect) bc_field(i) = c_bc_clamp
-      IF (bc_field(i) == c_bc_open) bc_field(i) = c_bc_simple_outflow
-    ENDDO
+    IF (boundary == c_bc_simple_laser &
+        .OR. boundary == c_bc_simple_outflow &
+        .OR. boundary == c_bc_cpml_laser &
+        .OR. boundary == c_bc_cpml_outflow) &
+            boundary = c_bc_open
 
     ! Sanity check on particle boundaries
     error = .FALSE.
-    DO i = 1, 2*c_ndims
-      IF (bc_particle(i) == c_bc_periodic &
-          .OR. bc_particle(i) == c_bc_reflect &
-          .OR. bc_particle(i) == c_bc_thermal &
-          .OR. bc_particle(i) == c_bc_open) CYCLE
-      IF (rank == 0) THEN
-        WRITE(*,*)
-        WRITE(*,*) '*** ERROR ***'
-        WRITE(*,*) 'Unrecognised particle boundary condition on "', &
-            boundary(i), '" boundary.'
-      ENDIF
-      error = .TRUE.
-      errcode = c_err_bad_value
-    ENDDO
+    IF (boundary == c_bc_periodic &
+        .OR. boundary == c_bc_reflect &
+        .OR. boundary == c_bc_thermal &
+        .OR. boundary == c_bc_open) RETURN
 
-    IF (error) CALL abort_code(errcode)
+    IF (rank == 0) THEN
+      WRITE(*,*)
+      WRITE(*,*) '*** ERROR ***'
+      WRITE(*,*) TRIM(bc_error)
+    END IF
+    error = .TRUE.
 
-  END SUBROUTINE setup_particle_boundaries
+  END FUNCTION setup_particle_boundary
 
 
 
@@ -122,8 +149,8 @@ CONTAINS
       DO i = nx_local+1, nx_local+ng
         field(i) = temp(n)
         n = n + 1
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     CALL MPI_SENDRECV(field(nx_local+1-ng), ng, basetype, proc_x_max, &
         tag, temp, ng, basetype, proc_x_min, tag, comm, status, errcode)
@@ -133,8 +160,8 @@ CONTAINS
       DO i = 1-ng, 0
         field(i) = temp(n)
         n = n + 1
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     DEALLOCATE(temp)
 
@@ -162,8 +189,8 @@ CONTAINS
       DO i = nx_local+1, nx_local+ng
         field(i) = temp(n)
         n = n + 1
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     CALL MPI_SENDRECV(field(nx_local+1-ng), ng, basetype, proc_x_max, &
         tag, temp, ng, basetype, proc_x_min, tag, comm, status, errcode)
@@ -173,8 +200,8 @@ CONTAINS
       DO i = 1-ng, 0
         field(i) = temp(n)
         n = n + 1
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     DEALLOCATE(temp)
 
@@ -194,24 +221,24 @@ CONTAINS
       IF (stagger(c_dir_x,stagger_type)) THEN
         DO i = 1, ng
           field(i-ng) = field(ng-i)
-        ENDDO
+        END DO
       ELSE
         DO i = 1, ng
           field(i-ng) = field(ng+1-i)
-        ENDDO
-      ENDIF
+        END DO
+      END IF
     ELSE IF (boundary == c_bd_x_max .AND. x_max_boundary) THEN
       nn = nx
       IF (stagger(c_dir_x,stagger_type)) THEN
         DO i = 1, ng
           field(nn+i) = field(nn-i)
-        ENDDO
+        END DO
       ELSE
         DO i = 1, ng
           field(nn+i) = field(nn+1-i)
-        ENDDO
-      ENDIF
-    ENDIF
+        END DO
+      END IF
+    END IF
 
   END SUBROUTINE field_zero_gradient
 
@@ -229,93 +256,205 @@ CONTAINS
       IF (stagger(c_dir_x,stagger_type)) THEN
         DO i = 1, ng-1
           field(i-ng) = -field(ng-i)
-        ENDDO
+        END DO
         field(0) = 0.0_num
       ELSE
         DO i = 1, ng
           field(i-ng) = -field(ng+1-i)
-        ENDDO
-      ENDIF
+        END DO
+      END IF
     ELSE IF (boundary == c_bd_x_max .AND. x_max_boundary) THEN
       nn = nx
       IF (stagger(c_dir_x,stagger_type)) THEN
         field(nn) = 0.0_num
         DO i = 1, ng-1
           field(nn+i) = -field(nn-i)
-        ENDDO
+        END DO
       ELSE
         DO i = 1, ng
           field(nn+i) = -field(nn+1-i)
-        ENDDO
-      ENDIF
-    ENDIF
+        END DO
+      END IF
+    END IF
 
   END SUBROUTINE field_clamp_zero
 
 
 
-  SUBROUTINE processor_summation_bcs(array, ng, flip_direction)
+  SUBROUTINE particle_reflection_bcs(array, ng, flip_direction, species)
 
     INTEGER, INTENT(IN) :: ng
     REAL(num), DIMENSION(1-ng:), INTENT(INOUT) :: array
     INTEGER, INTENT(IN), OPTIONAL :: flip_direction
-    REAL(num), DIMENSION(:), ALLOCATABLE :: temp
-    INTEGER :: nn, i, flip_dir
+    INTEGER, INTENT(IN), OPTIONAL :: species
+    INTEGER, DIMENSION(c_ndims) :: sizes
+    INTEGER :: nn, n, i, flip_dir, bc
+    INTEGER, DIMENSION(2*c_ndims) :: bc_species
 
     flip_dir = 0
     IF (PRESENT(flip_direction)) flip_dir = flip_direction
 
-    nn = nx
+    bc_species = bc_allspecies
+    IF (PRESENT(species)) THEN
+      DO i = 1, 2*c_ndims
+        IF (bc_species(i) == c_bc_mixed) THEN
+          bc_species(i) = species_list(species)%bc_particle(i)
+        END IF
+      END DO
+    END IF
 
-    ALLOCATE(temp(ng))
+    sizes = SHAPE(array)
+    n = 0
+    nn = sizes(n/2+1) - 2 * ng
 
-    temp = 0.0_num
-    CALL MPI_SENDRECV(array(nn+1), ng, mpireal, &
-        neighbour( 1), tag, temp, ng, mpireal, &
-        neighbour(-1), tag, comm, status, errcode)
-
-    ! Deal with reflecting boundaries differently
-    IF ((bc_particle(c_bd_x_min) == c_bc_reflect &
-        .OR. bc_particle(c_bd_x_min) == c_bc_thermal) .AND. x_min_boundary) THEN
-      IF (flip_dir == c_dir_x) THEN
+    n = n + 1
+    bc = bc_species(n)
+    IF (x_min_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_thermal)) THEN
+      IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng-1
           array(i) = array(i) - array(-i)
-        ENDDO
+          array(-i) = 0.0_num
+        END DO
       ELSE
         DO i = 1, ng-1
           array(i) = array(i) + array(1-i)
-        ENDDO
-      ENDIF
-    ELSE
-      array(1:ng) = array(1:ng) + temp
-    ENDIF
+          array(1-i) = 0.0_num
+        END DO
+      END IF
+    END IF
 
-    temp = 0.0_num
-    CALL MPI_SENDRECV(array(1-ng), ng, mpireal, &
-        neighbour(-1), tag, temp, ng, mpireal, &
-        neighbour( 1), tag, comm, status, errcode)
-
-    ! Deal with reflecting boundaries differently
-    IF ((bc_particle(c_bd_x_max) == c_bc_reflect &
-        .OR. bc_particle(c_bd_x_max) == c_bc_thermal) .AND. x_max_boundary) THEN
-      IF (flip_dir == c_dir_x) THEN
+    n = n + 1
+    bc = bc_species(n)
+    IF (x_max_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_thermal)) THEN
+      IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng
           array(nn-i) = array(nn-i) - array(nn+i)
-        ENDDO
+          array(nn+i) = 0.0_num
+        END DO
       ELSE
         DO i = 1, ng
           array(nn+1-i) = array(nn+1-i) + array(nn+i)
-        ENDDO
-      ENDIF
-    ELSE
-      array(nn+1-ng:nn) = array(nn+1-ng:nn) + temp
-    ENDIF
+          array(nn+i) = 0.0_num
+        END DO
+      END IF
+    END IF
+
+  END SUBROUTINE particle_reflection_bcs
+
+
+
+  SUBROUTINE particle_periodic_bcs(array, ng, species)
+
+    INTEGER, INTENT(IN) :: ng
+    REAL(num), DIMENSION(1-ng:), INTENT(INOUT) :: array
+    INTEGER, INTENT(IN), OPTIONAL :: species
+    REAL(num), DIMENSION(:), ALLOCATABLE :: temp
+    INTEGER, DIMENSION(c_ndims) :: sizes
+    INTEGER :: n, nn, i
+    INTEGER, DIMENSION(-1:1) :: neighbour_local
+    INTEGER, DIMENSION(2*c_ndims) :: bc_species
+
+    ! Transmit and sum all boundaries.
+    ! Set neighbour to MPI_PROC_NULL if we don't need to transfer anything
+
+    bc_species = bc_allspecies
+    IF (PRESENT(species)) THEN
+      DO i = 1, 2*c_ndims
+        IF (bc_species(i) == c_bc_mixed) THEN
+          bc_species(i) = species_list(species)%bc_particle(i)
+        END IF
+      END DO
+    END IF
+
+    sizes = SHAPE(array)
+    n = 0
+    nn = sizes(n/2+1) - 2 * ng
+
+    ALLOCATE(temp(ng))
+
+    ! Don't bother communicating non-periodic boundaries
+    neighbour_local = neighbour(:)
+    n = n + 1
+    IF (x_min_boundary) THEN
+      IF (bc_species(n) /= c_bc_periodic) THEN
+        neighbour_local(-1) = MPI_PROC_NULL
+      END IF
+    END IF
+    n = n + 1
+    IF (x_max_boundary) THEN
+      IF (bc_species(n) /= c_bc_periodic) THEN
+        neighbour_local( 1) = MPI_PROC_NULL
+      END IF
+    END IF
+    n = n - 2
+
+    temp = 0.0_num
+    CALL MPI_SENDRECV(array(nn+1), ng, mpireal, &
+        neighbour_local( 1), tag, temp, ng, mpireal, &
+        neighbour_local(-1), tag, comm, status, errcode)
+
+    n = n + 1
+    array(1:ng) = array(1:ng) + temp
+
+    temp = 0.0_num
+    CALL MPI_SENDRECV(array(1-ng), ng, mpireal, &
+        neighbour_local(-1), tag, temp, ng, mpireal, &
+        neighbour_local( 1), tag, comm, status, errcode)
+
+    n = n + 1
+    array(nn+1-ng:nn) = array(nn+1-ng:nn) + temp
 
     DEALLOCATE(temp)
 
-    CALL field_bc(array, ng)
+    IF (PRESENT(species)) CALL particle_clear_bcs(array, ng)
+
+  END SUBROUTINE particle_periodic_bcs
+
+
+
+  SUBROUTINE particle_clear_bcs(array, ng)
+
+    INTEGER, INTENT(IN) :: ng
+    REAL(num), DIMENSION(1-ng:), INTENT(INOUT) :: array
+    INTEGER, DIMENSION(c_ndims) :: sizes
+    INTEGER :: n, nn
+
+    sizes = SHAPE(array)
+    n = 0
+
+    nn = sizes(n/2+1) - 2 * ng
+
+    n = n + 1
+    array(:0) = 0.0_num
+    n = n + 1
+    array(nn+1:) = 0.0_num
+
+  END SUBROUTINE particle_clear_bcs
+
+
+
+  SUBROUTINE processor_summation_bcs(array, ng, flip_direction, species)
+
+    INTEGER, INTENT(IN) :: ng
+    REAL(num), DIMENSION(1-ng:), INTENT(INOUT) :: array
+    INTEGER, INTENT(IN), OPTIONAL :: flip_direction
+    INTEGER, INTENT(IN), OPTIONAL :: species
+
+    IF (PRESENT(species) .AND. .NOT. ANY(bc_allspecies == c_bc_mixed)) THEN
+      RETURN
+    END IF
+
+    IF (.NOT. PRESENT(species) .AND. ANY(bc_allspecies == c_bc_mixed)) THEN
+      RETURN
+    END IF
+
+    ! First apply reflecting boundary conditions
+    CALL particle_reflection_bcs(array, ng, flip_direction, species)
+
+    ! Next apply periodic and subdomain boundary conditions
+    CALL particle_periodic_bcs(array, ng, species)
 
   END SUBROUTINE processor_summation_bcs
 
@@ -335,8 +474,8 @@ CONTAINS
       IF (bc_field(i) == c_bc_conduct) THEN
         CALL field_clamp_zero(ey, ng, c_stagger_ey, i)
         CALL field_clamp_zero(ez, ng, c_stagger_ez, i)
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     DO i = 1, 2*c_ndims
       ! These apply zero field boundary conditions on the edges
@@ -346,7 +485,7 @@ CONTAINS
         CALL field_clamp_zero(ex, ng, c_stagger_ex, i)
         CALL field_clamp_zero(ey, ng, c_stagger_ey, i)
         CALL field_clamp_zero(ez, ng, c_stagger_ez, i)
-      ENDIF
+      END IF
 
       ! These apply zero gradient boundary conditions on the edges
       IF (bc_field(i) == c_bc_zero_gradient &
@@ -355,8 +494,8 @@ CONTAINS
         CALL field_zero_gradient(ex, c_stagger_ex, i)
         CALL field_zero_gradient(ey, c_stagger_ey, i)
         CALL field_zero_gradient(ez, c_stagger_ez, i)
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
   END SUBROUTINE efield_bcs
 
@@ -380,8 +519,8 @@ CONTAINS
         CALL field_clamp_zero(bx, ng, c_stagger_bx, i)
         CALL field_zero_gradient(by, c_stagger_by, i)
         CALL field_zero_gradient(bz, c_stagger_bz, i)
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     DO i = 1, 2*c_ndims
       ! These apply zero field boundary conditions on the edges
@@ -391,7 +530,7 @@ CONTAINS
         CALL field_clamp_zero(bx, ng, c_stagger_bx, i)
         CALL field_clamp_zero(by, ng, c_stagger_by, i)
         CALL field_clamp_zero(bz, ng, c_stagger_bz, i)
-      ENDIF
+      END IF
 
       ! These apply zero gradient boundary conditions on the edges
       IF (bc_field(i) == c_bc_zero_gradient &
@@ -400,8 +539,8 @@ CONTAINS
         CALL field_zero_gradient(bx, c_stagger_bx, i)
         CALL field_zero_gradient(by, c_stagger_by, i)
         CALL field_zero_gradient(bz, c_stagger_bz, i)
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
   END SUBROUTINE bfield_bcs
 
@@ -418,13 +557,13 @@ CONTAINS
       i = c_bd_x_min
       IF (add_laser(i) .OR. bc_field(i) == c_bc_simple_outflow) &
           CALL outflow_bcs_x_min
-    ENDIF
+    END IF
 
     IF (x_max_boundary) THEN
       i = c_bd_x_max
       IF (add_laser(i) .OR. bc_field(i) == c_bc_simple_outflow) &
           CALL outflow_bcs_x_max
-    ENDIF
+    END IF
 
     CALL bfield_bcs(.TRUE.)
 
@@ -438,18 +577,27 @@ CONTAINS
     TYPE(particle_list), DIMENSION(-1:1) :: send, recv
     INTEGER :: xbd
     INTEGER(i8) :: ixp
+    INTEGER, DIMENSION(2*c_ndims) :: bc_species
     LOGICAL :: out_of_bounds
-    INTEGER :: ispecies, i, ix
+    INTEGER :: bc, ispecies, i, ix
     REAL(num) :: temp(3)
-    REAL(num) :: part_pos
+    REAL(num) :: part_pos, boundary_shift
+    REAL(num) :: x_min_outer, x_max_outer
+
+    boundary_shift = 1.0_num + 0.5_num * png
+
+    x_min_outer = x_min - dx * boundary_shift
+    x_max_outer = x_max + dx * boundary_shift
 
     DO ispecies = 1, n_species
       cur => species_list(ispecies)%attached_list%head
 
+      bc_species = species_list(ispecies)%bc_particle
+
       DO ix = -1, 1, 2
         CALL create_empty_partlist(send(ix))
         CALL create_empty_partlist(recv(ix))
-      ENDDO
+      END DO
 
       DO WHILE (ASSOCIATED(cur))
         next => cur%next
@@ -462,14 +610,14 @@ CONTAINS
             .OR. bc_field(c_bd_x_min) == c_bc_cpml_outflow) THEN
           IF (x_min_boundary) THEN
             ! Particle has left the system
-            IF (part_pos < x_min) THEN
+            IF (part_pos < x_min_outer) THEN
               xbd = 0
               out_of_bounds = .TRUE.
-            ENDIF
+            END IF
           ELSE
             ! Particle has left this processor
             IF (part_pos < x_min_local) xbd = -1
-          ENDIF
+          END IF
         ELSE
           ! Particle has left this processor
           IF (part_pos < x_min_local) THEN
@@ -477,14 +625,24 @@ CONTAINS
             ! Particle has left the system
             IF (x_min_boundary) THEN
               xbd = 0
-              IF (bc_particle(c_bd_x_min) == c_bc_reflect) THEN
+              bc = bc_species(c_bd_x_min)
+              IF (bc == c_bc_reflect) THEN
                 cur%part_pos = 2.0_num * x_min - part_pos
                 cur%part_p(1) = -cur%part_p(1)
-              ELSE IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
+              ELSE IF (bc == c_bc_periodic) THEN
+                xbd = -1
+                cur%part_pos = part_pos + length_x
+              END IF
+            END IF
+            IF (part_pos < x_min_outer) THEN
+              IF (bc == c_bc_thermal) THEN
                 DO i = 1, 3
                   temp(i) = species_list(ispecies)%ext_temp_x_min(i)
-                ENDDO
+                END DO
 
+#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
+                cur%id = generate_id()
+#endif
                 ! x-direction
                 i = 1
                 cur%part_p(i) = flux_momentum_from_temperature(&
@@ -502,29 +660,26 @@ CONTAINS
 
                 cur%part_pos = 2.0_num * x_min - part_pos
 
-              ELSE IF (bc_particle(c_bd_x_min) == c_bc_periodic) THEN
-                xbd = -1
-                cur%part_pos = part_pos + length_x
               ELSE
                 ! Default to open boundary conditions - remove particle
                 out_of_bounds = .TRUE.
-              ENDIF
-            ENDIF
-          ENDIF
-        ENDIF
+              END IF
+            END IF
+          END IF
+        END IF
 
         IF (bc_field(c_bd_x_max) == c_bc_cpml_laser &
             .OR. bc_field(c_bd_x_max) == c_bc_cpml_outflow) THEN
           IF (x_max_boundary) THEN
             ! Particle has left the system
-            IF (part_pos >= x_max) THEN
+            IF (part_pos >= x_max_outer) THEN
               xbd = 0
               out_of_bounds = .TRUE.
-            ENDIF
+            END IF
           ELSE
             ! Particle has left this processor
-            IF (part_pos >= x_max_local) xbd =  1
-          ENDIF
+            IF (part_pos >= x_max_local) xbd = 1
+          END IF
         ELSE
           ! Particle has left this processor
           IF (part_pos >= x_max_local) THEN
@@ -532,14 +687,24 @@ CONTAINS
             ! Particle has left the system
             IF (x_max_boundary) THEN
               xbd = 0
-              IF (bc_particle(c_bd_x_max) == c_bc_reflect) THEN
+              bc = bc_species(c_bd_x_max)
+              IF (bc == c_bc_reflect) THEN
                 cur%part_pos = 2.0_num * x_max - part_pos
                 cur%part_p(1) = -cur%part_p(1)
-              ELSE IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
+              ELSE IF (bc == c_bc_periodic) THEN
+                xbd = 1
+                cur%part_pos = part_pos - length_x
+              END IF
+            END IF
+            IF (part_pos >= x_max_outer) THEN
+              IF (bc == c_bc_thermal) THEN
                 DO i = 1, 3
                   temp(i) = species_list(ispecies)%ext_temp_x_max(i)
-                ENDDO
+                END DO
 
+#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
+                cur%id = generate_id()
+#endif
                 ! x-direction
                 i = 1
                 cur%part_p(i) = -flux_momentum_from_temperature(&
@@ -557,16 +722,13 @@ CONTAINS
 
                 cur%part_pos = 2.0_num * x_max - part_pos
 
-              ELSE IF (bc_particle(c_bd_x_max) == c_bc_periodic) THEN
-                xbd = 1
-                cur%part_pos = part_pos - length_x
               ELSE
                 ! Default to open boundary conditions - remove particle
                 out_of_bounds = .TRUE.
-              ENDIF
-            ENDIF
-          ENDIF
-        ENDIF
+              END IF
+            END IF
+          END IF
+        END IF
 
         IF (out_of_bounds) THEN
           ! Particle has gone forever
@@ -577,17 +739,17 @@ CONTAINS
                 ejected_list(ispecies)%attached_list, cur)
           ELSE
             DEALLOCATE(cur)
-          ENDIF
+          END IF
         ELSE IF (ABS(xbd) > 0) THEN
           ! Particle has left processor, send it to its neighbour
           CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
           CALL add_particle_to_partlist(send(xbd), cur)
-        ENDIF
+        END IF
 
         ! Move to next particle
         cur => next
-      ENDDO
+      END DO
 
       ! swap Particles
       DO ix = -1, 1, 2
@@ -596,35 +758,27 @@ CONTAINS
             neighbour(ix), neighbour(ixp))
         CALL append_partlist(species_list(ispecies)%attached_list, &
             recv(ixp))
-      ENDDO
+      END DO
 
       DO ix = -1, 1, 2
         CALL destroy_partlist(send(ix))
         CALL destroy_partlist(recv(ix))
-      ENDDO
+      END DO
 
-    ENDDO
+    END DO
 
   END SUBROUTINE particle_bcs
 
 
 
-  SUBROUTINE current_bcs
+  SUBROUTINE current_bcs(species)
 
-    INTEGER :: i
+    INTEGER, INTENT(IN), OPTIONAL :: species
 
-    ! domain is decomposed. Just add currents at edges
-    CALL processor_summation_bcs(jx, jng, c_dir_x)
-    CALL processor_summation_bcs(jy, jng, c_dir_y)
-    CALL processor_summation_bcs(jz, jng, c_dir_z)
-
-    DO i = 1, 2*c_ndims
-      IF (bc_particle(i) == c_bc_reflect) THEN
-        CALL field_clamp_zero(jx, jng, c_stagger_jx, i)
-        CALL field_clamp_zero(jy, jng, c_stagger_jy, i)
-        CALL field_clamp_zero(jz, jng, c_stagger_jz, i)
-      ENDIF
-    ENDDO
+    ! Domain is decomposed. Just add currents at edges
+    CALL processor_summation_bcs(jx, jng, c_dir_x, species)
+    CALL processor_summation_bcs(jy, jng, c_dir_y, species)
+    CALL processor_summation_bcs(jz, jng, c_dir_z, species)
 
   END SUBROUTINE current_bcs
 
@@ -678,7 +832,7 @@ CONTAINS
         ELSE
           cpml_x_min_end = nx ! in local grid coordinates
           cpml_x_min_offset = cpml_thickness
-        ENDIF
+        END IF
 
         DO ix = cpml_x_min_start,cpml_x_min_end
           ! runs from 1 to cpml_thickness in global coordinates
@@ -704,16 +858,16 @@ CONTAINS
           cpml_kappa_bx(ix) = 1.0_num + (cpml_kappa_max - 1.0_num) * x_pos_m
           cpml_sigma_bx(ix) = cpml_sigma_maxval * x_pos_m
           cpml_a_bx(ix) = cpml_a_max * x_pos_ma
-        ENDDO
-      ENDIF
+        END DO
+      END IF
 
       ! Ghost cells start at the edge of the CPML boundary
       IF (nx_global_min <= cpml_thickness + fng + 1 &
           .AND. nx_global_max >= cpml_thickness + fng + 1) THEN
         add_laser(i) = .TRUE.
         cpml_x_min_laser_idx = cpml_thickness + fng + 1 - nx_global_min
-      ENDIF
-    ENDIF
+      END IF
+    END IF
 
     ! ============= x_max boundary =============
 
@@ -740,7 +894,7 @@ CONTAINS
         ELSE
           cpml_x_max_start = 1 ! in local grid coordinates
           cpml_x_max_offset = cpml_thickness
-        ENDIF
+        END IF
 
         DO ix = cpml_x_max_start,cpml_x_max_end
           ! runs from cpml_thickness to 1 in global coordinates
@@ -766,8 +920,8 @@ CONTAINS
           cpml_kappa_bx(ix-1) = 1.0_num + (cpml_kappa_max - 1.0_num) * x_pos_m
           cpml_sigma_bx(ix-1) = cpml_sigma_maxval * x_pos_m
           cpml_a_bx(ix-1) = cpml_a_max * x_pos_ma
-        ENDDO
-      ENDIF
+        END DO
+      END IF
 
       ! Ghost cells start at the edge of the CPML boundary
       IF (nx_global_min <= nx_global - cpml_thickness - fng + 2 &
@@ -775,8 +929,8 @@ CONTAINS
         add_laser(i) = .TRUE.
         cpml_x_max_laser_idx = &
             nx_global - cpml_thickness - fng + 2 - nx_global_min
-      ENDIF
-    ENDIF
+      END IF
+    END IF
 
     x_min_local = x_grid_min_local + (cpml_x_min_offset - 0.5_num) * dx
     x_max_local = x_grid_max_local - (cpml_x_max_offset - 0.5_num) * dx
@@ -841,8 +995,8 @@ CONTAINS
         cpml_psi_ezx(ipos) = bcoeff * cpml_psi_ezx(ipos) &
             + ccoeff_d * (by(ipos) - by(ipos-1))
         ez(ipos) = ez(ipos) + fac * cpml_psi_ezx(ipos)
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     ! ============= x_max boundary =============
 
@@ -863,8 +1017,8 @@ CONTAINS
         cpml_psi_ezx(ipos) = bcoeff * cpml_psi_ezx(ipos) &
             + ccoeff_d * (by(ipos) - by(ipos-1))
         ez(ipos) = ez(ipos) + fac * cpml_psi_ezx(ipos)
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
   END SUBROUTINE cpml_advance_e_currents
 
@@ -896,8 +1050,8 @@ CONTAINS
         cpml_psi_bzx(ipos) = bcoeff * cpml_psi_bzx(ipos) &
             + ccoeff_d * (ey(ipos+1) - ey(ipos))
         bz(ipos) = bz(ipos) - tstep * cpml_psi_bzx(ipos)
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     ! ============= x_max boundary =============
 
@@ -918,8 +1072,8 @@ CONTAINS
         cpml_psi_bzx(ipos) = bcoeff * cpml_psi_bzx(ipos) &
             + ccoeff_d * (ey(ipos+1) - ey(ipos))
         bz(ipos) = bz(ipos) - tstep * cpml_psi_bzx(ipos)
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
   END SUBROUTINE cpml_advance_b_currents
 

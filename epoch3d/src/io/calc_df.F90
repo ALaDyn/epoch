@@ -23,75 +23,12 @@ MODULE calc_df
 
 CONTAINS
 
-  SUBROUTINE calc_boundary(data_array)
+  SUBROUTINE calc_boundary(data_array, species)
 
     REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(OUT) :: data_array
-    INTEGER :: i, j, k
+    INTEGER, INTENT(IN), OPTIONAL :: species
 
-    CALL processor_summation_bcs(data_array, ng)
-
-    IF (x_min_boundary .AND. bc_particle(c_bd_x_min) /= c_bc_periodic &
-        .AND. bc_particle(c_bd_x_min) /= c_bc_reflect) THEN
-      DO k = 1-ng, nz+ng
-      DO j = 1-ng, ny+ng
-      DO i = 1, ng
-        data_array(i,j,k) = data_array(i,j,k) + data_array(1-i,j,k)
-      ENDDO
-      ENDDO
-      ENDDO
-    ENDIF
-    IF (x_max_boundary .AND. bc_particle(c_bd_x_max) /= c_bc_periodic &
-        .AND. bc_particle(c_bd_x_max) /= c_bc_reflect) THEN
-      DO k = 1-ng, nz+ng
-      DO j = 1-ng, ny+ng
-      DO i = 1, ng
-        data_array(nx-i+1,j,k) = data_array(nx-i+1,j,k) + data_array(nx+i,j,k)
-      ENDDO
-      ENDDO
-      ENDDO
-    ENDIF
-
-    IF (y_min_boundary .AND. bc_particle(c_bd_y_min) /= c_bc_periodic &
-        .AND. bc_particle(c_bd_y_min) /= c_bc_reflect) THEN
-      DO k = 1-ng, nz+ng
-      DO j = 1, ng
-      DO i = 1-ng, nx+ng
-        data_array(i,j,k) = data_array(i,j,k) + data_array(i,1-j,k)
-      ENDDO
-      ENDDO
-      ENDDO
-    ENDIF
-    IF (y_max_boundary .AND. bc_particle(c_bd_y_max) /= c_bc_periodic &
-        .AND. bc_particle(c_bd_y_max) /= c_bc_reflect) THEN
-      DO k = 1-ng, nz+ng
-      DO j = 1, ng
-      DO i = 1-ng, nx+ng
-        data_array(i,ny-j+1,k) = data_array(i,ny-j+1,k) + data_array(i,ny+j,k)
-      ENDDO
-      ENDDO
-      ENDDO
-    ENDIF
-
-    IF (z_min_boundary .AND. bc_particle(c_bd_z_min) /= c_bc_periodic &
-        .AND. bc_particle(c_bd_z_min) /= c_bc_reflect) THEN
-      DO k = 1, ng
-      DO j = 1-ng, ny+ng
-      DO i = 1-ng, nx+ng
-        data_array(i,j,k) = data_array(i,j,k) + data_array(i,j,1-k)
-      ENDDO
-      ENDDO
-      ENDDO
-    ENDIF
-    IF (z_max_boundary .AND. bc_particle(c_bd_z_max) /= c_bc_periodic &
-        .AND. bc_particle(c_bd_z_max) /= c_bc_reflect) THEN
-      DO k = 1, ng
-      DO j = -ng, ny+ng
-      DO i = -ng, nx+ng
-        data_array(i,j,nz-k+1) = data_array(i,j,nz-k+1) + data_array(i,j,nz+k)
-      ENDDO
-      ENDDO
-      ENDDO
-    ENDIF
+    CALL processor_summation_bcs(data_array, ng, species=species)
 
   END SUBROUTINE calc_boundary
 
@@ -125,7 +62,7 @@ CONTAINS
       spec_start = 1
       spec_end = n_species
       spec_sum = .TRUE.
-    ENDIF
+    END IF
 
     DO ispecies = spec_start, spec_end
       IF (io_list(ispecies)%species_type == c_species_id_photon) CYCLE
@@ -160,20 +97,21 @@ CONTAINS
           data_array(cell_x+ix, cell_y+iy, cell_z+iz) = &
               data_array(cell_x+ix, cell_y+iy, cell_z+iz) &
               + gx(ix) * gy(iy) * gz(iz) * wdata
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
 
         current => current%next
-      ENDDO
-    ENDDO
-
-    data_array = data_array * idx
+      END DO
+      CALL calc_boundary(data_array, ispecies)
+    END DO
 
     CALL calc_boundary(data_array)
+
+    data_array = data_array * idx
     DO ix = 1, 2*c_ndims
       CALL field_zero_gradient(data_array, c_stagger_centre, ix)
-    ENDDO
+    END DO
 
   END SUBROUTINE calc_mass_density
 
@@ -210,9 +148,11 @@ CONTAINS
       spec_start = 1
       spec_end = n_species
       spec_sum = .TRUE.
-    ENDIF
+    END IF
 
     DO ispecies = spec_start, spec_end
+      IF (spec_sum .AND. &
+          io_list(ispecies)%species_type == c_species_id_photon) CYCLE
 #ifndef NO_TRACER_PARTICLES
       IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
 #endif
@@ -252,7 +192,7 @@ CONTAINS
 #else
           wdata = 0.0_num
 #endif
-        ENDIF
+        END IF
 
 #include "particle_to_grid.inc"
 
@@ -265,13 +205,15 @@ CONTAINS
           wt(cell_x+ix, cell_y+iy, cell_z+iz) = &
               wt(cell_x+ix, cell_y+iy, cell_z+iz) &
               + gx(ix) * gy(iy) * gz(iz) * part_w
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
 
         current => current%next
-      ENDDO
-    ENDDO
+      END DO
+      CALL calc_boundary(data_array, ispecies)
+      CALL calc_boundary(wt, ispecies)
+    END DO
 
     CALL calc_boundary(data_array)
     CALL calc_boundary(wt)
@@ -279,7 +221,7 @@ CONTAINS
     data_array = data_array / MAX(wt, c_tiny)
     DO ix = 1, 2*c_ndims
       CALL field_zero_gradient(data_array, c_stagger_centre, ix)
-    ENDDO
+    END DO
 
     DEALLOCATE(wt)
 
@@ -296,8 +238,8 @@ CONTAINS
     ! The weight of a particle
     REAL(num) :: part_w
     ! The data to be weighted onto the grid
-    REAL(num) :: wdata = 0.0_num
-    REAL(num) :: fac, gamma_rel, gamma_rel_m1, ek, part_flux, xfac, yfac, zfac
+    REAL(num) :: wdata
+    REAL(num) :: fac, gamma_rel, gamma_rel_m1, part_flux, xfac, yfac, zfac
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: wt
     INTEGER :: ispecies, ix, iy, iz, spec_start, spec_end
     TYPE(particle), POINTER :: current
@@ -322,9 +264,11 @@ CONTAINS
       spec_start = 1
       spec_end = n_species
       spec_sum = .TRUE.
-    ENDIF
+    END IF
 
     DO ispecies = spec_start, spec_end
+      IF (spec_sum .AND. &
+          io_list(ispecies)%species_type == c_species_id_photon) CYCLE
 #ifndef NO_TRACER_PARTICLES
       IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
 #endif
@@ -357,46 +301,46 @@ CONTAINS
           gamma_rel = SQRT(part_u2 + 1.0_num)
           gamma_rel_m1 = part_u2 / (gamma_rel + 1.0_num)
 
-          ek = gamma_rel_m1 * fac
+          wdata = gamma_rel_m1 * fac
         ELSE
 #ifdef PHOTONS
           fac = c / current%particle_energy
           part_ux = current%part_p(1) * fac
           part_uy = current%part_p(2) * fac
           part_uz = current%part_p(3) * fac
-          ek = current%particle_energy * part_w
           gamma_rel = 1.0_num
+          wdata = current%particle_energy * part_w
 #else
-          ek = 0.0_num
           gamma_rel = 1.0_num
+          wdata = 0.0_num
 #endif
-        ENDIF
+        END IF
 
         SELECT CASE(direction)
         CASE(-c_dir_x)
           ! negative flux in x
           part_flux = xfac * part_ux / gamma_rel
-          wdata = -ek * MIN(part_flux, 0.0_num)
+          wdata = -wdata * MIN(part_flux, 0.0_num)
         CASE( c_dir_x)
           ! positive flux in x
           part_flux = xfac * part_ux / gamma_rel
-          wdata =  ek * MAX(part_flux, 0.0_num)
+          wdata =  wdata * MAX(part_flux, 0.0_num)
         CASE(-c_dir_y)
           ! negative flux in y
           part_flux = yfac * part_uy / gamma_rel
-          wdata = -ek * MIN(part_flux, 0.0_num)
+          wdata = -wdata * MIN(part_flux, 0.0_num)
         CASE( c_dir_y)
           ! positive flux in y
           part_flux = yfac * part_uy / gamma_rel
-          wdata =  ek * MAX(part_flux, 0.0_num)
+          wdata =  wdata * MAX(part_flux, 0.0_num)
         CASE(-c_dir_z)
           ! negative flux in z
           part_flux = zfac * part_uz / gamma_rel
-          wdata = -ek * MIN(part_flux, 0.0_num)
+          wdata = -wdata * MIN(part_flux, 0.0_num)
         CASE( c_dir_z)
           ! positive flux in z
           part_flux = zfac * part_uz / gamma_rel
-          wdata =  ek * MAX(part_flux, 0.0_num)
+          wdata =  wdata * MAX(part_flux, 0.0_num)
         END SELECT
 
 #include "particle_to_grid.inc"
@@ -410,13 +354,15 @@ CONTAINS
           wt(cell_x+ix, cell_y+iy, cell_z+iz) = &
               wt(cell_x+ix, cell_y+iy, cell_z+iz) &
               + gx(ix) * gy(iy) * gz(iz) * part_w
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
 
         current => current%next
-      ENDDO
-    ENDDO
+      END DO
+      CALL calc_boundary(data_array, ispecies)
+      CALL calc_boundary(wt, ispecies)
+    END DO
 
     CALL calc_boundary(data_array)
     CALL calc_boundary(wt)
@@ -424,7 +370,7 @@ CONTAINS
     data_array = data_array / MAX(wt, c_tiny)
     DO ix = 1, 2*c_ndims
       CALL field_zero_gradient(data_array, c_stagger_centre, ix)
-    ENDDO
+    END DO
 
     DEALLOCATE(wt)
 
@@ -451,9 +397,9 @@ CONTAINS
         bz_cc = 0.25_num * (bz(ix-1, iy-1, iz  ) + bz(ix, iy-1, iz  ) &
                          +  bz(ix-1, iy  , iz  ) + bz(ix, iy  , iz  ))
         data_array(ix,iy,iz) = (ey_cc * bz_cc - ez_cc * by_cc) / mu0
-      ENDDO
-      ENDDO
-      ENDDO
+      END DO
+      END DO
+      END DO
     CASE(c_dir_y)
       DO iz = 1, nz
       DO iy = 1, ny
@@ -465,9 +411,9 @@ CONTAINS
         bz_cc = 0.25_num * (bz(ix-1, iy-1, iz  ) + bz(ix, iy-1, iz  ) &
                          +  bz(ix-1, iy  , iz  ) + bz(ix, iy  , iz  ))
         data_array(ix,iy,iz) = (ez_cc * bx_cc - ex_cc * bz_cc) / mu0
-      ENDDO
-      ENDDO
-      ENDDO
+      END DO
+      END DO
+      END DO
     CASE(c_dir_z)
       DO iz = 1, nz
       DO iy = 1, ny
@@ -479,9 +425,9 @@ CONTAINS
         by_cc = 0.25_num * (by(ix-1, iy  , iz-1) + by(ix, iy, iz-1) &
                          +  by(ix-1, iy  , iz  ) + by(ix, iy, iz  ))
         data_array(ix,iy,iz) = (ex_cc * by_cc - ey_cc * bx_cc) / mu0
-      ENDDO
-      ENDDO
-      ENDDO
+      END DO
+      END DO
+      END DO
     END SELECT
 
   END SUBROUTINE calc_poynt_flux
@@ -516,7 +462,7 @@ CONTAINS
       spec_start = 1
       spec_end = n_species
       spec_sum = .TRUE.
-    ENDIF
+    END IF
 
     DO ispecies = spec_start, spec_end
       IF (io_list(ispecies)%species_type == c_species_id_photon) CYCLE
@@ -551,20 +497,21 @@ CONTAINS
           data_array(cell_x+ix, cell_y+iy, cell_z+iz) = &
               data_array(cell_x+ix, cell_y+iy, cell_z+iz) &
               + gx(ix) * gy(iy) * gz(iz) * wdata
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
 
         current => current%next
-      ENDDO
-    ENDDO
-
-    data_array = data_array * idx
+      END DO
+      CALL calc_boundary(data_array, ispecies)
+    END DO
 
     CALL calc_boundary(data_array)
+
+    data_array = data_array * idx
     DO ix = 1, 2*c_ndims
       CALL field_zero_gradient(data_array, c_stagger_centre, ix)
-    ENDDO
+    END DO
 
   END SUBROUTINE calc_charge_density
 
@@ -594,9 +541,10 @@ CONTAINS
       spec_start = 1
       spec_end = n_species
       spec_sum = .TRUE.
-    ENDIF
+    END IF
 
     DO ispecies = spec_start, spec_end
+      IF (io_list(ispecies)%species_type == c_species_id_photon) CYCLE
 #ifndef NO_TRACER_PARTICLES
       IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
 #endif
@@ -616,22 +564,146 @@ CONTAINS
           data_array(cell_x+ix, cell_y+iy, cell_z+iz) = &
               data_array(cell_x+ix, cell_y+iy, cell_z+iz) &
               + gx(ix) * gy(iy) * gz(iz) * wdata
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
 
         current => current%next
-      ENDDO
-    ENDDO
-
-    data_array = data_array * idx
+      END DO
+      CALL calc_boundary(data_array, ispecies)
+    END DO
 
     CALL calc_boundary(data_array)
+
+    data_array = data_array * idx
     DO ix = 1, 2*c_ndims
       CALL field_zero_gradient(data_array, c_stagger_centre, ix)
-    ENDDO
+    END DO
 
   END SUBROUTINE calc_number_density
+
+
+
+  SUBROUTINE calc_ppc(data_array, current_species)
+
+    REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(OUT) :: data_array
+    INTEGER, INTENT(IN) :: current_species
+    INTEGER :: ispecies, spec_start, spec_end
+    TYPE(particle), POINTER :: current
+    LOGICAL :: spec_sum
+    REAL(num) :: cell_x_r, cell_y_r, cell_z_r
+    INTEGER :: cell_x, cell_y, cell_z
+
+    data_array = 0.0_num
+
+    spec_start = current_species
+    spec_end = current_species
+    spec_sum = .FALSE.
+
+    IF (current_species <= 0) THEN
+      spec_start = 1
+      spec_end = n_species
+      spec_sum = .TRUE.
+    END IF
+
+    DO ispecies = spec_start, spec_end
+#ifndef NO_TRACER_PARTICLES
+      IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
+#endif
+      current => io_list(ispecies)%attached_list%head
+
+      DO WHILE (ASSOCIATED(current))
+#ifdef PARTICLE_SHAPE_TOPHAT
+        cell_x_r = (current%part_pos(1) - x_grid_min_local) / dx
+        cell_y_r = (current%part_pos(2) - y_grid_min_local) / dy
+        cell_z_r = (current%part_pos(3) - z_grid_min_local) / dz
+#else
+        cell_x_r = (current%part_pos(1) - x_grid_min_local) / dx + 0.5_num
+        cell_y_r = (current%part_pos(2) - y_grid_min_local) / dy + 0.5_num
+        cell_z_r = (current%part_pos(3) - z_grid_min_local) / dz + 0.5_num
+#endif
+        cell_x = FLOOR(cell_x_r) + 1
+        cell_y = FLOOR(cell_y_r) + 1
+        cell_z = FLOOR(cell_z_r) + 1
+
+        data_array(cell_x,cell_y,cell_z) = &
+            data_array(cell_x,cell_y,cell_z) + 1.0_num
+
+        current => current%next
+      END DO
+    END DO
+
+  END SUBROUTINE calc_ppc
+
+
+
+  SUBROUTINE calc_average_weight(data_array, current_species)
+
+    REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(OUT) :: data_array
+    INTEGER, INTENT(IN) :: current_species
+    ! The data to be weighted onto the grid
+    REAL(num) :: wdata
+    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: part_count
+    INTEGER :: ispecies, spec_start, spec_end
+    TYPE(particle), POINTER :: current
+    LOGICAL :: spec_sum
+    REAL(num) :: cell_x_r, cell_y_r, cell_z_r
+    INTEGER :: cell_x, cell_y, cell_z
+
+    data_array = 0.0_num
+
+    spec_start = current_species
+    spec_end = current_species
+    spec_sum = .FALSE.
+
+    IF (current_species <= 0) THEN
+      spec_start = 1
+      spec_end = n_species
+      spec_sum = .TRUE.
+    END IF
+
+    ALLOCATE(part_count(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    part_count = 0.0_num
+
+    DO ispecies = spec_start, spec_end
+#ifndef NO_TRACER_PARTICLES
+      IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
+#endif
+      current => io_list(ispecies)%attached_list%head
+      wdata = io_list(ispecies)%weight
+
+      DO WHILE (ASSOCIATED(current))
+#ifndef PER_SPECIES_WEIGHT
+        wdata = current%weight
+#endif
+
+#ifdef PARTICLE_SHAPE_TOPHAT
+        cell_x_r = (current%part_pos(1) - x_grid_min_local) / dx
+        cell_y_r = (current%part_pos(2) - y_grid_min_local) / dy
+        cell_z_r = (current%part_pos(3) - z_grid_min_local) / dz
+#else
+        cell_x_r = (current%part_pos(1) - x_grid_min_local) / dx + 0.5_num
+        cell_y_r = (current%part_pos(2) - y_grid_min_local) / dy + 0.5_num
+        cell_z_r = (current%part_pos(3) - z_grid_min_local) / dz + 0.5_num
+#endif
+        cell_x = FLOOR(cell_x_r) + 1
+        cell_y = FLOOR(cell_y_r) + 1
+        cell_z = FLOOR(cell_z_r) + 1
+
+        data_array(cell_x,cell_y,cell_z) = &
+            data_array(cell_x,cell_y,cell_z) + wdata
+        part_count(cell_x,cell_y,cell_z) = &
+            part_count(cell_x,cell_y,cell_z) + 1.0_num
+
+        current => current%next
+      END DO
+    END DO
+
+    data_array = data_array / MAX(part_count, c_tiny)
+
+    DEALLOCATE(part_count)
+
+  END SUBROUTINE calc_average_weight
 
 
 
@@ -650,16 +722,6 @@ CONTAINS
     LOGICAL :: spec_sum
 #include "particle_head.inc"
 
-    spec_start = current_species
-    spec_end = current_species
-    spec_sum = .FALSE.
-
-    IF (current_species <= 0) THEN
-      spec_start = 1
-      spec_end = n_species
-      spec_sum = .TRUE.
-    ENDIF
-
     ALLOCATE(meanx(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
     ALLOCATE(meany(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
     ALLOCATE(meanz(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
@@ -670,7 +732,18 @@ CONTAINS
     part_count = 0.0_num
     sigma = 0.0_num
 
+    spec_start = current_species
+    spec_end = current_species
+    spec_sum = .FALSE.
+
+    IF (current_species <= 0) THEN
+      spec_start = 1
+      spec_end = n_species
+      spec_sum = .TRUE.
+    END IF
+
     DO ispecies = spec_start, spec_end
+      IF (io_list(ispecies)%species_type == c_species_id_photon) CYCLE
 #ifndef NO_TRACER_PARTICLES
       IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
 #endif
@@ -704,12 +777,16 @@ CONTAINS
               meanz(cell_x+ix, cell_y+iy, cell_z+iz) + gf * part_pmz
           part_count(cell_x+ix, cell_y+iy, cell_z+iz) = &
               part_count(cell_x+ix, cell_y+iy, cell_z+iz) + gf
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
         current => current%next
-      ENDDO
-    ENDDO
+      END DO
+      CALL calc_boundary(meanx, ispecies)
+      CALL calc_boundary(meany, ispecies)
+      CALL calc_boundary(meanz, ispecies)
+      CALL calc_boundary(part_count, ispecies)
+    END DO
 
     CALL calc_boundary(meanx)
     CALL calc_boundary(meany)
@@ -724,6 +801,7 @@ CONTAINS
 
     part_count = 0.0_num
     DO ispecies = spec_start, spec_end
+      IF (io_list(ispecies)%species_type == c_species_id_photon) CYCLE
 #ifndef NO_TRACER_PARTICLES
       IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
 #endif
@@ -752,12 +830,14 @@ CONTAINS
               + (part_pmz - meanz(cell_x+ix, cell_y+iy, cell_z+iz))**2)
           part_count(cell_x+ix, cell_y+iy, cell_z+iz) = &
               part_count(cell_x+ix, cell_y+iy, cell_z+iz) + gf
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
         current => current%next
-      ENDDO
-    ENDDO
+      END DO
+      CALL calc_boundary(sigma, ispecies)
+      CALL calc_boundary(part_count, ispecies)
+    END DO
 
     CALL calc_boundary(sigma)
     CALL calc_boundary(part_count)
@@ -801,35 +881,40 @@ CONTAINS
       spec_start = 1
       spec_end = n_species
       spec_sum = .TRUE.
-    ENDIF
+    END IF
 
     DO ispecies = spec_start, spec_end
+      IF (io_list(ispecies)%species_type == c_species_id_photon) CYCLE
 #ifndef NO_TRACER_PARTICLES
       IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
 #endif
       current => io_list(ispecies)%attached_list%head
+
       DO WHILE (ASSOCIATED(current))
 #include "particle_to_grid.inc"
 
         wdata = evaluator(current, ispecies)
+
         DO iz = sf_min, sf_max
         DO iy = sf_min, sf_max
         DO ix = sf_min, sf_max
           data_array(cell_x+ix, cell_y+iy, cell_z+iz) = &
               data_array(cell_x+ix, cell_y+iy, cell_z+iz) &
               + gx(ix) * gy(iy) * gz(iz) * wdata
-        ENDDO
-        ENDDO
-        ENDDO
+        END DO
+        END DO
+        END DO
 
         current => current%next
-      ENDDO
-    ENDDO
+      END DO
+      CALL calc_boundary(data_array, ispecies)
+    END DO
 
     CALL calc_boundary(data_array)
+
     DO ix = 1, 2*c_ndims
       CALL field_zero_gradient(data_array, c_stagger_centre, ix)
-    ENDDO
+    END DO
 
   END SUBROUTINE calc_on_grid_with_evaluator
 
@@ -837,21 +922,22 @@ CONTAINS
 
   SUBROUTINE calc_per_species_current(data_array, current_species, direction)
 
-    REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(INOUT) :: data_array
+    REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(OUT) :: data_array
     INTEGER, INTENT(IN) :: current_species, direction
-
+    ! Properties of the current particle. Copy out of particle arrays for speed
+    REAL(num) :: part_q, part_mc
     REAL(num) :: part_px, part_py, part_pz
-    REAL(num) :: part_q, part_mc, part_w
-    REAL(num) :: part_j = 0.0_num
-    REAL(num) :: idx, root, fac
-    INTEGER :: ispecies, spec_start, spec_end, ix, iy, iz
-    INTEGER(i8) :: ipart
+    ! The data to be weighted onto the grid
+    REAL(num) :: wdata
+    REAL(num) :: fac, idx, root
+    INTEGER :: ispecies, ix, iy, iz, spec_start, spec_end
+    TYPE(particle), POINTER :: current
     LOGICAL :: spec_sum
-
-    TYPE (particle), POINTER :: current, next
 #include "particle_head.inc"
 
     data_array = 0.0_num
+    part_q = 0.0_num
+    fac = 0.0_num
 
     idx = 1.0_num / dx / dy / dz
 
@@ -863,7 +949,7 @@ CONTAINS
       spec_start = 1
       spec_end = n_species
       spec_sum = .TRUE.
-    ENDIF
+    END IF
 
     DO ispecies = spec_start, spec_end
       IF (io_list(ispecies)%species_type == c_species_id_photon) CYCLE
@@ -871,26 +957,24 @@ CONTAINS
       IF (spec_sum .AND. io_list(ispecies)%tracer) CYCLE
 #endif
       current => io_list(ispecies)%attached_list%head
-
-      part_w = io_list(ispecies)%weight
-      part_q  = io_list(ispecies)%charge
       part_mc = c * io_list(ispecies)%mass
-      fac = part_q * part_w
+      part_q  = io_list(ispecies)%charge
+      fac = io_list(ispecies)%weight
+      wdata = part_q * fac
 
-      DO ipart = 1, io_list(ispecies)%attached_list%count
-        next => current%next
+      DO WHILE (ASSOCIATED(current))
+        ! Copy the particle properties out for speed
+#ifdef PER_PARTICLE_CHARGE_MASS
+        part_mc = c * current%mass
+        part_q  = current%charge
 #ifndef PER_SPECIES_WEIGHT
-        part_w = current%weight
-#ifdef PER_PARTICLE_CHARGE_MASS
-        part_q  = current%charge
-        part_mc = c * current%mass
+        fac = current%weight
 #endif
-        fac = part_q * part_w
+        wdata = part_q * fac
 #else
-#ifdef PER_PARTICLE_CHARGE_MASS
-        part_q  = current%charge
-        part_mc = c * current%mass
-        fac = part_q * part_w
+#ifndef PER_SPECIES_WEIGHT
+        fac = current%weight
+        wdata = part_q * fac
 #endif
 #endif
 
@@ -901,11 +985,11 @@ CONTAINS
         root = 1.0_num / SQRT(part_mc**2 + part_px**2 + part_py**2 + part_pz**2)
         SELECT CASE (direction)
           CASE(c_dir_x)
-            part_j = fac * part_px * root
+            wdata = wdata * part_px * root
           CASE(c_dir_y)
-            part_j = fac * part_py * root
+            wdata = wdata * part_py * root
           CASE(c_dir_z)
-            part_j = fac * part_pz * root
+            wdata = wdata * part_pz * root
         END SELECT
 
 #include "particle_to_grid.inc"
@@ -915,17 +999,23 @@ CONTAINS
         DO ix = sf_min, sf_max
           data_array(cell_x+ix, cell_y+iy, cell_z+iz) = &
               data_array(cell_x+ix, cell_y+iy, cell_z+iz) &
-              + gx(ix) * gy(iy) * gz(iz) * part_j
-        ENDDO
-        ENDDO
-        ENDDO
-        current => next
-      ENDDO
-    ENDDO
+              + gx(ix) * gy(iy) * gz(iz) * wdata
+        END DO
+        END DO
+        END DO
 
-    fac = c * idx
-    data_array = data_array * fac
-    CALL processor_summation_bcs(data_array, ng, direction)
+        current => current%next
+      END DO
+      CALL calc_boundary(data_array, ispecies)
+    END DO
+
+    CALL calc_boundary(data_array)
+
+    idx = c * idx
+    data_array = data_array * idx
+    DO ix = 1, 2*c_ndims
+      CALL field_zero_gradient(data_array, c_stagger_centre, ix)
+    END DO
 
   END SUBROUTINE calc_per_species_current
 
@@ -1015,11 +1105,11 @@ CONTAINS
         ELSE
           particle_energy = particle_energy + current%particle_energy * part_w
 #endif
-        ENDIF
+        END IF
 
         current => current%next
-      ENDDO
-    ENDDO
+      END DO
+    END DO
 
     ! EM field energy
     field_energy = 0.0_num
@@ -1028,9 +1118,9 @@ CONTAINS
     DO i = 1, nx
       field_energy = field_energy + ex(i,j,k)**2 + ey(i,j,k)**2 &
           + ez(i,j,k)**2 + c2 * (bx(i,j,k)**2 + by(i,j,k)**2 + bz(i,j,k)**2)
-    ENDDO
-    ENDDO
-    ENDDO
+    END DO
+    END DO
+    END DO
     field_energy = 0.5_num * epsilon0 * field_energy * dx * dy * dz
 
     sum_out(1) = particle_energy
@@ -1045,14 +1135,17 @@ CONTAINS
 
   SUBROUTINE calc_initial_current
 
-    REAL(num), ALLOCATABLE :: jx(:,:,:), jy(:,:,:), jz(:,:,:)
+    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: jx, jy, jz
+    ! Properties of the current particle. Copy out of particle arrays for speed
+    REAL(num) :: part_q, part_mc
     REAL(num) :: part_px, part_py, part_pz
-    REAL(num) :: part_q, part_mc, part_w
+    ! The data to be weighted onto the grid
+    REAL(num) :: wdata
     REAL(num) :: part_jx, part_jy, part_jz
-    REAL(num) :: idx, root, fac, sum_out(3), sum_in(3)
+    REAL(num) :: fac, idx, root
+    REAL(num) :: sum_in(3), sum_out(3)
     INTEGER :: ispecies, ix, iy, iz
-    INTEGER(i8) :: ipart
-    TYPE (particle), POINTER :: current, next
+    TYPE(particle), POINTER :: current
 #include "particle_head.inc"
 
     ALLOCATE(jx(1-jng:nx+jng, 1-jng:ny+jng, 1-jng:nz+jng))
@@ -1071,26 +1164,24 @@ CONTAINS
       IF (species_list(ispecies)%tracer) CYCLE
 #endif
       current => species_list(ispecies)%attached_list%head
-
-      part_w = species_list(ispecies)%weight
-      part_q  = species_list(ispecies)%charge
       part_mc = c * species_list(ispecies)%mass
-      fac = part_q * part_w
+      part_q  = species_list(ispecies)%charge
+      fac = species_list(ispecies)%weight
+      wdata = part_q * fac
 
-      DO ipart = 1, species_list(ispecies)%attached_list%count
-        next => current%next
+      DO WHILE (ASSOCIATED(current))
+        ! Copy the particle properties out for speed
+#ifdef PER_PARTICLE_CHARGE_MASS
+        part_mc = c * current%mass
+        part_q  = current%charge
 #ifndef PER_SPECIES_WEIGHT
-        part_w = current%weight
-#ifdef PER_PARTICLE_CHARGE_MASS
-        part_q  = current%charge
-        part_mc = c * current%mass
+        fac = current%weight
 #endif
-        fac = part_q * part_w
+        wdata = part_q * fac
 #else
-#ifdef PER_PARTICLE_CHARGE_MASS
-        part_q  = current%charge
-        part_mc = c * current%mass
-        fac = part_q * part_w
+#ifndef PER_SPECIES_WEIGHT
+        fac = current%weight
+        wdata = part_q * fac
 #endif
 #endif
 
@@ -1100,9 +1191,9 @@ CONTAINS
         part_pz = current%part_p(3)
         root = 1.0_num / SQRT(part_mc**2 + part_px**2 + part_py**2 + part_pz**2)
 
-        part_jx = fac * part_px * root
-        part_jy = fac * part_py * root
-        part_jz = fac * part_pz * root
+        part_jx = wdata * part_px * root
+        part_jy = wdata * part_py * root
+        part_jz = wdata * part_pz * root
 
 #include "particle_to_grid.inc"
 
@@ -1118,12 +1209,13 @@ CONTAINS
           jz(cell_x+ix, cell_y+iy, cell_z+iz) = &
               jz(cell_x+ix, cell_y+iy, cell_z+iz) &
               + gx(ix) * gy(iy) * gz(iz) * part_jz
-        ENDDO
-        ENDDO
-        ENDDO
-        current => next
-      ENDDO
-    ENDDO
+        END DO
+        END DO
+        END DO
+
+        current => current%next
+      END DO
+    END DO
 
     sum_out(1) = SUM(jx)
     sum_out(2) = SUM(jy)

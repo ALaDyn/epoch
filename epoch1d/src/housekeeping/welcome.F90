@@ -105,9 +105,6 @@ CONTAINS
 #ifdef PER_SPECIES_WEIGHT
     found = .TRUE.
 #endif
-#ifdef PARTICLE_COUNT_UPDATE
-    found = .TRUE.
-#endif
 #ifdef NO_TRACER_PARTICLES
     found = .TRUE.
 #endif
@@ -141,13 +138,28 @@ CONTAINS
 #ifdef NO_IO
     found = .TRUE.
 #endif
+#ifdef DELTAF_METHOD
+    found = .TRUE.
+#endif
+#ifdef DELTAF_DEBUG
+    found = .TRUE.
+#endif
+#ifdef WORK_DONE_INTEGRATED
+    found = .TRUE.
+#endif
+#ifdef HC_PUSH
+    found = .TRUE.
+#endif
+#ifdef NO_USE_ISATTY
+    found = .TRUE.
+#endif
 
     IF (.NOT.found) THEN
       WRITE(*,*) '*************************************************************'
       WRITE(*,*) 'The code was compiled with no compile time options'
       WRITE(*,*) '*************************************************************'
       RETURN
-    ENDIF
+    END IF
 
     WRITE(*,*) 'The code was compiled with the following compile time options'
     WRITE(*,*) '*************************************************************'
@@ -175,10 +187,6 @@ CONTAINS
     WRITE(*,*) 'Per species weighting -DPER_SPECIES_WEIGHT'
 #else
     defines = IOR(defines, c_def_per_particle_weight)
-#endif
-#ifdef PARTICLE_COUNT_UPDATE
-    defines = IOR(defines, c_def_particle_count_update)
-    WRITE(*,*) 'Global particle counting -DPARTICLE_COUNT_UPDATE'
 #endif
 #ifdef NO_TRACER_PARTICLES
     WRITE(*,*) 'No tracer particle support -DNO_TRACER_PARTICLES'
@@ -228,6 +236,27 @@ CONTAINS
     ! There is no need to add a c_def for this since no I/O occurs.
     WRITE(*,*) 'Perform no I/O -DNO_IO'
 #endif
+#ifdef DELTAF_METHOD
+    defines = IOR(defines, c_def_deltaf_method)
+    WRITE(*,*) 'Delta-f method -DDELTAF_METHOD'
+#endif
+#ifdef DELTAF_DEBUG
+    defines = IOR(defines, c_def_deltaf_debug)
+    WRITE(*,*) 'Delta-f debugging -DDELTAF_DEBUG'
+#endif
+#ifdef WORK_DONE_INTEGRATED
+    defines = IOR(defines, c_def_work_done_integrated)
+    WRITE(*,*) 'Work done on each particle -DWORK_DONE_INTEGRATED'
+#endif
+#ifdef HC_PUSH
+    defines = IOR(defines, c_def_hc_push)
+    WRITE(*,*) 'Higuera-Cary particle push -DHC_PUSH'
+#endif
+#ifdef NO_USE_ISATTY
+    WRITE(*,*) 'Disable isatty C-call -DNO_USE_ISATTY'
+#else
+    defines = IOR(defines, c_def_use_isatty)
+#endif
     WRITE(*,*) '*************************************************************'
 
   END SUBROUTINE compiler_directives
@@ -270,8 +299,8 @@ CONTAINS
         strmin = i + 1
         strmax = strmin + 4
         EXIT
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     ! Revision
     DO i = strmin, MIN(strmax,strlen)
@@ -281,8 +310,8 @@ CONTAINS
         strmin = i + 1
         strmax = strmin + 4
         EXIT
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     ! Minor revision
     DO i = strmin, MIN(strmax,strlen)
@@ -291,8 +320,8 @@ CONTAINS
         READ(str, '(i9)') c_minor_rev
         strmax = i - 1
         EXIT
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     version_string = c_commit_id(2:strmax)
 
@@ -317,7 +346,7 @@ CONTAINS
       n_nums = 1
     ELSE
       n_nums = 1 + INT(LOG10(REAL(ABS(int_in), num)))
-    ENDIF
+    END IF
     WRITE(numfmt, '(''(I'', I6.6, '')'')') n_nums
     WRITE(string, numfmt) int_in
 

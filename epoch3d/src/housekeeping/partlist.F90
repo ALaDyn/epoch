@@ -67,6 +67,9 @@ CONTAINS
     nvar = nvar+1
 #endif
 #endif
+#ifdef WORK_DONE_INTEGRATED
+    nvar = nvar+6
+#endif
     ALLOCATE(packed_particle_data(nvar))
 
   END SUBROUTINE setup_partlists
@@ -114,7 +117,7 @@ CONTAINS
     DO WHILE (ASSOCIATED(current) .AND. ipart < n_elements)
       ipart = ipart+1
       current => current%next
-    ENDDO
+    END DO
     partlist%head => a_particle
     partlist%tail => current
     partlist%count = ipart
@@ -143,8 +146,8 @@ CONTAINS
       current => current%next
       IF (ASSOCIATED(current)) THEN
         IF (ASSOCIATED(current%prev, TARGET=tail)) EXIT
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     partlist%count = ipart
 
@@ -165,7 +168,7 @@ CONTAINS
       CALL create_particle(new_particle)
       CALL add_particle_to_partlist(partlist, new_particle)
       NULLIFY(new_particle)
-    ENDDO
+    END DO
 
   END SUBROUTINE create_allocated_partlist
 
@@ -190,7 +193,7 @@ CONTAINS
 #endif
       CALL add_particle_to_partlist(partlist, new_particle)
       NULLIFY(new_particle)
-    ENDDO
+    END DO
 
   END SUBROUTINE create_filled_partlist
 
@@ -211,14 +214,14 @@ CONTAINS
         .AND. .NOT. ASSOCIATED(partlist%tail)) THEN
       test_partlist = 0
       RETURN
-    ENDIF
+    END IF
 
     ! List with head or tail but not both is broken
     IF (.NOT. ASSOCIATED(partlist%head) &
         .OR. .NOT. ASSOCIATED(partlist%tail)) THEN
       test_partlist = -1
       RETURN
-    ENDIF
+    END IF
 
     ! Having head and tail elements which are not the end of a list are OK for
     ! unsafe partlists
@@ -237,8 +240,8 @@ CONTAINS
         ! This tests if we've just jumped to the tail element
         ! Allows testing of unsafe partlists
         IF (ASSOCIATED(current%prev, TARGET=partlist%tail)) EXIT
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     IF (test_ct /= partlist%count) test_partlist = IOR(test_partlist, 4)
 
@@ -260,7 +263,7 @@ CONTAINS
       DEALLOCATE(new_particle)
       new_particle => next
       ipart = ipart+1
-    ENDDO
+    END DO
 
     CALL create_empty_partlist(partlist)
 
@@ -289,13 +292,13 @@ CONTAINS
       IF (rank == 0) &
           PRINT *, 'Unable to append partlists because one is not safe'
       RETURN
-    ENDIF
+    END IF
 
     IF (ASSOCIATED(head%tail)) THEN
       head%tail%next => tail%head
     ELSE
       head%head => tail%head
-    ENDIF
+    END IF
     IF (ASSOCIATED(tail%head)) tail%head%prev => head%tail
     IF (ASSOCIATED(tail%tail)) head%tail => tail%tail
     head%count = head%count + tail%count
@@ -327,7 +330,7 @@ CONTAINS
       partlist%head => new_particle
       partlist%tail => new_particle
       RETURN
-    ENDIF
+    END IF
 
     partlist%tail%next => new_particle
     new_particle%prev => partlist%tail
@@ -370,6 +373,9 @@ CONTAINS
     REAL(num), DIMENSION(:), INTENT(INOUT) :: array
     TYPE(particle), POINTER :: a_particle
     INTEGER(i8) :: cpos
+#ifdef PARTICLE_ID4
+    INTEGER(i8) :: temp_i8
+#endif
 
     cpos = 1
     array(cpos:cpos+c_ndims-1) = a_particle%part_pos
@@ -394,8 +400,12 @@ CONTAINS
     array(cpos+1) = REAL(a_particle%processor_at_t0, num)
     cpos = cpos+2
 #endif
-#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
-    array(cpos) = REAL(a_particle%id, num)
+#ifdef PARTICLE_ID4
+    temp_i8 = INT(a_particle%id, i8)
+    array(cpos) = TRANSFER(temp_i8, 1.0_num)
+    cpos = cpos+1
+#elif PARTICLE_ID
+    array(cpos) = TRANSFER(a_particle%id, 1.0_num)
     cpos = cpos+1
 #endif
 #ifdef COLLISIONS_TEST
@@ -411,6 +421,15 @@ CONTAINS
     cpos = cpos+1
 #endif
 #endif
+#ifdef WORK_DONE_INTEGRATED
+    array(cpos) = a_particle%work_x
+    array(cpos+1) = a_particle%work_y
+    array(cpos+2) = a_particle%work_z
+    array(cpos+3) = a_particle%work_x_total
+    array(cpos+4) = a_particle%work_y_total
+    array(cpos+5) = a_particle%work_z_total
+    cpos = cpos+6
+#endif
 
   END SUBROUTINE pack_particle
 
@@ -421,6 +440,9 @@ CONTAINS
     REAL(num), DIMENSION(:), INTENT(IN) :: array
     TYPE(particle), POINTER :: a_particle
     INTEGER(i8) :: cpos
+#ifdef PARTICLE_ID4
+    INTEGER(i8) :: temp_i8
+#endif
 
     cpos = 1
     a_particle%part_pos = array(cpos:cpos+c_ndims-1)
@@ -446,10 +468,11 @@ CONTAINS
     cpos = cpos+2
 #endif
 #ifdef PARTICLE_ID4
-    a_particle%id = NINT(array(cpos))
+    temp_i8 = TRANSFER(array(cpos), temp_i8)
+    a_particle%id = INT(temp_i8)
     cpos = cpos+1
 #elif PARTICLE_ID
-    a_particle%id = NINT(array(cpos),i8)
+    a_particle%id = TRANSFER(array(cpos), a_particle%id)
     cpos = cpos+1
 #endif
 #ifdef COLLISIONS_TEST
@@ -465,8 +488,30 @@ CONTAINS
     cpos = cpos+1
 #endif
 #endif
+#ifdef WORK_DONE_INTEGRATED
+    a_particle%work_x = array(cpos)
+    a_particle%work_y = array(cpos+1)
+    a_particle%work_z = array(cpos+2)
+    a_particle%work_x_total = array(cpos+3)
+    a_particle%work_y_total = array(cpos+4)
+    a_particle%work_z_total = array(cpos+5)
+    cpos = cpos+6
+#endif
 
   END SUBROUTINE unpack_particle
+
+
+
+#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
+  FUNCTION generate_id()
+
+    INTEGER(idkind) :: generate_id
+
+    highest_id = highest_id + 1_idkind
+    generate_id = cpu_id + highest_id
+
+  END FUNCTION generate_id
+#endif
 
 
 
@@ -488,7 +533,7 @@ CONTAINS
     new_particle%processor_at_t0 = 0
 #endif
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
-    new_particle%id = 0
+    new_particle%id = generate_id()
 #endif
 #ifdef COLLISIONS_TEST
     new_particle%coll_count = 0
@@ -554,7 +599,7 @@ CONTAINS
     IF (.NOT. compare_particles) THEN
       CALL display_particle(part1)
       CALL display_particle(part2)
-    ENDIF
+    END IF
 
   END FUNCTION compare_particles
 
@@ -576,11 +621,11 @@ CONTAINS
       PRINT *, 'Size of data array does not match specified on', rank, &
           npart_in_data, SIZE(array)
       RETURN
-    ENDIF
+    END IF
     IF (partlist%count /= npart_in_data) THEN
       PRINT *, 'Size of data array does not match partlist on', rank
       RETURN
-    ENDIF
+    END IF
 
     ALLOCATE(a_particle)
 
@@ -590,9 +635,9 @@ CONTAINS
       IF (.NOT. compare_particles(a_particle, current)) THEN
         PRINT *, 'BAD PARTICLE ', ipart, 'on', rank
         RETURN
-      ENDIF
+      END IF
       current => current%next
-    ENDDO
+    END DO
 
     DEALLOCATE(a_particle)
 
@@ -622,7 +667,7 @@ CONTAINS
       CALL pack_particle(array(cpos:cpos+nvar-1), current)
       ipart = ipart + 1
       current => current%next
-    ENDDO
+    END DO
 
     CALL MPI_SEND(array, nsend, mpireal, dest, tag, comm, errcode)
 
@@ -728,7 +773,7 @@ CONTAINS
       data_send(cpos:cpos+nvar-1) = packed_particle_data
       ipart = ipart + 1
       current => current%next
-    ENDDO
+    END DO
 
     ! No longer need the sending partlist, so destroy it to save some memory
     CALL destroy_partlist(partlist_send)
@@ -762,83 +807,25 @@ CONTAINS
 
 
 
-  SUBROUTINE generate_particle_ids(partlist)
+  SUBROUTINE update_particle_count
 
-    USE constants
+    ! This routine ensures that the particle count for the species_list
+    ! objects is accurate. This makes some things easier, but increases
+    ! communication
+    INTEGER :: ispecies
+    LOGICAL, SAVE :: update = .TRUE.
 
-    TYPE(particle_list) :: partlist
-#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
-    INTEGER(i8), ALLOCATABLE :: nid_all(:)
-    INTEGER(i8) :: nid, part_id
-    INTEGER :: i, id_update
-    TYPE(particle), POINTER :: current
-    TYPE(pointer_list) :: idlist
-    TYPE(pointer_item), POINTER :: idcurrent, idnext
+    IF (.NOT.update) RETURN
 
-    id_update = partlist%id_update
+    DO ispecies = 1, n_species
+      CALL MPI_ALLREDUCE(species_list(ispecies)%attached_list%count, &
+          species_list(ispecies)%count, 1, MPI_INTEGER8, MPI_SUM, &
+          comm, errcode)
+      species_list(ispecies)%count_update_step = step
+    END DO
 
-    CALL MPI_ALLREDUCE(id_update, partlist%id_update, 1, MPI_INTEGER, &
-        MPI_MAX, comm, errcode)
+    update = use_particle_count_update
 
-    IF (partlist%id_update == 0) RETURN
-
-    ALLOCATE(idlist%head)
-    idlist%tail => idlist%head
-    NULLIFY(idlist%head%next)
-    NULLIFY(idlist%head%part)
-
-    ! Scan through particle list and identify particles which need
-    ! an ID to be assigned.
-    nid = 0
-    current => partlist%head
-    DO WHILE(ASSOCIATED(current))
-      IF (current%id == 0) THEN
-        nid = nid + 1
-        CALL add_particle_to_list(current, idlist)
-      ENDIF
-      current => current%next
-    ENDDO
-
-    ALLOCATE(nid_all(nproc))
-
-    CALL MPI_ALLGATHER(nid, 1, MPI_INTEGER8, nid_all, 1, MPI_INTEGER8, &
-        comm, errcode)
-
-    ! Count number of particles on ranks zero to rank-1
-    nid = 0
-    DO i = 1, rank
-      nid = nid + nid_all(i)
-    ENDDO
-    part_id = particles_max_id + nid
-
-    ! Count remaining particles
-    DO i = rank+1, nproc
-      nid = nid + nid_all(i)
-    ENDDO
-
-    particles_max_id = particles_max_id + nid
-
-    DEALLOCATE(nid_all)
-
-    ! Number each particle with a unique id
-    idcurrent => idlist%head%next
-    DO WHILE(ASSOCIATED(idcurrent))
-      part_id = part_id + 1
-#if PARTICLE_ID
-      idcurrent%part%id = part_id
-#else
-      idcurrent%part%id = INT(part_id,i4)
-#endif
-      idnext => idcurrent%next
-      DEALLOCATE(idcurrent)
-      idcurrent => idnext
-    ENDDO
-
-    DEALLOCATE(idlist%head)
-
-    partlist%id_update = 0
-#endif
-
-  END SUBROUTINE generate_particle_ids
+  END SUBROUTINE update_particle_count
 
 END MODULE partlist

@@ -52,16 +52,17 @@ PROGRAM pic
 #ifdef PHOTONS
   USE photons
 #endif
+  USE injectors
 
   IMPLICIT NONE
 
   INTEGER :: ispecies, ierr
   LOGICAL :: halt = .FALSE., push = .TRUE.
-  LOGICAL :: force_dump
+  LOGICAL :: force_dump = .FALSE.
   CHARACTER(LEN=64) :: deck_file = 'input.deck'
   CHARACTER(LEN=*), PARAMETER :: data_dir_file = 'USE_DATA_DIRECTORY'
   CHARACTER(LEN=64) :: timestring
-  REAL(num) :: runtime, dt0, dt_store
+  REAL(num) :: runtime, dt_store
 
   step = 0
   time = 0.0_num
@@ -86,23 +87,23 @@ PROGRAM pic
     ELSE
       PRINT*, 'Specify output directory'
       READ(*,'(A)') data_dir
-    ENDIF
+    END IF
     CALL cleanup_stop_files
-  ENDIF
+  END IF
 
   CALL MPI_BCAST(data_dir, c_max_path_length, MPI_CHARACTER, 0, comm, errcode)
 
   ! version check only, exit silently
   IF (TRIM(data_dir) == 'VERSION_INFO') CALL finalise
 
+  CALL register_objects ! custom.f90
   CALL read_deck(deck_file, .TRUE., c_ds_first)
 
   CALL setup_partlists  ! partlist.f90
-  CALL register_objects ! custom.f90
   CALL timer_init
 
   IF (use_exact_restart) CALL read_cpu_split
-  CALL setup_particle_boundaries ! boundary.f90
+  CALL setup_boundaries ! boundary.f90
   CALL mpi_initialise  ! mpi_routines.f90
   CALL after_control   ! setup.f90
   CALL open_files      ! setup.f90
@@ -118,7 +119,7 @@ PROGRAM pic
     ! auto_load particles
     CALL auto_load
     time = 0.0_num
-  ENDIF
+  END IF
 
   CALL custom_particle_load
   CALL manual_load
@@ -126,11 +127,14 @@ PROGRAM pic
   CALL set_dt
   CALL set_maxwell_solver
   CALL deallocate_ic
+  CALL update_particle_count
+
+  CALL after_load
 
   npart_global = 0
   DO ispecies = 1, n_species
     npart_global = npart_global + species_list(ispecies)%count
-  ENDDO
+  END DO
 
   ! .TRUE. to over_ride balance fraction check
   IF (npart_global > 0) CALL balance_workload(.TRUE.)
@@ -140,13 +144,9 @@ PROGRAM pic
   CALL efield_bcs
 
   IF (ic_from_restart) THEN
-    dt0 = dt
-    dt_store = dt
-    IF (dt_from_restart .GT. 0) dt0 = dt_from_restart
-    dt = dt0 / 2.0_num
-    time = time + dt
+    IF (dt_from_restart > 0) dt = dt_from_restart
+    time = time + dt / 2.0_num
     CALL update_eb_fields_final
-    dt = dt_store
     CALL moving_window
   ELSE
     dt_store = dt
@@ -154,7 +154,8 @@ PROGRAM pic
     time = time + dt
     CALL bfield_final_bcs
     dt = dt_store
-  ENDIF
+  END IF
+  CALL count_n_zeros
 
   ! Setup particle migration between species
   IF (use_particle_migration) CALL initialise_migration
@@ -164,28 +165,29 @@ PROGRAM pic
   IF (use_qed) CALL setup_qed_module()
 #endif
 
-  walltime_start = MPI_WTIME()
+  walltime_started = MPI_WTIME()
   IF (.NOT.ic_from_restart) CALL output_routines(step) ! diagnostics.f90
   IF (use_field_ionisation) CALL initialise_ionisation
 
   IF (timer_collect) CALL timer_start(c_timer_step)
 
   DO
-    IF ((step >= nsteps .AND. nsteps >= 0) &
-        .OR. (time >= t_end) .OR. halt) EXIT
     IF (timer_collect) THEN
       CALL timer_stop(c_timer_step)
       CALL timer_reset
       timer_first(c_timer_step) = timer_walltime
-    ENDIF
+    END IF
+
     push = (time >= particle_push_start_time)
 #ifdef PHOTONS
     IF (push .AND. use_qed .AND. time > qed_start_time) THEN
       CALL qed_update_optical_depth()
-    ENDIF
+    END IF
 #endif
+
     CALL update_eb_fields_half
     IF (push) THEN
+      CALL run_injectors
       ! .FALSE. this time to use load balancing threshold
       IF (use_balance) CALL balance_workload(.FALSE.)
       CALL push_particles
@@ -200,43 +202,36 @@ PROGRAM pic
             CALL collisional_ionisation
           ELSE
             CALL particle_collisions
-          ENDIF
-        ENDIF
+          END IF
+        END IF
 
         ! Early beta version of particle splitting operator
         IF (use_split) CALL split_particles
 
         CALL reattach_particles_to_mainlist
-      ENDIF
+      END IF
       IF (use_particle_migration) CALL migrate_particles(step)
       IF (use_field_ionisation) CALL ionise_particles
-    ENDIF
+      CALL update_particle_count
+    END IF
 
-    CALL check_for_stop_condition(halt, force_dump)
-    IF (halt) EXIT
     step = step + 1
     time = time + dt / 2.0_num
+
+    CALL check_for_stop_condition(halt, force_dump)
+
+    IF ((step >= nsteps .AND. nsteps >= 0) &
+        .OR. (time >= t_end) .OR. halt) EXIT
+
     CALL output_routines(step)
     time = time + dt / 2.0_num
 
     CALL update_eb_fields_final
 
     CALL moving_window
+  END DO
 
-    ! This section ensures that the particle count for the species_list
-    ! objects is accurate. This makes some things easier, but increases
-    ! communication
-#ifdef PARTICLE_COUNT_UPDATE
-    DO ispecies = 1, n_species
-      CALL MPI_ALLREDUCE(species_list(ispecies)%attached_list%count, &
-          species_list(ispecies)%count, 1, MPI_INTEGER8, MPI_SUM, &
-          comm, errcode)
-      species_list(ispecies)%count_update_step = step
-    ENDDO
-#endif
-  ENDDO
-
-  IF (rank == 0) runtime = MPI_WTIME() - walltime_start
+  IF (rank == 0) runtime = MPI_WTIME() - walltime_started
 
 #ifdef PHOTONS
   IF (use_qed) CALL shutdown_qed_module()
@@ -247,7 +242,7 @@ PROGRAM pic
   IF (rank == 0) THEN
     CALL create_full_timestring(runtime, timestring)
     WRITE(*,*) 'Final runtime of core = ' // TRIM(timestring)
-  ENDIF
+  END IF
 
   CALL finalise
 

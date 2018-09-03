@@ -1,3 +1,220 @@
+## v5.0.0
+
+ * Assign particle IDs at creation time. See the user manual for further details
+
+ * Replaced USE_ISATTY compiler flag with NO_USE_ISATTY
+
+ * Replaced non-standard ISATTY intrinsic function with a call to the
+   POSIX C-library function "isatty"
+
+ * Changed FORTRAN standard to 2003
+
+
+## v4.12.0 to v4.14.0 (2018-08-13)
+
+ * Added the Higuera-Cary relativistic particle push. This is enabled by
+   compiling with the flag -DHC_PUSH
+
+ * Added sanity check for binary file size
+
+ * Fixed the ETA string on restart
+
+ * Added control block option "reset_walltime" to reset the walltime
+   to zero when restarting
+
+ * Added the ability to request output dumps at runtime by touching a file
+   named "DUMP"
+
+ * Made the x-coordinate a time-dependent input deck variable when the moving
+   window is enabled
+
+ * Added "window_stop_time" parameter to the window block
+
+ * Added example SDF reader code
+
+ * Added "atan2" function to the deck parser
+
+ * Omit redundant dimension in dist_fn output
+
+ * Modified load balance calculation so that a perfectly balanced problem has
+   a value of one
+
+ * Only redistribute the simulation if it would result in an improvement to
+   the load balance
+
+ * Improvements to the load balancing calculations
+
+ * Added dlb_maximum_interval parameter to the input deck
+
+ * Added dlb_force_interval parameter to the input deck
+
+ * Added balance_first parameter to the input deck
+
+ * Added y and z versions of the bc_x_{min,max}_after_move parameters to
+   the input deck
+
+ * Added "dump_at_walltimes" flag to the io block
+
+ * Added "walltime_interval", "walltime_start" and "walltime_stop" flags to
+   the io block
+
+
+## v4.11.0 to v4.12.0 (2018-06-16)
+
+ * Fixes for exact restarts
+
+ * Apply reflecting particle BCs when conduct is specified
+
+ * Fix moving window for fractional particles per cell
+
+ * Don't average ppc diagnostic over shape function
+
+ * Added average particle weight diagnostic
+
+ * Replaced PARTICLE_COUNT_UPDATE Makefile DEFINE with
+   "use_particle_count_update" control block flag
+
+ * Added "use_accurate_n_zeros" control block flag to enable finding the
+   exact number of output that are generated
+
+ * Prevent duplicated final dump
+
+ * Added "use_flux_maxwellian" option to the injector block
+
+ * Added warnings for BCs that are incompatible with moving windows
+
+ * Added y,z versions of the Lehe Maxwell solver
+
+ * Added "stencil" block for specifying a Maxwell solver with custom
+   coefficients
+
+ * Added "work_{x,y,z}" and "work_{x,y,z}_total" dumpmasks for tracking the
+   work done on each particle by the electric field.
+
+ * Various bugfixes
+
+ * Updated the SDF submodule:
+   SDF/FORTRAN
+   - Improve Fortran error handling
+
+   SDF/utilities
+   - Added support for SDF_BLOCKTYPE_POINT_DERIVED to sdffilter
+   - Make sdffilter print all point mesh components
+   - Return non-zero code for unsupported blocks in sdffilter
+   - Fixed station file column order in sdffilter
+   - Return an error for failed python builds
+
+   SDF/VisIt
+   - Add an option for disabling obstacle boundaries in VisIt
+   - Don't generate boundary meshes when requested in VisIt
+
+
+## v4.10.0 to v4.11.0 (2018-04-13)
+
+ * Added time dependent moving window
+
+ * Added multiple RNG states
+
+ * Fixed F2003 extension in shared_data
+
+ * Fixed errors in derived variable ouput for photons
+
+ * Fix bug in grow_array in 2D
+
+ * If print_const is used, output constant values into a separate file
+
+ * Allow CPML with moving window
+
+ * Added COMPILER=auto option to automatically detect compiler
+
+ * Added time dependent moving window
+
+ * Fix pack.sh script for non-bash shells
+
+ * Added issue templates
+
+ * Changed the Make rule from hector to archer
+
+ * Fixed lasers so that positions work as expected
+
+ * Fixed #1691, compilation error with older gfortran
+
+ * Updated mediawiki links to the new location
+
+ * Updated SDF submodule
+   SDF/FORTRAN
+   - Fix pack.sh script for non-bash shells
+
+   SDF/IDL
+   - Functions to read key-val pair file into struct
+   - Rename main function
+   - Added licensing header
+   - Uppercase keywords
+   - Correct indentation
+   - General tidy
+
+   SDF/Matlab
+   - Read name-value pairs into structure
+   - Removed DOS linefeed characters
+   - Added license header
+   - Tidied up a little
+
+   SDF/utilities
+   - Script to read name-val pairs from file into dict
+   - Fix float vs int ordering
+   - Made PEP8 compliant
+
+   SDF/VisIt
+   - Fix build script for VisIt-2.13 and 2.13.1 on macOS
+
+
+## v4.9.0 to v4.10.0 (2018-03-13)
+
+ * Added time varying particle injectors
+
+ * Add per species particle boundaries You can now specify bc_x_min and
+   bc_x_max to a species block. This overrides the global boundaries for that
+   species
+
+ * Fixes #1567 with moving window and offset_grid Bug 1567: UNLOCATABLE
+   PARTICLE with restart dump and moving window Shift particles back to true
+   position and adjust offset grid
+
+ * Bugfix for assigning particle IDs
+
+ * Various fixes for compiling with DEFINES flags
+
+ * Added particles_per_cell diagnostic
+
+ * Fixed missing ierror argument to MPI_ALLGATHER This fixes issue #1636
+
+ * Fix PER_PARTICLE_CHARGE and fractional particles Previously 'fractional'
+   particles were not given mass or charge giving segfault if ppc did not
+   evenly divide by number of cells
+
+ * Added CONTRIBUTING.md guide
+
+ * Updated SDF
+   SDF/FORTRAN
+   - Fix PGI build on OSX
+   - Work around a PGI floating point bug.
+   - Fixed unix_seconds for Jan and Feb of leap years
+   - Fully initialise sdf_file_handle
+   - Changed FPE generation in error handler
+   - Fix count of leap years since 1970
+   - Check for broken OpenMPI 2.1.1 and 2.1.2
+
+   SDF/utilities
+   - Added support for string-type namevalue pairs
+   - Avoid duplicated dictionary names
+   - Made build of sdf2ascii optional (off by default)
+   - Removed unhelpful dimension squashing
+   - Removed mmap option from python reader
+
+   SDF/VisIt
+   - Added test for compatible g++ version
+
+
 ## v4.8.0 to v4.9.0 (2017-07-28)
 
  * Add alternative field solvers for the Maxwell equations.

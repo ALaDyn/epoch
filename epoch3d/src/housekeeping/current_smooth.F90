@@ -21,6 +21,7 @@ MODULE current_smooth
 #else
   USE shared_data
 #endif
+  USE boundary
 
   IMPLICIT NONE
 
@@ -29,6 +30,11 @@ CONTAINS
   SUBROUTINE smooth_current()
 
     ! A very simple current smoothing routine
+
+    ! First copy in values to ghost cells
+    CALL field_bc(jx, jng)
+    CALL field_bc(jy, jng)
+    CALL field_bc(jz, jng)
 
     CALL smooth_array(jx)
     CALL smooth_array(jy)
@@ -65,13 +71,13 @@ CONTAINS
           DO isubx = sf_min, sf_max
             w1 = w2 * weight_fn(isubx)
             val = val + array(ix+isubx, iy+isuby, iz+isubz) * w1
-          ENDDO
-        ENDDO
-      ENDDO
+          END DO
+        END DO
+      END DO
       wk_array(ix, iy, iz) = val
-    ENDDO
-    ENDDO
-    ENDDO
+    END DO
+    END DO
+    END DO
 #else
     DO iz = 1, nz
     DO iy = 1, ny
@@ -90,9 +96,9 @@ CONTAINS
           + array(ix-1, iy+1, iz-1) + array(ix+1, iy+1, iz-1) &
           + array(ix-1, iy-1, iz+1) + array(ix+1, iy-1, iz+1) &
           + array(ix-1, iy+1, iz+1) + array(ix+1, iy+1, iz+1)) * 0.015625_num
-    ENDDO
-    ENDDO
-    ENDDO
+    END DO
+    END DO
+    END DO
 #endif
     array(1:nx, 1:ny, 1:nz) = wk_array
 

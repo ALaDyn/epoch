@@ -63,7 +63,7 @@ CONTAINS
       laser%current_integral_phase = phases(ilas)
       ilas = ilas + 1
       laser => laser%next
-    ENDDO
+    END DO
 
   END SUBROUTINE setup_laser_phases
 
@@ -96,14 +96,14 @@ CONTAINS
       next => current%next
       CALL deallocate_laser(current)
       current => next
-    ENDDO
+    END DO
 
     current => laser_x_max
     DO WHILE(ASSOCIATED(current))
       next => current%next
       CALL deallocate_laser(current)
       current => next
-    ENDDO
+    END DO
 
   END SUBROUTINE deallocate_lasers
 
@@ -123,9 +123,30 @@ CONTAINS
     ELSE IF (boundary == c_bd_x_max) THEN
       n_laser_x_max = n_laser_x_max + 1
       CALL attach_laser_to_list(laser_x_max, laser)
-    ENDIF
+    END IF
 
   END SUBROUTINE attach_laser
+
+
+
+  ! This routine populates the constant elements of a parameter pack
+  ! from a laser
+
+  SUBROUTINE populate_pack_from_laser(laser, parameters)
+
+    TYPE(laser_block), POINTER :: laser
+    TYPE(parameter_pack), INTENT(INOUT) :: parameters
+
+    parameters%pack_ix = 0
+
+    SELECT CASE(laser%boundary)
+      CASE(c_bd_x_min)
+        parameters%pack_ix = 0
+      CASE(c_bd_x_max)
+        parameters%pack_ix = nx
+    END SELECT
+
+  END SUBROUTINE populate_pack_from_laser
 
 
 
@@ -134,12 +155,15 @@ CONTAINS
     TYPE(laser_block), POINTER :: laser
     REAL(num) :: laser_time_profile
     INTEGER :: err
+    TYPE(parameter_pack) :: parameters
 
     err = 0
+    CALL populate_pack_from_laser(laser, parameters)
     IF (laser%use_time_function) THEN
-      laser_time_profile = evaluate(laser%time_function, err)
+      laser_time_profile = evaluate_with_parameters(laser%time_function, &
+          parameters, err)
       RETURN
-    ENDIF
+    END IF
 
     laser_time_profile = custom_laser_time_profile(laser)
 
@@ -154,7 +178,7 @@ CONTAINS
     TYPE(parameter_pack) :: parameters
 
     err = 0
-    parameters%pack_ix = 0
+    CALL populate_pack_from_laser(laser, parameters)
     laser%phase = &
         evaluate_with_parameters(laser%phase_function, parameters, err)
 
@@ -169,7 +193,7 @@ CONTAINS
     TYPE(parameter_pack) :: parameters
 
     err = 0
-    parameters%pack_ix = 0
+    CALL populate_pack_from_laser(laser, parameters)
     laser%profile = &
         evaluate_with_parameters(laser%profile_function, parameters, err)
 
@@ -181,9 +205,12 @@ CONTAINS
 
     TYPE(laser_block), POINTER :: laser
     INTEGER :: err
+    TYPE(parameter_pack) :: parameters
 
     err = 0
-    laser%omega = evaluate(laser%omega_function, err)
+    CALL populate_pack_from_laser(laser, parameters)
+    laser%omega = &
+        evaluate_with_parameters(laser%omega_function, parameters, err)
     IF (laser%omega_func_type == c_of_freq) &
         laser%omega = 2.0_num * pi * laser%omega
     IF (laser%omega_func_type == c_of_lambda) &
@@ -205,9 +232,9 @@ CONTAINS
             + current%omega * dt
       ELSE
         current%current_integral_phase = current%omega * time
-      ENDIF
+      END IF
       current => current%next
-    ENDDO
+    END DO
 
     current => laser_x_max
     DO WHILE(ASSOCIATED(current))
@@ -217,9 +244,9 @@ CONTAINS
             + current%omega * dt
       ELSE
         current%current_integral_phase = current%omega * time
-      ENDIF
+      END IF
       current => current%next
-    ENDDO
+    END DO
 
   END SUBROUTINE update_laser_omegas
 
@@ -236,11 +263,11 @@ CONTAINS
       current => list
       DO WHILE(ASSOCIATED(current%next))
         current => current%next
-      ENDDO
+      END DO
       current%next => laser
     ELSE
       list => laser
-    ENDIF
+    END IF
 
   END SUBROUTINE attach_laser_to_list
 
@@ -258,14 +285,14 @@ CONTAINS
       dt_local = 2.0_num * pi / current%omega
       dt_laser = MIN(dt_laser, dt_local)
       current => current%next
-    ENDDO
+    END DO
 
     current => laser_x_max
     DO WHILE(ASSOCIATED(current))
       dt_local = 2.0_num * pi / current%omega
       dt_laser = MIN(dt_laser, dt_local)
       current => current%next
-    ENDDO
+    END DO
 
     ! Need at least two iterations per laser period
     ! (Nyquist)
@@ -288,7 +315,7 @@ CONTAINS
     laserpos = 1
     IF (bc_field(n) == c_bc_cpml_laser) THEN
       laserpos = cpml_x_min_laser_idx
-    ENDIF
+    END IF
     dtc2 = dt * c**2
     lx = dtc2 / dx
     sum = 1.0_num / (lx + c)
@@ -312,10 +339,10 @@ CONTAINS
             * SIN(current%current_integral_phase + current%phase)
           source1 = source1 + base * COS(current%pol_angle)
           source2 = source2 + base * SIN(current%pol_angle)
-        ENDIF
+        END IF
         current => current%next
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     bz(laserpos-1) = sum * ( 4.0_num * source1 &
         + 2.0_num * (ey_x_min + c * bz_x_min) &
@@ -331,11 +358,11 @@ CONTAINS
 
     IF (dump_absorption) THEN
       IF (add_laser(n)) THEN
-        CALL calc_absorption(c_bd_x_min, lasers = laser_x_min)
+        CALL calc_absorption(c_bd_x_min, lasers=laser_x_min)
       ELSE
         CALL calc_absorption(c_bd_x_min)
-      ENDIF
-    ENDIF
+      END IF
+    END IF
 
   END SUBROUTINE outflow_bcs_x_min
 
@@ -354,7 +381,7 @@ CONTAINS
     laserpos = nx
     IF (bc_field(n) == c_bc_cpml_laser) THEN
       laserpos = cpml_x_max_laser_idx
-    ENDIF
+    END IF
     dtc2 = dt * c**2
     lx = dtc2 / dx
     sum = 1.0_num / (lx + c)
@@ -378,10 +405,10 @@ CONTAINS
             * SIN(current%current_integral_phase + current%phase)
           source1 = source1 + base * COS(current%pol_angle)
           source2 = source2 + base * SIN(current%pol_angle)
-        ENDIF
+        END IF
         current => current%next
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     bz(laserpos) = sum * (-4.0_num * source1 &
         - 2.0_num * (ey_x_max - c * bz_x_max) &
@@ -397,11 +424,11 @@ CONTAINS
 
     IF (dump_absorption) THEN
       IF (add_laser(n)) THEN
-        CALL calc_absorption(c_bd_x_max, lasers = laser_x_max)
+        CALL calc_absorption(c_bd_x_max, lasers=laser_x_max)
       ELSE
         CALL calc_absorption(c_bd_x_max)
-      ENDIF
-    ENDIF
+      END IF
+    END IF
 
   END SUBROUTINE outflow_bcs_x_max
 
@@ -427,7 +454,7 @@ CONTAINS
     IF (bd == c_bd_x_max) THEN
       dir = -1.0_num
       ibc = nx
-    ENDIF
+    END IF
 
     e1 = ey(ibc)
     e2 = ez(ibc)
@@ -447,8 +474,8 @@ CONTAINS
         lfactor = 0.5_num * epsilon0 * c * factor * (t_env * current%amp)**2
         laser_inject_local = laser_inject_local + lfactor * laser_inject_sum
         current => current%next
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
   END SUBROUTINE calc_absorption
 

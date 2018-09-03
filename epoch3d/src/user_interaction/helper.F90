@@ -38,31 +38,31 @@ CONTAINS
 
       ! Set temperature at boundary for thermal bcs.
 
-      IF (bc_particle(c_bd_x_min) == c_bc_thermal) THEN
+      IF (species%bc_particle(c_bd_x_min) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_x_min(:,:,:) = &
             species_list(ispecies)%initial_conditions%temp(1,:,:,:)
-      ENDIF
-      IF (bc_particle(c_bd_x_max) == c_bc_thermal) THEN
+      END IF
+      IF (species%bc_particle(c_bd_x_max) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_x_max(:,:,:) = &
             species_list(ispecies)%initial_conditions%temp(nx,:,:,:)
-      ENDIF
-      IF (bc_particle(c_bd_y_min) == c_bc_thermal) THEN
+      END IF
+      IF (species%bc_particle(c_bd_y_min) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_y_min(:,:,:) = &
             species_list(ispecies)%initial_conditions%temp(:,1,:,:)
-      ENDIF
-      IF (bc_particle(c_bd_y_max) == c_bc_thermal) THEN
+      END IF
+      IF (species%bc_particle(c_bd_y_max) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_y_max(:,:,:) = &
             species_list(ispecies)%initial_conditions%temp(:,ny,:,:)
-      ENDIF
-      IF (bc_particle(c_bd_z_min) == c_bc_thermal) THEN
+      END IF
+      IF (species%bc_particle(c_bd_z_min) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_z_min(:,:,:) = &
             species_list(ispecies)%initial_conditions%temp(:,:,1,:)
-      ENDIF
-      IF (bc_particle(c_bd_z_max) == c_bc_thermal) THEN
+      END IF
+      IF (species%bc_particle(c_bd_z_max) == c_bc_thermal) THEN
         species_list(ispecies)%ext_temp_z_max(:,:,:) = &
             species_list(ispecies)%initial_conditions%temp(:,:,nz,:)
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
   END SUBROUTINE set_thermal_bcs
 
@@ -98,7 +98,7 @@ CONTAINS
       CALL setup_particle_temperature(&
           species_list(ispecies)%initial_conditions%temp(:,:,:,3), c_dir_z, &
           species, species_list(ispecies)%initial_conditions%drift(:,:,:,3))
-    ENDDO
+    END DO
 
     IF (rank == 0) THEN
       DO ispecies = 1, n_species
@@ -111,9 +111,9 @@ CONTAINS
               '"' // TRIM(species%name) // '"'
 #endif
           species%count = 0
-        ENDIF
-      ENDDO
-    ENDIF
+        END IF
+      END DO
+    END IF
 
     CALL deltaf_load
 
@@ -141,7 +141,7 @@ CONTAINS
       species_list(ispecies)%initial_conditions%density_back = 0.0_num
       species_list(ispecies)%initial_conditions%temp_back = 0.0_num
       species_list(ispecies)%initial_conditions%drift_back = 0.0_num
-    ENDDO
+    END DO
 
   END SUBROUTINE allocate_ic
 
@@ -155,7 +155,7 @@ CONTAINS
       DEALLOCATE(species_list(ispecies)%initial_conditions%density)
       DEALLOCATE(species_list(ispecies)%initial_conditions%temp)
       DEALLOCATE(species_list(ispecies)%initial_conditions%drift)
-    ENDDO
+    END DO
 
   END SUBROUTINE deallocate_ic
 
@@ -187,9 +187,9 @@ CONTAINS
     DO iy = 1-ng, ny+ng
     DO ix = 1-ng, nx+ng
       IF (density(ix,iy,iz) > density_max) density(ix,iy,iz) = density_max
-    ENDDO ! ix
-    ENDDO ! iy
-    ENDDO ! iz
+    END DO ! ix
+    END DO ! iy
+    END DO ! iz
 
     DO iz = 1, nz
     DO iy = 1, ny
@@ -197,10 +197,10 @@ CONTAINS
       IF (density(ix,iy,iz) >= density_min) THEN
         num_valid_cells_local = num_valid_cells_local + 1
         density_total = density_total + density(ix,iy,iz)
-      ENDIF
-    ENDDO ! ix
-    ENDDO ! iy
-    ENDDO ! iz
+      END IF
+    END DO ! ix
+    END DO ! iy
+    END DO ! iz
 
     CALL MPI_ALLREDUCE(num_valid_cells_local, num_valid_cells_global, 1, &
         MPI_INTEGER8, MPI_SUM, comm, errcode)
@@ -210,7 +210,7 @@ CONTAINS
     ELSE
       npart_per_cell_average = REAL(species%count, num) &
           / REAL(num_valid_cells_global, num)
-    ENDIF
+    END IF
 
     IF (npart_per_cell_average <= 0) RETURN
 
@@ -225,9 +225,9 @@ CONTAINS
       npart_per_cell = NINT(density(ix, iy, iz) / density_average &
           * npart_per_cell_average)
       npart_this_proc_new = npart_this_proc_new + npart_per_cell
-    ENDDO ! ix
-    ENDDO ! iy
-    ENDDO ! iz
+    END DO ! ix
+    END DO ! iy
+    END DO ! iz
 
     CALL destroy_partlist(partlist)
     CALL create_allocated_partlist(partlist, npart_this_proc_new)
@@ -260,10 +260,10 @@ CONTAINS
 
         ipart = ipart + 1
         current => current%next
-      ENDDO
-    ENDDO ! ix
-    ENDDO ! iy
-    ENDDO ! iz
+      END DO
+    END DO ! ix
+    END DO ! iy
+    END DO ! iz
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
@@ -272,7 +272,7 @@ CONTAINS
       CALL remove_particle_from_partlist(partlist, current)
       DEALLOCATE(current)
       current => next
-    ENDDO
+    END DO
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
@@ -288,7 +288,7 @@ CONTAINS
       WRITE(stat_unit,*) 'Loaded ', TRIM(ADJUSTL(string)), &
           ' particles of species ', '"' // TRIM(species%name) // '"'
 #endif
-    ENDIF
+    END IF
 
     CALL particle_bcs
 
@@ -315,22 +315,46 @@ CONTAINS
     INTEGER(i8) :: cell_y
     INTEGER(i8) :: cell_z
     INTEGER(i8) :: i, ipos
-    INTEGER :: ix, iy, iz
+    INTEGER :: ix, iy, iz, nx_e, ny_e
+    INTEGER :: ix_min, ix_max, iy_min, iy_max, iz_min, iz_max
     CHARACTER(LEN=15) :: string
     LOGICAL :: sweep
 
     npart_this_species = species%count
     IF (npart_this_species <= 0) RETURN
 
+    ix_min = 1
+    ix_max = nx
+
+    iy_min = 1
+    iy_max = ny
+
+    iz_min = 1
+    iz_max = nz
+
+    IF (species%fill_ghosts) THEN
+      IF (x_min_boundary) ix_min = ix_min - png
+      IF (x_max_boundary) ix_max = ix_max + png
+
+      IF (y_min_boundary) iy_min = iy_min - png
+      IF (y_max_boundary) iy_max = iy_max + png
+
+      IF (z_min_boundary) iz_min = iz_min - png
+      IF (z_max_boundary) iz_max = iz_max + png
+    END IF
+
+    nx_e = ix_max - ix_min + 1
+    ny_e = iy_max - iy_min + 1
+
     num_valid_cells_local = 0
-    DO iz = 1, nz
-    DO iy = 1, ny
-    DO ix = 1, nx
+    DO iz = iz_min, iz_max
+    DO iy = iy_min, iy_max
+    DO ix = ix_min, ix_max
       IF (load_list(ix, iy, iz)) &
           num_valid_cells_local = num_valid_cells_local + 1
-    ENDDO ! ix
-    ENDDO ! iy
-    ENDDO ! iz
+    END DO ! ix
+    END DO ! iy
+    END DO ! iz
 
     IF (species%npart_per_cell >= 0) THEN
       npart_per_cell = FLOOR(species%npart_per_cell, KIND=i8)
@@ -346,7 +370,7 @@ CONTAINS
       num_valid_cells_global = 0
       DO i = 1,nproc
         num_valid_cells_global = num_valid_cells_global + num_valid_cells_all(i)
-      ENDDO
+      END DO
 
       IF (num_valid_cells_global == 0) THEN
         IF (rank == 0) THEN
@@ -356,8 +380,8 @@ CONTAINS
           WRITE(*,*) 'validly be placed for species "' // TRIM(species%name) &
               // '". ', 'Code will now terminate.'
           CALL abort_code(c_err_bad_setup)
-        ENDIF
-      ENDIF
+        END IF
+      END IF
 
       valid_cell_frac = REAL(num_valid_cells_local, num) &
           / REAL(num_valid_cells_global, num)
@@ -378,7 +402,7 @@ CONTAINS
         num_frac(i) = num_real - num_int
         num_idx (i) = i - 1
         num_total = num_total + num_int
-      ENDDO
+      END DO
       num_total = npart_this_species - num_total
 
       IF (num_total > 0) THEN
@@ -397,10 +421,10 @@ CONTAINS
               num_idx(i-1) = num_idx(i)
               num_idx(i) = idx
               sweep = .TRUE.
-            ENDIF
+            END IF
             f0 = f1
-          ENDDO
-        ENDDO
+          END DO
+        END DO
 
         ! Accumulate fractional particles until they have all been accounted
         ! for. If any of them have been assigned to the current processor,
@@ -410,18 +434,18 @@ CONTAINS
           IF (num_idx(i) == rank) THEN
             num_new_particles = num_new_particles + 1
             EXIT
-          ENDIF
+          END IF
           num_total = num_total - 1
           IF (num_total <= 0) EXIT
-        ENDDO
-      ENDIF
+        END DO
+      END IF
 
       DEALLOCATE(num_valid_cells_all, num_idx, num_frac)
 
       species%npart_per_cell = &
           REAL(npart_this_species,num) / num_valid_cells_global
       npart_per_cell = FLOOR(species%npart_per_cell, KIND=i8)
-    ENDIF
+    END IF
 
     partlist => species%attached_list
 
@@ -433,9 +457,9 @@ CONTAINS
     current => partlist%head
     IF (npart_per_cell > 0) THEN
 
-      DO iz = 1, nz
-      DO iy = 1, ny
-      DO ix = 1, nx
+      DO iz = iz_min, iz_max
+      DO iy = iy_min, iy_max
+      DO ix = ix_min, ix_max
         IF (.NOT. load_list(ix, iy, iz)) CYCLE
 
         ipart = 0
@@ -461,12 +485,12 @@ CONTAINS
 
           ! One particle sucessfully placed
           npart_left = npart_left - 1
-        ENDDO
-      ENDDO ! ix
-      ENDDO ! iy
-      ENDDO ! iz
+        END DO
+      END DO ! ix
+      END DO ! iy
+      END DO ! iz
 
-    ENDIF
+    END IF
 
     ! When num_new_particles does not equal
     ! npart_per_cell * num_valid_cells_local there will be particles left
@@ -476,40 +500,53 @@ CONTAINS
       ALLOCATE(valid_cell_list(num_valid_cells_local))
 
       ipos = 0
-      DO iz = 1, nz
-      DO iy = 1, ny
-      DO ix = 1, nx
+      DO iz = iz_min, iz_max
+      DO iy = iy_min, iy_max
+      DO ix = ix_min, ix_max
         IF (load_list(ix,iy,iz)) THEN
           ipos = ipos + 1
-          valid_cell_list(ipos) = ix - 1 + nx * (iy - 1 + ny * (iz - 1))
-        ENDIF
-      ENDDO ! ix
-      ENDDO ! iy
-      ENDDO ! iz
+          valid_cell_list(ipos) = ix - ix_min &
+              + nx_e * (iy - iy_min + ny_e * (iz - iz_min))
+        END IF
+      END DO ! ix
+      END DO ! iy
+      END DO ! iz
 
       DO i = 1, npart_left
         ipos = INT(random() * (num_valid_cells_local - 1)) + 1
         ipos = valid_cell_list(ipos)
 
-        cell_z = ipos / (nx * ny)
-        ipos = ipos - (nx * ny) * cell_z
-        cell_z = cell_z + 1
+        cell_z = ipos / (nx_e * ny_e)
+        ipos = ipos - (nx_e * ny_e) * cell_z
+        cell_z = cell_z + iz_min
 
-        cell_y = ipos / nx
-        ipos = ipos - nx * cell_y
-        cell_y = cell_y + 1
+        cell_y = ipos / nx_e
+        ipos = ipos - nx_e * cell_y
+        cell_y = cell_y + iy_min
 
-        cell_x = ipos + 1
+        cell_x = ipos + ix_min
 
+#ifdef PER_PARTICLE_CHARGE_MASS
+        ! Even if particles have per particle charge and mass, assume
+        ! that initially they all have the same charge and mass (user
+        ! can easily over_ride)
+        current%charge = species%charge
+        current%mass = species%mass
+#endif
+#ifdef DELTAF_METHOD
+        ! Store the number of particles per cell to allow calculation
+        ! of phase space volume later
+        current%pvol = npart_per_cell
+#endif
         current%part_pos(1) = x(cell_x) + (random() - 0.5_num) * dx
         current%part_pos(2) = y(cell_y) + (random() - 0.5_num) * dy
         current%part_pos(3) = z(cell_z) + (random() - 0.5_num) * dz
 
         current => current%next
-      ENDDO
+      END DO
 
       DEALLOCATE(valid_cell_list)
-    ENDIF
+    END IF
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
@@ -518,7 +555,7 @@ CONTAINS
       CALL remove_particle_from_partlist(partlist, current)
       DEALLOCATE(current)
       current => next
-    ENDDO
+    END DO
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
@@ -533,7 +570,7 @@ CONTAINS
       WRITE(stat_unit,*) 'Loaded ', TRIM(ADJUSTL(string)), &
           ' particles of species ', '"' // TRIM(species%name) // '"'
 #endif
-    ENDIF
+    END IF
 
     CALL particle_bcs
 
@@ -548,13 +585,13 @@ CONTAINS
     REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(IN) :: density_in
     TYPE(particle_species), POINTER :: species
     REAL(num), INTENT(IN) :: density_min, density_max
-    TYPE(particle), POINTER :: current
+    TYPE(particle), POINTER :: current, next
     INTEGER(i8) :: ipart
     INTEGER, DIMENSION(:,:,:), ALLOCATABLE :: npart_in_cell
 #ifdef PARTICLE_SHAPE_TOPHAT
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: rpart_in_cell
 #endif
-    REAL(num) :: wdata
+    REAL(num) :: wdata, x0, x1, y0, y1, z0, z1
     TYPE(particle_list), POINTER :: partlist
     INTEGER :: ix, iy, iz, i, j, k, isubx, isuby, isubz
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: density
@@ -576,10 +613,10 @@ CONTAINS
         density_map(ix,iy,iz) = .TRUE.
       ELSE
         density(ix,iy,iz) = 0.0_num
-      ENDIF
-    ENDDO ! ix
-    ENDDO ! iy
-    ENDDO ! iz
+      END IF
+    END DO ! ix
+    END DO ! iy
+    END DO ! iz
 
     ! Uniformly load particles in space
     CALL load_particles(species, density_map)
@@ -611,7 +648,7 @@ CONTAINS
 #ifdef PARTICLE_SHAPE_BSPLINE3
           IF (.NOT. density_map(i,j,k)) k = cell_z - isubz / 2
 #endif
-        ENDIF
+        END IF
 #endif
         DO isuby = sf_min, sf_max
           i = cell_x
@@ -624,7 +661,7 @@ CONTAINS
 #ifdef PARTICLE_SHAPE_BSPLINE3
             IF (.NOT. density_map(i,j,k)) j = cell_y - isuby / 2
 #endif
-          ENDIF
+          END IF
 #endif
           DO isubx = sf_min, sf_max
             i = cell_x + isubx
@@ -636,12 +673,12 @@ CONTAINS
 #ifdef PARTICLE_SHAPE_BSPLINE3
               IF (.NOT. density_map(i,j,k)) i = cell_x - isubx / 2
 #endif
-            ENDIF
+            END IF
 #endif
             wdata = wdata + gx(isubx) * gy(isuby) * gz(isubz) * density(i,j,k)
-          ENDDO ! isubx
-        ENDDO ! isuby
-      ENDDO ! isubz
+          END DO ! isubx
+        END DO ! isuby
+      END DO ! isubz
 
       current%weight = wdata
       npart_in_cell(cell_x,cell_y,cell_z) = &
@@ -649,7 +686,7 @@ CONTAINS
 
       current => current%next
       ipart = ipart + 1
-    ENDDO
+    END DO
     DEALLOCATE(density_map)
     DEALLOCATE(density)
 
@@ -658,11 +695,11 @@ CONTAINS
 #ifdef PARTICLE_SHAPE_TOPHAT
     ! For the TOPHAT shape function, particles can be located on a
     ! neighbouring process
-    ALLOCATE(rpart_in_cell(-2:nx+3,-2:ny+3,-2:nz+3))
+    ALLOCATE(rpart_in_cell(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
 
     rpart_in_cell = npart_in_cell
     CALL processor_summation_bcs(rpart_in_cell, ng)
-    npart_in_cell = rpart_in_cell
+    npart_in_cell = INT(rpart_in_cell)
 
     DEALLOCATE(rpart_in_cell)
 #endif
@@ -687,9 +724,39 @@ CONTAINS
 
       current => current%next
       ipart = ipart + 1
-    ENDDO
+    END DO
 
     DEALLOCATE(npart_in_cell)
+
+    ! If you are filling ghost cells to meet an injector
+    ! Then you have overfilled by half a cell but need those particles
+    ! To calculate weights correctly. Now delete those particles that
+    ! Overlap with the injection region
+    IF (species%fill_ghosts) THEN
+      x1 = 0.5_num * dx * png
+      x0 = x_min - x1
+      x1 = x_max + x1
+
+      y1 = 0.5_num * dy * png
+      y0 = y_min - y1
+      y1 = y_max + y1
+
+      z1 = 0.5_num * dz * png
+      z0 = z_min - z1
+      z1 = z_max + z1
+
+      current => partlist%head
+      DO WHILE(ASSOCIATED(current))
+        next => current%next
+        IF (current%part_pos(1) < x0 .OR. current%part_pos(1) >= x1 &
+            .OR. current%part_pos(2) < y0 .OR. current%part_pos(2) >= y1 &
+            .OR. current%part_pos(3) < z0 .OR. current%part_pos(3) >= z1) THEN
+          CALL remove_particle_from_partlist(partlist, current)
+          DEALLOCATE(current)
+        END IF
+        current => next
+      END DO
+    END IF
 
   END SUBROUTINE setup_particle_density
 #endif
@@ -710,7 +777,7 @@ CONTAINS
     cdf(1) = dist_fn(1)
     DO ipoint = 2, n_points
       cdf(ipoint) = cdf(ipoint-1) + dist_fn(ipoint)
-    ENDDO
+    END DO
 
     cdf = cdf / cdf(n_points)
 
@@ -727,8 +794,8 @@ CONTAINS
         sample_dist_function = (axis(current) * (position - cdf(current)) &
             + axis(current+1) * (cdf(current+1) - position)) / d_cdf
         EXIT
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     DEALLOCATE(cdf)
 
@@ -750,7 +817,7 @@ CONTAINS
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
     INTEGER(KIND=i4), DIMENSION(:), POINTER :: idbuf4
     INTEGER(KIND=i8), DIMENSION(:), POINTER :: idbuf8
-    INTEGER :: id_offset
+    INTEGER :: i, id_offset
     INTEGER, DIMENSION(:), POINTER :: part_counts
 #endif
     TYPE(particle_species), POINTER :: species
@@ -796,19 +863,19 @@ CONTAINS
         read_count = load_1d_real_array(curr_loader%px_data, pxbuf, &
             curr_loader%px_data_offset, errcode)
         IF (part_count /= read_count) file_inconsistencies = .TRUE.
-      ENDIF
+      END IF
 
       IF (curr_loader%py_data_given) THEN
         read_count = load_1d_real_array(curr_loader%py_data, pybuf, &
             curr_loader%py_data_offset, errcode)
         IF (part_count /= read_count) file_inconsistencies = .TRUE.
-      ENDIF
+      END IF
 
       IF (curr_loader%pz_data_given) THEN
         read_count = load_1d_real_array(curr_loader%pz_data, pzbuf, &
             curr_loader%pz_data_offset, errcode)
         IF (part_count /= read_count) file_inconsistencies = .TRUE.
-      ENDIF
+      END IF
 
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
       IF (curr_loader%id_data_given) THEN
@@ -818,9 +885,9 @@ CONTAINS
         ELSE
           read_count = load_1d_integer8_array(curr_loader%id_data, idbuf8, &
               curr_loader%id_data_offset, errcode)
-        ENDIF
+        END IF
         IF (part_count /= read_count) file_inconsistencies = .TRUE.
-      ENDIF
+      END IF
 #endif
 
       CALL MPI_ALLREDUCE(MPI_IN_PLACE, file_inconsistencies, 1, MPI_LOGICAL, &
@@ -831,22 +898,21 @@ CONTAINS
           WRITE(*,*) '*** ERROR ***'
           WRITE(*,*) 'Error while loading particles_from_file for species ', &
               TRIM(species%name)
-        ENDIF
+        END IF
         CALL abort_code(c_err_bad_setup)
-      ENDIF
+      END IF
 
 ! This is needed to get the IDs assigned properly
-#if defined(PARTICLEID) || defined(PARTICLE_ID4)
+#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
       IF (.NOT.curr_loader%id_data_given) THEN
         ALLOCATE(part_counts(0:nproc-1))
         CALL MPI_ALLGATHER(part_count, 1, MPI_INTEGER4, part_counts, 1, &
-            MPI_INTEGER4, comm)
+            MPI_INTEGER4, comm, errcode)
         id_offset = 0
-        i = 0
-        DO WHILE (i < rank)
+        DO i = 0, rank
           id_offset = id_offset + part_counts(i)
-        ENDDO
-      ENDIF
+        END DO
+      END IF
 #endif
 
       DO read_count = 1, part_count
@@ -857,42 +923,32 @@ CONTAINS
         new_particle%part_pos(1) = xbuf(read_count)
         new_particle%part_pos(2) = ybuf(read_count)
         new_particle%part_pos(3) = zbuf(read_count)
+#if !defined(PER_SPECIES_WEIGHT) || defined (PHOTONS)
         new_particle%weight = wbuf(read_count)
+#endif
         IF (curr_loader%px_data_given) THEN
           new_particle%part_p(1) = pxbuf(read_count)
-        ENDIF
+        END IF
         IF (curr_loader%py_data_given) THEN
           new_particle%part_p(2) = pybuf(read_count)
-        ENDIF
+        END IF
         IF (curr_loader%pz_data_given) THEN
           new_particle%part_p(3) = pzbuf(read_count)
-        ENDIF
+        END IF
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
         IF (curr_loader%id_data_given) THEN
-#if defined(PARTICLE_ID4)
           IF (curr_loader%id_data_4byte) THEN
-            new_particle%id = idbuf4(read_count)
+            new_particle%id = INT(idbuf4(read_count), idkind)
           ELSE
-            new_particle%id = INT(idbuf8(read_count), i4)
-          ENDIF
-#else
-          IF (curr_loader%id_data_4byte) THEN
-            new_particle%id = INT(idbuf4(read_count), i8)
-          ELSE
-            new_particle%id = idbuf8(read_count)
-          ENDIF
-#endif
+            new_particle%id = INT(idbuf8(read_count), idkind)
+          END IF
         ELSE
-#if defined(PARTICLE_ID4)
-          new_particle%id = INT(id_offset + read_count, i4)
-#else
-          new_particle%id = INT(id_offset + read_count, i8)
-#endif
-        ENDIF
+          new_particle%id = INT(id_offset + read_count, idkind)
+        END IF
 #endif
         ! Just being careful
         NULLIFY(new_particle)
-      ENDDO
+      END DO
 
       ! Need to keep totals accurate
       CALL MPI_ALLREDUCE(partlist%count, species%count, 1, MPI_INTEGER8, &
@@ -906,8 +962,10 @@ CONTAINS
         WRITE(stat_unit,*) 'Inserted ', TRIM(stra), &
             ' custom particles of species "', TRIM(species%name), '"'
 #endif
-      ENDIF
-    ENDDO
+      END IF
+    END DO
+
+    DEALLOCATE(custom_loaders_list)
 
     CALL distribute_particles
 

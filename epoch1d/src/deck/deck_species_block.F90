@@ -43,10 +43,14 @@ MODULE deck_species_block
   CHARACTER(LEN=string_length) :: release_species_list
   CHARACTER(LEN=string_length), DIMENSION(:), POINTER :: release_species
   REAL(num), DIMENSION(:), POINTER :: species_ionisation_energies
-  REAL(num), DIMENSION(:), POINTER :: ionisation_energies, ionise_to_species
-  REAL(num), DIMENSION(:), POINTER :: mass, charge, angular, part_count
-  REAL(num), DIMENSION(:), POINTER :: principle, dumpmask_array
-  REAL(num) :: species_mass, species_charge, species_dumpmask
+  REAL(num), DIMENSION(:), POINTER :: ionisation_energies
+  REAL(num), DIMENSION(:), POINTER :: mass, charge
+  INTEGER, DIMENSION(:), POINTER :: principle, angular, part_count
+  INTEGER, DIMENSION(:), POINTER :: ionise_to_species, dumpmask_array
+  INTEGER, DIMENSION(:,:), POINTER :: bc_particle_array
+  REAL(num) :: species_mass, species_charge
+  INTEGER :: species_dumpmask
+  INTEGER, DIMENSION(2*c_ndims) :: species_bc_particle
 
 CONTAINS
 
@@ -68,8 +72,9 @@ CONTAINS
       ALLOCATE(angular(4))
       ALLOCATE(part_count(4))
       ALLOCATE(dumpmask_array(4))
+      ALLOCATE(bc_particle_array(2*c_ndims,4))
       release_species = ''
-    ENDIF
+    END IF
 
   END SUBROUTINE species_deck_initialise
 
@@ -77,10 +82,12 @@ CONTAINS
 
   SUBROUTINE species_deck_finalise
 
-    INTEGER :: i, j, io, iu, nlevels, nrelease
+    INTEGER :: i, j, idx, io, iu, nlevels, nrelease
     CHARACTER(LEN=8) :: string
-    INTEGER :: errcode
+    INTEGER :: errcode, bc
     TYPE(primitive_stack) :: stack
+    INTEGER, DIMENSION(2*c_ndims) :: bc_species
+    LOGICAL :: error
 
     IF (deck_state == c_ds_first) THEN
       CALL setup_species
@@ -93,21 +100,23 @@ CONTAINS
           CALL integer_as_string(i, string)
           PRINT*, 'Name of species ', TRIM(ADJUSTL(string)), ' is ', &
               TRIM(species_names(i))
-        ENDIF
+        END IF
         ! This would usually be set after c_ds_first but all of this is required
         ! during setup of derived ionisation species
-        species_list(i)%ionise_to_species = INT(ionise_to_species(i))
+        species_list(i)%ionise_to_species = ionise_to_species(i)
         species_list(i)%ionisation_energy = ionisation_energies(i)
-        species_list(i)%n = INT(principle(i))
-        species_list(i)%l = INT(angular(i))
+        species_list(i)%n = principle(i)
+        species_list(i)%l = angular(i)
         species_list(i)%mass = mass(i)
         species_list(i)%charge = charge(i)
         species_list(i)%count = INT(part_count(i),i8)
-        species_list(i)%dumpmask = INT(dumpmask_array(i))
+        species_list(i)%dumpmask = dumpmask_array(i)
+        species_list(i)%bc_particle = bc_particle_array(:,i)
         IF (species_list(i)%ionise_to_species > 0) &
             species_list(i)%ionise = .TRUE.
-      ENDDO
+      END DO
 
+      DEALLOCATE(bc_particle_array)
       DEALLOCATE(dumpmask_array)
       DEALLOCATE(part_count)
       DEALLOCATE(principle)
@@ -127,7 +136,7 @@ CONTAINS
         DO WHILE(species_list(j)%ionise)
           nlevels = nlevels + 1
           j = species_list(j)%ionise_to_species
-        ENDDO
+        END DO
 
         ! Count number of release species listed for species i; we need to do
         ! this because sometimes extra values are returned on the stack
@@ -136,7 +145,7 @@ CONTAINS
           IF (stack%entries(j)%value > 0 &
               .AND. stack%entries(j)%value <= n_species) &
                   nrelease = nrelease + 1
-        ENDDO
+        END DO
 
         ! If there's only one release species use it for all ionisation levels
         IF (SIZE(stack%entries) == 1) THEN
@@ -145,7 +154,7 @@ CONTAINS
           DO WHILE(species_list(j)%ionise)
             species_list(j)%release_species = stack%entries(1)%value
             j = species_list(j)%ionise_to_species
-          ENDDO
+          END DO
         ! If there's a list of release species use it
         ELSEIF (nlevels == nrelease) THEN
           nlevels = 1
@@ -155,7 +164,7 @@ CONTAINS
             species_list(stack%entries(nlevels)%value)%electron = .TRUE.
             nlevels = nlevels + 1
             j = species_list(j)%ionise_to_species
-          ENDDO
+          END DO
         ! If there's too many or not enough release species specified use the
         ! first one only and throw an error
         ELSE
@@ -164,7 +173,7 @@ CONTAINS
           DO WHILE(species_list(j)%ionise)
             species_list(j)%release_species = stack%entries(1)%value
             j = species_list(j)%ionise_to_species
-          ENDDO
+          END DO
           IF (rank == 0) THEN
             DO iu = 1, nio_units ! Print to stdout and to file
               io = io_units(iu)
@@ -172,15 +181,69 @@ CONTAINS
               WRITE(io,*) 'Incorrect number of release species specified ', &
                   'for ', TRIM(species_names(i)), '. Using only first ', &
                   'specified.'
-            ENDDO
-          ENDIF
-        ENDIF
+            END DO
+          END IF
+        END IF
 
         CALL deallocate_stack(stack)
-      ENDDO
+      END DO
       DEALLOCATE(release_species)
       DEALLOCATE(ionise_to_species)
       DEALLOCATE(species_names)
+
+      ! Sanity check on periodic boundaries
+      DO i = 1, n_species
+        ! First, set the per-species boundary condition to the same value
+        ! as bc_particle if it hasn't been set yet
+        DO idx = 1, 2*c_ndims
+          IF (species_list(i)%bc_particle(idx) == c_bc_null) &
+              species_list(i)%bc_particle(idx) = bc_particle(idx)
+        END DO
+
+        bc_species = species_list(i)%bc_particle
+
+        error = .FALSE.
+        DO idx = 1, c_ndims
+          IF (bc_species(2*idx-1) == c_bc_periodic) THEN
+            IF (bc_species(2*idx) /= c_bc_periodic) &
+                error = .TRUE.
+          ELSE
+            IF (bc_species(2*idx) == c_bc_periodic) &
+                error = .TRUE.
+          END IF
+        END DO
+
+        IF (error) THEN
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Periodic boundaries must be specified on both', &
+                  ' sides of the domain.'
+            END DO
+          END IF
+          CALL abort_code(c_err_bad_value)
+        END IF
+
+        ! Finally, set bc_allspecies. This will be equal to the per-species
+        ! value if they are all compatible or c_bc_mixed otherwise
+        DO idx = 1, 2*c_ndims
+          bc = bc_species(idx)
+
+          IF (bc == c_bc_reflect .OR. bc == c_bc_thermal) THEN
+            bc = c_bc_reflect
+          ELSE IF (bc /= c_bc_periodic) THEN
+            bc = c_bc_open
+          END IF
+
+          IF (i == 1) THEN
+            bc_allspecies(idx) = bc
+          ELSE
+            IF (bc_allspecies(idx) /= bc) bc_allspecies(idx) = c_bc_mixed
+          END IF
+        END DO
+      END DO
     ELSE
       DEALLOCATE(species_charge_set)
       DEALLOCATE(species_blocks)
@@ -195,10 +258,10 @@ CONTAINS
             WRITE(io,*) '*** ERROR ***'
             WRITE(io,*) 'The species named "' // TRIM(species_list(i)%name) &
                 // '" must have a positive mass.'
-          ENDDO
-        ENDIF
+          END DO
+        END IF
         CALL abort_code(c_err_bad_value)
-      ENDDO
+      END DO
 
       IF (track_ejected_particles) THEN
         ALLOCATE(ejected_list(n_species))
@@ -208,9 +271,9 @@ CONTAINS
           ejected_list(i)%name = &
               'ejected_' // TRIM(ADJUSTL(species_list(i)%name))
           CALL create_empty_partlist(ejected_list(i)%attached_list)
-        ENDDO
-      ENDIF
-    ENDIF
+        END DO
+      END IF
+    END IF
 
     IF (use_field_ionisation) need_random_state = .TRUE.
 
@@ -224,6 +287,7 @@ CONTAINS
     current_block = current_block + 1
     got_name = .FALSE.
     species_dumpmask = c_io_always
+    species_bc_particle = c_bc_null
     IF (deck_state == c_ds_first) RETURN
     species_id = species_blocks(current_block)
     offset = 0
@@ -246,16 +310,17 @@ CONTAINS
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'Species block number ', TRIM(id_string), &
               ' has no "name" element.'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
 
       check_block = c_err_missing_elements
-    ENDIF
+    END IF
 
     IF (deck_state == c_ds_first) THEN
       block_species_id = n_species
       charge(n_species) = species_charge
       mass(n_species) = species_mass
+      bc_particle_array(:, n_species) = species_bc_particle
       IF (n_secondary_species_in_block > 0) THEN
         ! Create an empty species for each ionisation energy listed in species
         ! block
@@ -266,10 +331,10 @@ CONTAINS
           CALL create_ionisation_species_from_name(name, &
               species_ionisation_energies(i), &
               n_secondary_species_in_block + 1 - i)
-        ENDDO
+        END DO
         DEALLOCATE(species_ionisation_energies)
-      ENDIF
-    ENDIF
+      END IF
+    END IF
 
   END SUBROUTINE species_block_end
 
@@ -292,13 +357,13 @@ CONTAINS
       IF (got_name) THEN
         errcode = c_err_preset_element
         RETURN
-      ENDIF
+      END IF
       got_name = .TRUE.
       IF (deck_state /= c_ds_first) RETURN
       CALL grow_array(species_blocks, current_block)
       species_blocks(current_block) = create_species_number_from_name(value)
       RETURN
-    ENDIF
+    END IF
 
     ! Collect ionisation energies for the species
     IF (str_cmp(element, 'ionisation_energies') &
@@ -310,9 +375,9 @@ CONTAINS
         CALL evaluate_and_return_all(stack, &
             n_secondary_species_in_block, species_ionisation_energies, errcode)
         CALL deallocate_stack(stack)
-      ENDIF
+      END IF
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'ionisation_electron_species') &
         .OR. str_cmp(element, 'ionization_electron_species') &
@@ -320,15 +385,15 @@ CONTAINS
         .OR. str_cmp(element, 'electron')) THEN
       release_species_list = value
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'mass')) THEN
       species_mass = as_real_print(value, element, errcode) * m0
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'charge')) THEN
       species_charge = as_real_print(value, element, errcode) * q0
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'dump')) THEN
       dump = as_logical_print(value, element, errcode)
@@ -336,12 +401,22 @@ CONTAINS
         species_dumpmask = c_io_always
       ELSE
         species_dumpmask = c_io_never
-      ENDIF
-    ENDIF
+      END IF
+    END IF
 
     IF (str_cmp(element, 'dumpmask')) THEN
       species_dumpmask = as_integer_print(value, element, errcode)
-    ENDIF
+    END IF
+
+    IF (str_cmp(element, 'bc_x_min')) THEN
+      species_bc_particle(c_bd_x_min) = as_bc_print(value, element, errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_x_max')) THEN
+      species_bc_particle(c_bd_x_max) = as_bc_print(value, element, errcode)
+      RETURN
+    END IF
 
     IF (deck_state == c_ds_first) RETURN
 
@@ -352,7 +427,7 @@ CONTAINS
     IF (str_cmp(element, 'identify')) THEN
       CALL identify_species(value, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'mass')) THEN
       species_list(species_id)%mass = species_mass
@@ -367,21 +442,21 @@ CONTAINS
             species_list(j)%mass = species_list(j)%mass &
                 - species_list(species_id)%mass
             j = species_list(j)%ionise_to_species
-          ENDDO
-        ENDIF
-      ENDDO
+          END DO
+        END IF
+      END DO
       IF (species_list(species_id)%mass < 0) THEN
         IF (rank == 0) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
             io = io_units(iu)
             WRITE(io,*) '*** ERROR ***'
             WRITE(io,*) 'Particle species cannot have negative mass.'
-          ENDDO
-        ENDIF
+          END DO
+        END IF
         errcode = c_err_bad_value
-      ENDIF
+      END IF
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'charge')) THEN
       species_list(species_id)%charge = species_charge
@@ -399,11 +474,11 @@ CONTAINS
                 - species_list(species_id)%charge
             species_charge_set(j) = .TRUE.
             j = species_list(j)%ionise_to_species
-          ENDDO
-        ENDIF
-      ENDDO
+          END DO
+        END IF
+      END DO
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'frac') .OR. str_cmp(element, 'fraction')) THEN
       IF (npart_global >= 0) THEN
@@ -411,32 +486,51 @@ CONTAINS
             INT(as_real_print(value, element, errcode) * npart_global, i8)
       ELSE
         species_list(species_id)%count = 0
-      ENDIF
+      END IF
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'npart')) THEN
       species_list(species_id)%count = &
           as_long_integer_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'npart_per_cell')) THEN
       species_list(species_id)%npart_per_cell = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'dump') .OR. str_cmp(element, 'dumpmask')) THEN
-      species_list(species_id)%dumpmask = INT(species_dumpmask)
+      species_list(species_id)%dumpmask = species_dumpmask
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'immobile')) THEN
       species_list(species_id)%immobile = &
           as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
+
+    IF (str_cmp(element, 'meet_injectors') &
+        .OR. str_cmp(element, 'load_up_to_injectors')) THEN
+      species_list(species_id)%fill_ghosts = &
+          as_logical_print(value, element, errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_x_min')) THEN
+      species_list(species_id)%bc_particle(c_bd_x_min) = &
+          species_bc_particle(c_bd_x_min)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_x_max')) THEN
+      species_list(species_id)%bc_particle(c_bd_x_max) = &
+          species_bc_particle(c_bd_x_max)
+      RETURN
+    END IF
 
     ! *************************************************************
     ! This section sets properties for tracer particles
@@ -449,10 +543,10 @@ CONTAINS
       IF (as_logical_print(value, element, errcode)) THEN
         errcode = c_err_pp_options_wrong
         extended_error_string = '-DNO_TRACER_PARTICLES'
-      ENDIF
+      END IF
 #endif
       RETURN
-    ENDIF
+    END IF
 
     ! *************************************************************
     ! This section sets properties for particle splitting
@@ -460,13 +554,13 @@ CONTAINS
     IF (str_cmp(element, 'split')) THEN
       species_list(species_id)%split = as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'npart_max')) THEN
       species_list(species_id)%npart_max = &
           as_long_integer_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     ! *************************************************************
     ! This section sets properties for migration
@@ -476,69 +570,69 @@ CONTAINS
       species_list(species_id)%migrate%this_species = &
           as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'promote_to')) THEN
       species_list(species_id)%migrate%promote_to_species = &
           as_integer_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'demote_to')) THEN
       species_list(species_id)%migrate%demote_to_species = &
           as_integer_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'promote_multiplier')) THEN
       species_list(species_id)%migrate%promotion_energy_factor = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'demote_multiplier')) THEN
       species_list(species_id)%migrate%demotion_energy_factor = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'promote_density')) THEN
       species_list(species_id)%migrate%promotion_density = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'demote_density')) THEN
       species_list(species_id)%migrate%demotion_density = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     ! Initial conditions
 
     IF (str_cmp(element, 'offset')) THEN
       offset = as_long_integer_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'density_min') .OR. str_cmp(element, 'minrho')) THEN
       dmin = as_real_print(value, element, errcode)
       IF (dmin <= 0.0_num) dmin = EPSILON(1.0_num)
       species_list(species_id)%initial_conditions%density_min = dmin
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'density_max') .OR. str_cmp(element, 'maxrho')) THEN
       species_list(species_id)%initial_conditions%density_max = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'density_back')) THEN
       species_list(species_id)%initial_conditions%density_back = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     CALL get_filename(value, filename, got_file, errcode)
 
@@ -550,13 +644,13 @@ CONTAINS
       IF (str_cmp(element, 'mass_density')) THEN
         mult = 1.0_num / species_list(species_id)%mass
         mult_string = '/ species_list(species_id)%mass'
-      ENDIF
+      END IF
 
       CALL fill_array(species_list(species_id)%density_function, &
           species_list(species_id)%initial_conditions%density, &
           mult, mult_string, element, value, filename, got_file)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'drift_x')) THEN
       n = 1
@@ -564,7 +658,7 @@ CONTAINS
           species_list(species_id)%initial_conditions%drift(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'drift_y')) THEN
       n = 2
@@ -572,7 +666,7 @@ CONTAINS
           species_list(species_id)%initial_conditions%drift(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'drift_z')) THEN
       n = 3
@@ -580,25 +674,25 @@ CONTAINS
           species_list(species_id)%initial_conditions%drift(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'drift_x_back')) THEN
       species_list(species_id)%initial_conditions%drift_back(1) = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'drift_y_back')) THEN
       species_list(species_id)%initial_conditions%drift_back(2) = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'drift_z_back')) THEN
       species_list(species_id)%initial_conditions%drift_back(3) = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     mult_string = '* ev / kb'
 
@@ -621,7 +715,7 @@ CONTAINS
 
       debug_mode = .FALSE.
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'temp_back') .OR. str_cmp(element, 'temp_back_k') &
          .OR. str_cmp(element, 'temp_back_ev')) THEN
@@ -672,7 +766,7 @@ CONTAINS
           species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'temp_y') .OR. str_cmp(element, 'temp_y_k') &
         .OR. str_cmp(element, 'temp_y_ev')) THEN
@@ -683,7 +777,7 @@ CONTAINS
           species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'temp_z') .OR. str_cmp(element, 'temp_z_k') &
         .OR. str_cmp(element, 'temp_z_ev')) THEN
@@ -694,7 +788,7 @@ CONTAINS
           species_list(species_id)%initial_conditions%temp(:,n), &
           mult, mult_string, element, value, filename, got_file)
       RETURN
-    ENDIF
+    END IF
 
     errcode = c_err_unknown_element
 
@@ -719,10 +813,10 @@ CONTAINS
             WRITE(io,*) '*** ERROR ***'
             WRITE(io,*) 'No mass specified for particle species "', &
                 TRIM(species_list(i)%name), '"'
-          ENDDO
-        ENDIF
+          END DO
+        END IF
         errcode = c_err_missing_elements
-      ENDIF
+      END IF
       IF (.NOT. species_charge_set(i)) THEN
         IF (rank == 0) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
@@ -730,10 +824,10 @@ CONTAINS
             WRITE(io,*) '*** ERROR ***'
             WRITE(io,*) 'No charge specified for particle species "', &
                 TRIM(species_list(i)%name), '"'
-          ENDDO
-        ENDIF
+          END DO
+        END IF
         errcode = c_err_missing_elements
-      ENDIF
+      END IF
       IF (species_list(i)%npart_per_cell >= 0) THEN
         IF (species_list(i)%count >= 0 .AND. rank == 0) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
@@ -742,11 +836,11 @@ CONTAINS
             WRITE(io,*) 'Two forms of npart used for particle species "', &
                 TRIM(species_list(i)%name), '"'
             WRITE(io,*) 'Just using "npart_per_cell".'
-          ENDDO
-        ENDIF
+          END DO
+        END IF
         species_list(i)%count = INT(species_list(i)%npart_per_cell, i8)
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
   END FUNCTION species_block_check
 
@@ -763,8 +857,8 @@ CONTAINS
       IF (str_cmp(name, species_names(i))) THEN
         create_species_number_from_name = i
         RETURN
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     ! If we're here then then named species doesn't yet exist
 
@@ -777,10 +871,10 @@ CONTAINS
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'The species name "' // TRIM(name) // '" is not valid.'
           WRITE(io,*) 'Please choose a different name and try again.'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       CALL abort_code(c_err_bad_value)
-    ENDIF
+    END IF
 
     n_species = n_species + 1
     create_species_number_from_name = n_species
@@ -795,6 +889,7 @@ CONTAINS
     CALL grow_array(angular, n_species)
     CALL grow_array(part_count, n_species)
     CALL grow_array(dumpmask_array, n_species)
+    CALL grow_array(bc_particle_array, 2*c_ndims, n_species)
 
     species_names(n_species) = TRIM(name)
     ionise_to_species(n_species) = -1
@@ -806,6 +901,7 @@ CONTAINS
     angular(n_species) = -1
     part_count(n_species) = -1
     dumpmask_array(n_species) = species_dumpmask
+    bc_particle_array(:,n_species) = species_bc_particle
 
     RETURN
 
@@ -823,7 +919,7 @@ CONTAINS
 
     DO i = 1, n_species
       IF (str_cmp(name, species_names(i))) RETURN
-    ENDDO
+    END DO
     ! This calculates the principle and angular quantum number based on the
     ! assumption that shells are filled as they would be in the ground state
     ! e.g. 1s, 2s, 2p, 3s, 3p, 4s, 3d, 4p, 5s, 4d, 5p, 6s, 4f, 5d, 6p, 7s, etc
@@ -837,9 +933,9 @@ CONTAINS
         IF (n_electrons <= i) THEN
           n = n - l
           EXIT
-        ENDIF
-      ENDDO
-    ENDDO
+        END IF
+      END DO
+    END DO
     principle(n_species) = n
     angular(n_species) = l
     ionisation_energies(n_species) = ionisation_energy
@@ -865,6 +961,8 @@ CONTAINS
     part_count(n_species) = 0
     CALL grow_array(dumpmask_array, n_species)
     dumpmask_array(n_species) = species_dumpmask
+    CALL grow_array(bc_particle_array, 2*c_ndims, n_species)
+    bc_particle_array(:,n_species) = species_bc_particle
     RETURN
 
   END SUBROUTINE create_ionisation_species_from_name
@@ -881,8 +979,8 @@ CONTAINS
       IF (str_cmp(name, species_list(i)%name)) THEN
         species_number_from_name = i
         RETURN
-      ENDIF
-    ENDDO
+      END IF
+    END DO
     species_number_from_name = -1
     RETURN
 
@@ -911,11 +1009,11 @@ CONTAINS
             io = io_units(iu)
             WRITE(io,*) '*** ERROR ***'
             WRITE(io,*) 'Cannot load from file whilst using a moving window.'
-          ENDDO
-        ENDIF
+          END DO
+        END IF
         errcode = c_err_bad_value
         RETURN
-      ENDIF
+      END IF
 
       CALL load_single_array_from_file(filename, array, offset, errcode)
 
@@ -937,16 +1035,16 @@ CONTAINS
             io = io_units(iu)
             WRITE(io,*) '*** ERROR ***'
             WRITE(io,*) 'Unable to parse input deck.'
-          ENDDO
-        ENDIF
+          END DO
+        END IF
         CALL abort_code(errcode)
-      ENDIF
+      END IF
 
-      DO ix = -2, nx+3
+      DO ix = 1-ng, nx+ng
         parameters%pack_ix = ix
         array(ix) = evaluate_with_parameters(stack, parameters, errcode)
-      ENDDO
-    ENDIF
+      END DO
+    END IF
 
     CALL deallocate_stack(output)
     output = stack
@@ -966,8 +1064,9 @@ CONTAINS
       species_list(species_id)%mass = m0
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_electron
+      species_list(species_id)%electron = .TRUE.
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(value, 'proton')) THEN
       species_list(species_id)%charge = q0
@@ -975,7 +1074,7 @@ CONTAINS
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_proton
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(value, 'positron')) THEN
       species_list(species_id)%charge = q0
@@ -983,7 +1082,7 @@ CONTAINS
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_positron
       RETURN
-    ENDIF
+    END IF
 
 #ifndef PHOTONS
     extended_error_string = 'Cannot identify species "' &
@@ -1005,13 +1104,14 @@ CONTAINS
       species_list(species_id)%mass = m0
       species_list(species_id)%species_type = c_species_id_electron
       species_charge_set(species_id) = .TRUE.
+      species_list(species_id)%electron = .TRUE.
 #if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
       trident_electron_species = species_id
 #else
       errcode = c_err_generic_warning
 #endif
       RETURN
-    ENDIF
+    END IF
 
     ! Breit Wheeler process electron
     IF (str_cmp(value, 'bw_electron')) THEN
@@ -1019,13 +1119,14 @@ CONTAINS
       species_list(species_id)%mass = m0
       species_list(species_id)%species_type = c_species_id_electron
       species_charge_set(species_id) = .TRUE.
+      species_list(species_id)%electron = .TRUE.
 #ifdef PHOTONS
       breit_wheeler_electron_species = species_id
 #else
       errcode = c_err_generic_warning
 #endif
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(value, 'bw_positron')) THEN
       species_list(species_id)%charge = q0
@@ -1036,7 +1137,7 @@ CONTAINS
       breit_wheeler_positron_species = species_id
 #endif
       RETURN
-    ENDIF
+    END IF
 
     ! trident process positron
     IF (str_cmp(value, 'trident_positron')) THEN
@@ -1050,7 +1151,7 @@ CONTAINS
       errcode = c_err_generic_warning
 #endif
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(value, 'photon')) THEN
       species_list(species_id)%charge = 0.0_num
@@ -1063,7 +1164,7 @@ CONTAINS
       errcode = c_err_generic_warning
 #endif
       RETURN
-    ENDIF
+    END IF
 
     errcode = IOR(errcode, c_err_bad_value)
 

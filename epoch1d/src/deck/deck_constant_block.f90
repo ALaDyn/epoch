@@ -31,6 +31,16 @@ CONTAINS
 
   SUBROUTINE constant_deck_initialise
 
+    INTEGER :: i
+
+    IF (ALLOCATED(deck_constant_list)) THEN
+      DO i = 1, n_deck_constants
+        CALL deallocate_stack(deck_constant_list(i)%execution_stream)
+      END DO
+      DEALLOCATE(deck_constant_list)
+    END IF
+    n_deck_constants = 0
+
   END SUBROUTINE constant_deck_initialise
 
 
@@ -39,6 +49,7 @@ CONTAINS
 
     INTEGER :: i, errcode
     REAL(num) :: dc
+    LOGICAL :: const_is_open
 
     IF (.NOT.print_deck_constants) RETURN
     IF (rank /= 0) RETURN
@@ -47,14 +58,19 @@ CONTAINS
       WRITE(du,*) 'Constant block values after first pass:'
     ELSE
       WRITE(du,*) 'Constant block values after second pass:'
-    ENDIF
+    END IF
     WRITE(du,*)
+
+    INQUIRE(unit=duc, opened=const_is_open)
 
     DO i = 1, n_deck_constants
       errcode = 0
       dc = evaluate(deck_constant_list(i)%execution_stream, errcode)
       WRITE(du,'("  ", A, " = ", G18.11)') TRIM(deck_constant_list(i)%name), dc
-    ENDDO
+      IF (const_is_open) THEN
+        WRITE(duc,'(A, " = ", G18.11)') TRIM(deck_constant_list(i)%name), dc
+      END IF
+    END DO
 
   END SUBROUTINE constant_deck_finalise
 
@@ -88,7 +104,7 @@ CONTAINS
     ! First check whether constant already exists
     DO ix = 1, n_deck_constants
       IF (str_cmp(TRIM(element), TRIM(deck_constant_list(ix)%name))) RETURN
-    ENDDO
+    END DO
 
     ! If we're here then then named constant doesn't yet exist, so create it
 
@@ -104,17 +120,17 @@ CONTAINS
               // '" conflicts with a'
           WRITE(io,*) 'built-in constant name. It will be ignored.'
           WRITE(io,*)
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       RETURN
-    ENDIF
+    END IF
 
     CALL initialise_stack(temp)
     CALL tokenize(value, temp, errcode)
     IF (errcode /= c_err_none) THEN
       CALL deallocate_stack(temp)
       RETURN
-    ENDIF
+    END IF
 
     ! Take a copy of the old list
     IF (n_deck_constants > 0) THEN
@@ -130,7 +146,7 @@ CONTAINS
     ELSE
       ! Allocate the new list
       ALLOCATE(deck_constant_list(1:n_deck_constants+1))
-    ENDIF
+    END IF
 
     ! Add the new value
     deck_constant_list(n_deck_constants+1)%execution_stream = temp
