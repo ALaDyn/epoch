@@ -119,7 +119,7 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     INTEGER(i8), INTENT(IN) :: n_els_min
-    INTEGER(i8) :: actual_elements, i_part, els_allocated
+    INTEGER(i8) :: actual_elements
     INTEGER(i8) :: i_sub, n_subs, last, link_to
     INTEGER(i8), DIMENSION(:), ALLOCATABLE :: els_to_allocate
     LOGICAL, INTENT(IN), OPTIONAL :: link_el_in, no_pad_store
@@ -293,7 +293,6 @@ CONTAINS
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: substore, tmp1, tmp2
     INTEGER(i8), INTENT(IN) :: total_size
-    TYPE(particle), POINTER :: current, prev
     INTEGER(i8) :: i_part
 
     !Nothing to do
@@ -365,9 +364,8 @@ CONTAINS
     TYPE(particle_species), INTENT(IN) :: species
     TYPE(particle), POINTER :: current
     TYPE(particle_sub_store), POINTER :: sub
-    INTEGER(i8) :: counta, countb, countc, i, a_count, cell_x, cell_y, countd, j
+    INTEGER(i8) :: counta, countb, countc, i, a_count, countd, j
     REAL(num) :: idx, idy, part_x, part_y
-    INTEGER :: ierr
 
     IF(.NOT. species%attached_list%use_store) RETURN
     !First check general integrity
@@ -475,15 +473,12 @@ CONTAINS
     DO WHILE (ASSOCIATED(current))
       part_x  = current%part_pos(1)
       part_y  = current%part_pos(2)
-      cell_x = part_x * idx
-      cell_y = part_y * idy
       IF( part_x .GT. x_max_local  .OR. part_x .LT. x_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, x', cell_x, part_x, &
-            x_min_local, x_max_local, current%live, current%id
+        WRITE(100+rank, *) 'Error, particle out of range, x', part_x
         countd = countd + 1
       ENDIF
       IF(part_y .GT. y_max_local  .OR. part_y .LT. y_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, y', cell_y
+        WRITE(100+rank, *) 'Error, particle out of range, y', part_y
         countd = countd + 1
       ENDIF
       current => current%next
@@ -521,7 +516,6 @@ CONTAINS
    INTEGER(i8) :: countd
    LOGICAL, INTENT(IN) :: inside_is_err
    REAL(num) :: part_x, part_y
-   INTEGER :: ierr
 
    countd = 0
    current => list%head
@@ -552,8 +546,7 @@ CONTAINS
     TYPE(particle_store), INTENT(IN) :: store
     TYPE(particle), POINTER :: current, prev
     TYPE(particle_sub_store), POINTER :: sub
-    INTEGER(i8) :: counta, countb, countc, i, a_count, cell_x, cell_y, countd, j
-    INTEGER :: ierr
+    INTEGER(i8) :: counta, countb, countc, i, a_count, j
 
     WRITE(100+rank, *) 'Walking'
     !First check general integrity
@@ -793,7 +786,6 @@ CONTAINS
   SUBROUTINE increment_next_free_element(list)
 
     TYPE(particle_list), INTENT(INOUT) :: list
-    INTEGER(i8) :: new_size, i
 
     IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
       !First resort: compact store
@@ -1032,7 +1024,6 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     TYPE(particle), POINTER :: new_particle
-    INTEGER :: ierr
 
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
@@ -1066,7 +1057,7 @@ CONTAINS
       fromstore_in, nocopy_in)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
-    TYPE(particle), POINTER :: a_particle, tmp_particle, prev_particle
+    TYPE(particle), POINTER :: a_particle, tmp_particle
     LOGICAL, INTENT(IN), OPTIONAL :: fromstore_in, nocopy_in
     LOGICAL :: fromstore, nocopy
 
@@ -1719,8 +1710,8 @@ CONTAINS
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: src_section, dest_section
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), POINTER :: original, new, place_into
-    INTEGER(i8) :: i, next_place_index, count, moved, j, placed_in_src, dest_sec
+    TYPE(particle), POINTER :: original, place_into
+    INTEGER(i8) :: i, next_place_index, count, moved, j
 
     !Completely compact, between stores
     !Write so as to allow skipping empty subs completely

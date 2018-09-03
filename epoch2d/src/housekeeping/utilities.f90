@@ -253,10 +253,10 @@ CONTAINS
     USE mpi
 
     INTEGER, INTENT(IN) :: errcode
-    INTEGER :: i, newcode, ierr
+    INTEGER :: newcode, ierr
 
     PRINT*, errcode
-    newcode = SQRT(REAL(-1*errcode))
+    newcode = INT(SQRT(REAL(-1*errcode)))
     CALL MPI_ABORT(MPI_COMM_WORLD, errcode, ierr)
 
   END SUBROUTINE abort_with_trace
