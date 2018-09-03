@@ -366,6 +366,7 @@ CONTAINS
     REAL(num) :: idx, idy, part_x, part_y
     INTEGER :: ierr
 
+    IF(.NOT. species%attached_list%use_store) RETURN
     !First check general integrity
     counta = 0
     countb = 0
@@ -793,7 +794,10 @@ CONTAINS
 
     IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
       !First resort: compact store
-      IF(list%count > 0) CALL full_compact_backing_store(list%store, list)
+     IF(list%count > 0 .AND. &
+          REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
+        CALL full_compact_backing_store(list%store, list)
+      ENDIF
       IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
         !Compacting insufficient, must grow
         CALL create_empty_substore(list%store, sublist_size)

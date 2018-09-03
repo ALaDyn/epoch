@@ -588,6 +588,7 @@ MODULE shared_data
   INTEGER(i8), PARAMETER :: sublist_size = 1000 !Size of a sublist. Grow ops allocate a new sublist of this size
   REAL(num), PARAMETER :: sublist_slack = 0.05  !Fractional slack to initially allocate
   REAL(num), PARAMETER :: list_factor = 1.6  !Grow ops allocate to this times previous size
+  REAL(num), PARAMETER :: fill_factor = 0.5  !Minimum fill level of sublists
   LOGICAL :: use_store_default = .TRUE.  !Default to using stores for lists; deck can override
   !Segment of memory storing particles
   !Does not track number of valid particles, only its own length
