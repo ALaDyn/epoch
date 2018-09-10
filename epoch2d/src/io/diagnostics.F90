@@ -294,6 +294,11 @@ CONTAINS
       CALL sdf_set_point_array_size(sdf_buffer_size)
       sdf_max_string_length = sdf_get_max_string_length()
       max_string_length = MIN(sdf_max_string_length, c_max_string_length)
+
+      acc_counter => io_block_list(1)%accumulate_counter
+      acc_counter%reset = .FALSE.
+      acc_counter%current_step = 1
+
     END IF
 
     dims = (/nx_global, ny_global/)
