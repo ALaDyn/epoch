@@ -106,6 +106,7 @@ CONTAINS
     partlist%id_update = 0
     partlist%safe = .TRUE.
     partlist%use_store = use_store
+    partlist%locked_store = .FALSE.
     IF (use_store) &
         CALL create_particle_store(partlist, sublist_size, .FALSE., .TRUE.)
 
@@ -789,7 +790,7 @@ CONTAINS
 
     IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
       !First resort: compact store
-     IF(list%count > 0 .AND. &
+     IF(list%count > 0 .AND..NOT. list%locked_store .AND. &
           REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
         CALL full_compact_backing_store(list%store, list)
       END IF

@@ -308,9 +308,8 @@ CONTAINS
     IF (npart_this_species <= 0) THEN
      IF (use_store_default) THEN
        CALL create_empty_partlist(species%attached_list, .TRUE.)
-     ELSE
-       RETURN
      END IF
+     RETURN
     END IF
 
     ix_min = 1

@@ -41,6 +41,7 @@ CONTAINS
 
     DO ispecies = 1, n_species
       local_count = species_list(ispecies)%attached_list%count
+      species_list(ispecies)%attached_list%locked_store = .TRUE.
       CALL MPI_ALLREDUCE(local_count, species_list(ispecies)%global_count, &
           1, MPI_INTEGER8, MPI_SUM, comm, errcode)
       ALLOCATE(species_list(ispecies)%secondary_list(i0:nx+i1,i0:ny+i1))
@@ -95,6 +96,7 @@ CONTAINS
       END IF
       DEALLOCATE(species_list(ispecies)%secondary_list)
     END DO
+    species_list(ispecies)%attached_list%locked_store = .FALSE.
 
     CALL particle_bcs
 

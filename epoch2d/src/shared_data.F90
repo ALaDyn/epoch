@@ -651,7 +651,7 @@ MODULE shared_data
     LOGICAL :: safe
 
     TYPE(particle_list), POINTER :: next, prev
-    LOGICAL :: use_store
+    LOGICAL :: use_store, locked_store
     TYPE(particle_store) :: store
   END TYPE particle_list
 
