@@ -415,7 +415,7 @@ CONTAINS
       species_list(ispecies)%migrate%demotion_energy_factor = 1.0_num
       species_list(ispecies)%migrate%promotion_density = HUGE(1.0_num)
       species_list(ispecies)%migrate%demotion_density = 0.0_num
-      species_list(ispecies)%fill_ghosts = .FALSE.
+      species_list(ispecies)%fill_ghosts = .TRUE.
 #ifndef NO_TRACER_PARTICLES
       species_list(ispecies)%tracer = .FALSE.
 #endif
@@ -1339,9 +1339,13 @@ CONTAINS
 
         IF (npart /= species%count) THEN
           IF (rank == 0) THEN
+            CALL integer_as_string(species%count, str1)
+            CALL integer_as_string(npart, str2)
             PRINT*, '*** ERROR ***'
-            PRINT*, 'Malformed restart dump. Number of particle variables', &
-                ' does not match grid.'
+            PRINT*, 'Malformed restart dump.'
+            PRINT*, 'Particle grid for species "', TRIM(species%name), &
+                '" has ', TRIM(str1), ' particles'
+            PRINT*, 'but "', TRIM(block_id), '" has ', TRIM(str2)
           END IF
           CALL abort_code(c_err_io_error)
           STOP

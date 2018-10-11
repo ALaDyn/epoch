@@ -32,7 +32,7 @@ CONTAINS
     LOGICAL :: error
     CHARACTER(LEN=5), DIMENSION(2*c_ndims) :: &
         boundary = (/ 'x_min', 'x_max' /)
-    CHARACTER(LEN=2*c_max_string_length) :: species_name
+    CHARACTER(LEN=2*c_max_string_length) :: bc_error
 
     ! For some types of boundary, fields and particles are treated in
     ! different ways, deal with that here
@@ -57,10 +57,10 @@ CONTAINS
     error = .FALSE.
     DO ispecies = 1, n_species
       DO i = 1, 2*c_ndims
-        species_name = TRIM(boundary(i)) // ' on species ' &
-            // TRIM(species_list(ispecies)%name)
+        bc_error = 'Unrecognised "' // TRIM(boundary(i)) // '" boundary for ' &
+            // 'species "' // TRIM(species_list(ispecies)%name) // '"'
         error = error .OR. setup_particle_boundary(&
-            species_list(ispecies)%bc_particle(i), species_name)
+            species_list(ispecies)%bc_particle(i), bc_error)
       END DO
     END DO
 
@@ -73,10 +73,10 @@ CONTAINS
 
 
 
-  FUNCTION setup_particle_boundary(boundary, boundary_name) RESULT(error)
+  FUNCTION setup_particle_boundary(boundary, bc_error) RESULT(error)
 
     INTEGER, INTENT(INOUT) :: boundary
-    CHARACTER(LEN=*), INTENT(IN) :: boundary_name
+    CHARACTER(LEN=*), INTENT(IN) :: bc_error
     LOGICAL :: error
 
     ! For some types of boundary, fields and particles are treated in
@@ -108,8 +108,7 @@ CONTAINS
     IF (rank == 0) THEN
       WRITE(*,*)
       WRITE(*,*) '*** ERROR ***'
-      WRITE(*,*) 'Unrecognised particle boundary condition on "', &
-          TRIM(boundary_name), '" boundary.'
+      WRITE(*,*) TRIM(bc_error)
     END IF
     error = .TRUE.
 
@@ -310,7 +309,7 @@ CONTAINS
 
     n = n + 1
     bc = bc_species(n)
-    IF (x_min_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_thermal)) THEN
+    IF (x_min_boundary .AND. bc == c_bc_reflect) THEN
       IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng-1
@@ -327,7 +326,7 @@ CONTAINS
 
     n = n + 1
     bc = bc_species(n)
-    IF (x_max_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_thermal)) THEN
+    IF (x_max_boundary .AND. bc == c_bc_reflect) THEN
       IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng
@@ -585,10 +584,10 @@ CONTAINS
     REAL(num) :: part_pos, boundary_shift
     REAL(num) :: x_min_outer, x_max_outer
 
-    boundary_shift = 1.0_num + 0.5_num * png
+    boundary_shift = dx * REAL((1 + png) / 2, num)
 
-    x_min_outer = x_min - dx * boundary_shift
-    x_max_outer = x_max + dx * boundary_shift
+    x_min_outer = x_min - boundary_shift
+    x_max_outer = x_max + boundary_shift
 
     DO ispecies = 1, n_species
       cur => species_list(ispecies)%attached_list%head
@@ -656,7 +655,7 @@ CONTAINS
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
-                cur%part_pos = 2.0_num * x_min - part_pos
+                cur%part_pos = 2.0_num * x_min_outer - part_pos
 
               ELSE
                 ! Default to open boundary conditions - remove particle
@@ -715,7 +714,7 @@ CONTAINS
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
-                cur%part_pos = 2.0_num * x_max - part_pos
+                cur%part_pos = 2.0_num * x_max_outer - part_pos
 
               ELSE
                 ! Default to open boundary conditions - remove particle
