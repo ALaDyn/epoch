@@ -238,8 +238,8 @@ DEFINES := $(DEFINE)
 # are enabled.
 #DEFINES += $(D)PARSER_CHECKING
 
-# Use compiler extension ISATTY to enable coloured welcome banner
-#DEFINES += $(D)USE_ISATTY
+# Disable the use of isatty C call to enable coloured welcome banner
+#DEFINES += $(D)NO_USE_ISATTY
 
 # Compile the delta-f version of EPOCH
 #DEFINES += $(D)DELTAF_METHOD
@@ -253,6 +253,9 @@ DEFINES := $(DEFINE)
 
 # Higuera-Cary push
 #DEFINES += $(D)HC_PUSH
+
+# Disable MPI3 features
+#DEFINES += $(D)NO_MPI3
 
 # If you are having trouble compiling the encoded_source module or
 # don't want embedded source code in restart dumps, uncomment the
@@ -289,24 +292,25 @@ PREPROFLAGS = $(DEFINES) $(D)_COMMIT='"$(COMMIT)"' $(D)_DATE=$(DATE) \
 FC_INFO := $(shell ${FC} --version 2>/dev/null \
     || ${FC} -V 2>/dev/null | grep '[a-zA-Z]' | head -n 1)
 
-SRCFILES = balance.F90 boundary.F90 calc_df.F90 collisions.F90 constants.F90 \
-  current_smooth.F90 custom_deck.f90 custom_laser.f90 custom_parser.f90 \
-  deck.F90 deck_boundaries_block.f90 deck_collision_block.F90 \
-  deck_constant_block.f90 deck_control_block.F90 deck_dist_fn_block.f90 \
-  deck_fields_block.f90 deck_injector_block.f90 deck_io_block.F90 \
-  deck_io_global_block.F90 deck_laser_block.f90 deck_part_from_file_block.F90 \
-  deck_particle_probe_block.F90 deck_qed_block.F90 deck_species_block.F90 \
-  deck_stencil_block.f90 deck_subset_block.F90 deck_window_block.f90 \
-  deltaf_loader.F90 diagnostics.F90 dist_fn.F90 epoch2d.F90 evaluate.F90 \
-  evaluator_blocks.F90 fields.f90 finish.f90 helper.F90 ic_module.f90 \
-  injectors.F90 ionise.F90 iterators.F90 laser.f90 mpi_routines.F90 \
-  mpi_subtype_control.f90 numerics.f90 particle_id_hash.F90 \
-  particle_migration.F90 particle_pointer_advance.f90 particle_temperature.F90 \
-  particles.F90 partlist.F90 photons.F90 prefetch.F90 probes.F90 \
-  random_generator.f90 redblack_module.f90 setup.F90 shape_functions.F90 \
-  shared_data.F90 shunt.F90 simple_io.f90 split_particle.F90 stack.f90 \
-  strings.f90 strings_advanced.f90 terminal_controls.F90 timer.f90 \
-  tokenizer_blocks.f90 utilities.f90 version_data.F90 welcome.F90 window.F90
+SRCFILES = antennae.f90 balance.F90 boundary.F90 calc_df.F90 collisions.F90 \
+  constants.F90 current_smooth.F90 custom_deck.f90 custom_laser.f90 \
+  custom_parser.f90 deck.F90 deck_antenna_block.f90 deck_boundaries_block.f90 \
+  deck_collision_block.F90 deck_constant_block.f90 deck_control_block.F90 \
+  deck_dist_fn_block.f90 deck_fields_block.f90 deck_injector_block.f90 \
+  deck_io_block.F90 deck_io_global_block.F90 deck_laser_block.f90 \
+  deck_part_from_file_block.F90 deck_particle_probe_block.F90 \
+  deck_qed_block.F90 deck_species_block.F90 deck_stencil_block.f90 \
+  deck_subset_block.F90 deck_window_block.f90 deltaf_loader.F90 \
+  diagnostics.F90 dist_fn.F90 epoch2d.F90 evaluate.F90 evaluator_blocks.F90 \
+  fields.f90 finish.f90 helper.F90 ic_module.f90 injectors.F90 ionise.F90 \
+  iterators.F90 laser.f90 mpi_routines.F90 mpi_subtype_control.f90 \
+  numerics.f90 particle_id_hash.F90 particle_migration.F90 \
+  particle_pointer_advance.f90 particle_temperature.F90 particles.F90 \
+  partlist.F90 photons.F90 prefetch.F90 probes.F90 random_generator.f90 \
+  redblack_module.f90 setup.F90 shape_functions.F90 shared_data.F90 shunt.F90 \
+  simple_io.F90 split_particle.F90 stack.f90 strings.f90 strings_advanced.f90 \
+  terminal_controls.F90 timer.f90 tokenizer_blocks.f90 utilities.f90 \
+  version_data.F90 welcome.F90 window.F90
 
 OBJFILES := $(SRCFILES:.f90=.o)
 OBJFILES := $(OBJFILES:.F90=.o)
@@ -427,6 +431,7 @@ FORCE:
 
 # All the dependencies
 
+antennae.o: antennae.f90 evaluate.o shared_data.o shunt.o
 balance.o: balance.F90 boundary.o constants.o mpi_subtype_control.o \
   redblack_module.o timer.o utilities.o
 boundary.o: boundary.F90 laser.o mpi_subtype_control.o particle_id_hash.o \
@@ -438,13 +443,15 @@ current_smooth.o: current_smooth.F90 boundary.o shape_functions.o shared_data.o
 custom_deck.o: custom_deck.f90 constants.o
 custom_laser.o: custom_laser.f90 shared_data.o
 custom_parser.o: custom_parser.f90 shared_data.o stack.o tokenizer_blocks.o
-deck.o: deck.F90 custom_deck.o deck_boundaries_block.o deck_collision_block.o \
-  deck_constant_block.o deck_control_block.o deck_dist_fn_block.o \
-  deck_fields_block.o deck_injector_block.o deck_io_block.o \
-  deck_io_global_block.o deck_laser_block.o deck_part_from_file_block.o \
-  deck_particle_probe_block.o deck_qed_block.o deck_species_block.o \
-  deck_stencil_block.o deck_subset_block.o deck_window_block.o photons.o \
-  strings.o utilities.o version_data.o $(SDFMOD)
+deck.o: deck.F90 custom_deck.o deck_antenna_block.o deck_boundaries_block.o \
+  deck_collision_block.o deck_constant_block.o deck_control_block.o \
+  deck_dist_fn_block.o deck_fields_block.o deck_injector_block.o \
+  deck_io_block.o deck_io_global_block.o deck_laser_block.o \
+  deck_part_from_file_block.o deck_particle_probe_block.o deck_qed_block.o \
+  deck_species_block.o deck_stencil_block.o deck_subset_block.o \
+  deck_window_block.o photons.o strings.o utilities.o version_data.o $(SDFMOD)
+deck_antenna_block.o: deck_antenna_block.f90 antennae.o evaluate.o shunt.o \
+  strings_advanced.o
 deck_boundaries_block.o: deck_boundaries_block.f90 strings_advanced.o \
   utilities.o
 deck_collision_block.o: deck_collision_block.F90 collisions.o strings_advanced.o
@@ -467,25 +474,26 @@ deck_qed_block.o: deck_qed_block.F90 strings_advanced.o utilities.o
 deck_species_block.o: deck_species_block.F90 partlist.o setup.o simple_io.o \
   strings_advanced.o utilities.o
 deck_stencil_block.o: deck_stencil_block.f90 fields.o strings_advanced.o
-deck_subset_block.o: deck_subset_block.F90 particle_id_hash.o \
+deck_subset_block.o: deck_subset_block.F90 particle_id_hash.o shunt.o \
   strings_advanced.o utilities.o
 deck_window_block.o: deck_window_block.f90 strings_advanced.o
 deltaf_loader.o: deltaf_loader.F90 shared_data.o
-diagnostics.o: diagnostics.F90 calc_df.o constants.o deck.o deck_io_block.o \
-  dist_fn.o iterators.o particle_id_hash.o probes.o setup.o shared_data.o \
-  strings.o timer.o version_data.o window.o $(SDFMOD) $(ENCODED_SOURCE)
+diagnostics.o: diagnostics.F90 antennae.o calc_df.o constants.o deck.o \
+  deck_io_block.o dist_fn.o evaluate.o iterators.o particle_id_hash.o probes.o \
+  setup.o shared_data.o strings.o timer.o version_data.o window.o $(SDFMOD) \
+  $(ENCODED_SOURCE)
 dist_fn.o: dist_fn.F90 mpi_subtype_control.o particles.o $(SDFMOD)
-epoch2d.o: epoch2d.F90 balance.o calc_df.o collisions.o current_smooth.o \
-  deck.o diagnostics.o fields.o finish.o helper.o ic_module.o injectors.o \
-  ionise.o mpi_routines.o particle_migration.o particles.o photons.o setup.o \
-  split_particle.o welcome.o window.o
+epoch2d.o: epoch2d.F90 antennae.o balance.o calc_df.o collisions.o \
+  current_smooth.o deck.o diagnostics.o fields.o finish.o helper.o ic_module.o \
+  injectors.o ionise.o mpi_routines.o particle_migration.o particles.o \
+  photons.o setup.o split_particle.o welcome.o window.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
 evaluate.o: evaluate.F90 shunt.o stack.o
 evaluator_blocks.o: evaluator_blocks.F90 custom_parser.o stack.o strings.o
 fields.o: fields.f90 boundary.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
-finish.o: finish.f90 collisions.o deck.o diagnostics.o dist_fn.o injectors.o \
-  ionise.o laser.o probes.o setup.o shared_data.o window.o
+finish.o: finish.f90 antennae.o collisions.o deck.o diagnostics.o dist_fn.o \
+  injectors.o ionise.o laser.o probes.o setup.o shared_data.o window.o
 helper.o: helper.F90 balance.o boundary.o deltaf_loader.o partlist.o simple_io.o
 ic_module.o: ic_module.f90 helper.o shared_data.o
 injectors.o: injectors.F90 evaluate.o particle_temperature.o partlist.o \
@@ -511,13 +519,13 @@ prefetch.o: prefetch.F90 shared_data.o
 probes.o: probes.F90 partlist.o $(SDFMOD)
 random_generator.o: random_generator.f90
 redblack_module.o: redblack_module.f90 partlist.o
-setup.o: setup.F90 balance.o constants.o fields.o helper.o laser.o \
+setup.o: setup.F90 antennae.o balance.o constants.o fields.o helper.o laser.o \
   mpi_routines.o mpi_subtype_control.o particle_id_hash.o shunt.o \
   split_particle.o timer.o version_data.o welcome.o window.o $(SDFMOD)
 shape_functions.o: shape_functions.F90 shared_data.o
 shared_data.o: shared_data.F90 constants.o $(SDFMOD)
 shunt.o: shunt.F90 evaluator_blocks.o tokenizer_blocks.o utilities.o
-simple_io.o: simple_io.f90 boundary.o mpi_subtype_control.o
+simple_io.o: simple_io.F90 boundary.o mpi_subtype_control.o
 split_particle.o: split_particle.F90 boundary.o
 stack.o: stack.f90 constants.o
 strings.o: strings.f90 shared_data.o

@@ -34,20 +34,20 @@ MODULE deck_species_block
 
   INTEGER :: species_id, current_block
   INTEGER(KIND=MPI_OFFSET_KIND) :: offset = 0
-  CHARACTER(LEN=string_length), DIMENSION(:), POINTER :: species_names
-  INTEGER, DIMENSION(:), POINTER :: species_blocks
+  CHARACTER(LEN=string_length), DIMENSION(:), ALLOCATABLE :: species_names
+  INTEGER, DIMENSION(:), ALLOCATABLE :: species_blocks
   LOGICAL :: got_name
   INTEGER :: check_block = c_err_none
   LOGICAL, DIMENSION(:), ALLOCATABLE :: species_charge_set
   INTEGER :: n_secondary_species_in_block
   CHARACTER(LEN=string_length) :: release_species_list
-  CHARACTER(LEN=string_length), DIMENSION(:), POINTER :: release_species
-  REAL(num), DIMENSION(:), POINTER :: species_ionisation_energies
-  REAL(num), DIMENSION(:), POINTER :: ionisation_energies
-  REAL(num), DIMENSION(:), POINTER :: mass, charge
-  INTEGER, DIMENSION(:), POINTER :: principle, angular, part_count
-  INTEGER, DIMENSION(:), POINTER :: ionise_to_species, dumpmask_array
-  INTEGER, DIMENSION(:,:), POINTER :: bc_particle_array
+  CHARACTER(LEN=string_length), DIMENSION(:), ALLOCATABLE :: release_species
+  REAL(num), DIMENSION(:), ALLOCATABLE :: species_ionisation_energies
+  REAL(num), DIMENSION(:), ALLOCATABLE :: ionisation_energies
+  REAL(num), DIMENSION(:), ALLOCATABLE :: mass, charge
+  INTEGER, DIMENSION(:), ALLOCATABLE :: principle, angular, part_count
+  INTEGER, DIMENSION(:), ALLOCATABLE :: ionise_to_species, dumpmask_array
+  INTEGER, DIMENSION(:,:), ALLOCATABLE :: bc_particle_array
   REAL(num) :: species_mass, species_charge
   INTEGER :: species_dumpmask
   INTEGER, DIMENSION(2*c_ndims) :: species_bc_particle
@@ -370,7 +370,6 @@ CONTAINS
     IF (str_cmp(element, 'ionisation_energies') &
         .OR. str_cmp(element, 'ionization_energies')) THEN
       IF (deck_state == c_ds_first) THEN
-        NULLIFY(species_ionisation_energies)
         CALL initialise_stack(stack)
         CALL tokenize(value, stack, errcode)
         CALL evaluate_and_return_all(stack, &
@@ -689,7 +688,7 @@ CONTAINS
       END IF
 
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%density)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%density)) THEN
         ALLOCATE(ic%density(1-ng:nx+ng,1-ng:ny+ng))
       END IF
 
@@ -730,7 +729,7 @@ CONTAINS
     IF (str_cmp(element, 'drift_x')) THEN
       n = 1
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%drift)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%drift)) THEN
         ALLOCATE(ic%drift(1-ng:nx+ng,1-ng:ny+ng,3))
       END IF
 
@@ -743,7 +742,7 @@ CONTAINS
     IF (str_cmp(element, 'drift_y')) THEN
       n = 2
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%drift)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%drift)) THEN
         ALLOCATE(ic%drift(1-ng:nx+ng,1-ng:ny+ng,3))
       END IF
 
@@ -756,7 +755,7 @@ CONTAINS
     IF (str_cmp(element, 'drift_z')) THEN
       n = 3
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%drift)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%drift)) THEN
         ALLOCATE(ic%drift(1-ng:nx+ng,1-ng:ny+ng,3))
       END IF
 
@@ -791,7 +790,7 @@ CONTAINS
       IF (str_cmp(element, 'temp_ev')) mult = ev / kb
 
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%temp)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%temp)) THEN
         ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,3))
       END IF
 
@@ -855,7 +854,7 @@ CONTAINS
 
       n = 1
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%temp)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%temp)) THEN
         ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,3))
       END IF
 
@@ -870,7 +869,7 @@ CONTAINS
 
       n = 2
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%temp)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%temp)) THEN
         ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,3))
       END IF
 
@@ -885,7 +884,7 @@ CONTAINS
 
       n = 3
       ic => species_list(species_id)%initial_conditions
-      IF (got_file .AND. .NOT. ASSOCIATED(ic%temp)) THEN
+      IF (got_file .AND. .NOT. ALLOCATED(ic%temp)) THEN
         ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,3))
       END IF
 

@@ -1,3 +1,32 @@
+## v5.0.0
+
+ * Assign particle IDs at creation time. See the user manual for further details
+
+ * Replaced USE_ISATTY compiler flag with NO_USE_ISATTY
+
+ * Added antennae that allow you to specify an external time varying current
+   in the simulation domain
+
+ * Added "antenna" block to the input deck with the following keys
+
+   - jx - Profile for x current due to antenna
+
+   - jy - Profile for y current due to antenna
+
+   - jz - Profile for z current due to antenna
+
+   - ranges - Spatial range over which to try to specify antenna currents
+
+   - omega - Frequency of antenna if you want a simple single frequency
+     oscillator
+
+   - start_time - Time at which to start applying antenna
+
+   - stop_time - Time at which to stop applying antenna
+
+ * Allow subset restrictions to be time-varying functions
+
+
 ## v4.14.0 to v4.15.0
 
  * Enabled averaging of poynt_flux and ekflux variables
