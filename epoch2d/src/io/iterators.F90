@@ -308,15 +308,18 @@ CONTAINS
           array(part_count) = cur%optical_depth
           cur => cur%next
         END DO
+#endif
 
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
       CASE (c_dump_part_qed_energy)
         DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
           part_count = part_count + 1
           array(part_count) = cur%particle_energy
           cur => cur%next
         END DO
+#endif
 
-#ifdef TRIDENT_PHOTONS
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
       CASE (c_dump_part_opdepth_tri)
         DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
           part_count = part_count + 1
@@ -324,6 +327,14 @@ CONTAINS
           cur => cur%next
         END DO
 #endif
+
+#ifdef BREMSSTRAHLUNG
+      CASE (c_dump_part_opdepth_brem)
+        DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
+          part_count = part_count + 1
+          array(part_count) = cur%optical_depth_bremsstrahlung
+          cur => cur%next
+        END DO
 #endif
       END SELECT
       ! If the current partlist is exhausted, switch to the next one
