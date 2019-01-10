@@ -50,6 +50,9 @@ MODULE deck_species_block
   INTEGER, DIMENSION(:,:), POINTER :: bc_particle_array
   REAL(num) :: species_mass, species_charge
   INTEGER :: species_dumpmask
+#ifdef BREMSSTRAHLUNG
+  INTEGER :: species_atomic_number
+#endif
   INTEGER, DIMENSION(2*c_ndims) :: species_bc_particle
 
 CONTAINS
@@ -395,6 +398,13 @@ CONTAINS
       species_charge = as_real_print(value, element, errcode) * q0
     END IF
 
+#ifdef BREMSSTRAHLUNG
+    IF (str_cmp(element, 'atomic_no') &
+        .OR. str_cmp(element, 'atomic_number')) THEN
+      species_atomic_number = as_integer_print(value, element, errcode)
+    END IF
+#endif
+
     IF (str_cmp(element, 'dump')) THEN
       dump = as_logical_print(value, element, errcode)
       IF (dump) THEN
@@ -546,6 +556,29 @@ CONTAINS
     IF (str_cmp(element, 'bc_x_max')) THEN
       species_list(species_id)%bc_particle(c_bd_x_max) = &
           species_bc_particle(c_bd_x_max)
+      RETURN
+    END IF
+
+    ! *************************************************************
+    ! This section sets properties for bremsstrahlung emission
+    ! *************************************************************
+    IF (str_cmp(element, 'atomic_no') &
+        .OR. str_cmp(element, 'atomic_number')) THEN
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = species_atomic_number
+      species_list(species_id)%atomic_no_set = .TRUE.
+
+      ! Identify if the current species ionises to another species
+      j = species_list(species_id)%ionise_to_species
+      DO WHILE(j>0)
+        species_list(j)%atomic_no = species_list(species_id)%atomic_no
+        species_list(j)%atomic_no_set = .TRUE.
+        j = species_list(j)%ionise_to_species
+      END DO
+#else
+      errcode = c_err_pp_options_wrong
+      extended_error_string = '-DBREMSSTRAHLUNG'
+#endif
       RETURN
     END IF
 
@@ -859,6 +892,37 @@ CONTAINS
       END IF
     END DO
 
+#ifdef BREMSSTRAHLUNG
+    ! Have all species been assigned an atomic number?
+    DO i = 1, n_species
+      IF (species_list(i)%atomic_no_set) CYCLE
+
+      ! Does this species ionise to another species? If so, the charge cannot
+      ! be the atomic number, and we cannot run the bremsstrahlung module
+      IF (species_list(i)%ionise_to_species > 0) THEN
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) '*** ERROR ***'
+            WRITE(io,*) TRIM(species_list(i)%name), ' missing atomic number'
+          END DO
+        END IF
+        errcode = c_err_missing_elements
+      ELSE
+        species_list(i)%atomic_no = NINT(species_list(i)%charge/q0)
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'No atomic number has been specified for species: ', &
+                TRIM(species_list(i)%name)
+            WRITE(io,*) 'Atomic number has been set to species particle charge'
+          END DO
+        END IF
+      END IF
+    END DO
+#endif
+
   END FUNCTION species_block_check
 
 
@@ -1082,6 +1146,10 @@ CONTAINS
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_electron
       species_list(species_id)%electron = .TRUE.
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
@@ -1090,6 +1158,10 @@ CONTAINS
       species_list(species_id)%mass = m0 * 1836.2_num
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_proton
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 1
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
@@ -1098,10 +1170,14 @@ CONTAINS
       species_list(species_id)%mass = m0
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_positron
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
-#ifndef PHOTONS
+#if !defined(PHOTONS) && !defined(BREMSSTRAHLUNG)
     extended_error_string = 'Cannot identify species "' &
         // TRIM(species_list(species_id)%name) // '" as "' // TRIM(value) &
         // '" because' // CHAR(10) &
@@ -1127,6 +1203,10 @@ CONTAINS
 #else
       errcode = c_err_generic_warning
 #endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
@@ -1142,6 +1222,10 @@ CONTAINS
 #else
       errcode = c_err_generic_warning
 #endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
@@ -1152,6 +1236,10 @@ CONTAINS
       species_list(species_id)%species_type = c_species_id_positron
 #ifdef PHOTONS
       breit_wheeler_positron_species = species_id
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
 #endif
       RETURN
     END IF
@@ -1167,6 +1255,10 @@ CONTAINS
 #else
       errcode = c_err_generic_warning
 #endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
@@ -1177,6 +1269,27 @@ CONTAINS
       species_charge_set(species_id) = .TRUE.
 #ifdef PHOTONS
       IF (photon_species == -1) photon_species = species_id
+#else
+      errcode = c_err_generic_warning
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
+      RETURN
+    END IF
+
+    ! Bremsstrahlung photon
+    IF (str_cmp(value, 'brem_photon')) THEN
+      species_list(species_id)%charge = 0.0_num
+      species_list(species_id)%mass = 0.0_num
+      species_list(species_id)%species_type = c_species_id_photon
+      species_charge_set(species_id) = .TRUE.
+#ifdef BREMSSTRAHLUNG
+    IF (bremsstrahlung_photon_species == -1) bremsstrahlung_photon_species &
+        = species_id
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
 #else
       errcode = c_err_generic_warning
 #endif
