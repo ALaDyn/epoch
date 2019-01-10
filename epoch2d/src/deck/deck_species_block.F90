@@ -436,6 +436,23 @@ CONTAINS
     ! *************************************************************
     IF (str_cmp(element, 'identify')) THEN
       CALL identify_species(value, errcode)
+
+      ! If this particle is the release species of an ionising species, then
+      ! subtract the charge and mass of this species from the ionising species
+      ! to get the charge and mass of the child species.
+      DO i = 1, n_species
+        IF (species_id == species_list(i)%release_species) THEN
+          j = species_list(i)%ionise_to_species
+          DO WHILE(j > 0)
+            species_list(j)%mass = species_list(j)%mass &
+                - species_list(species_id)%mass
+            species_list(j)%charge = species_list(j)%charge &
+                - species_list(species_id)%charge
+            species_charge_set(j) = .TRUE.
+            j = species_list(j)%ionise_to_species
+          END DO
+        END IF
+      END DO
       RETURN
     END IF
 
