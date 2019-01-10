@@ -24,5 +24,69 @@ MODULE bremsstrahlung
 
 CONTAINS
 
+  !Function to ensure all required species are present
+  FUNCTION check_bremsstrahlung_variables()
+    INTEGER :: check_bremsstrahlung_variables
+    INTEGER :: io, iu
+    INTEGER :: ispecies
+    INTEGER :: first_electron = -1
+
+    check_bremsstrahlung_variables = c_err_none
+
+    ! No special species required if bremsstrahlung is turned off
+    IF (.NOT.use_bremsstrahlung) RETURN
+
+    ! No special species required if we only do radiation reaction
+    IF (.NOT.produce_bremsstrahlung_photons) RETURN
+
+    ! Identify if there exists any electron species
+    DO ispecies = 1, n_species
+      IF (species_list(ispecies)%species_type == c_species_id_electron &
+          .AND. first_electron == -1) THEN
+        first_electron = ispecies
+      ENDIF
+    ENDDO
+
+    ! Print warning if there is no electron species
+    IF (first_electron < 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'No electron species specified.'
+          WRITE(io,*) 'Specify using "identify:electron".'
+          WRITE(io,*) 'Bremsstrahlung routines require at least one species' , &
+              ' of electrons.'
+        ENDDO
+      ENDIF
+      check_bremsstrahlung_variables = c_err_missing_elements
+      RETURN
+    ENDIF
+
+#ifdef PHOTONS
+    ! photon_species can act as bremsstrahlung_photon_species if no
+    ! bremsstrahlung species is defined
+    IF (bremsstrahlung_photon_species == -1 &
+        .AND. .NOT. photon_species == -1 ) THEN
+      bremsstrahlung_photon_species = photon_species
+    END IF
+#endif
+
+    !Check if there exists a species to populate with bremsstrahlung photons
+    IF (bremsstrahlung_photon_species < 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'No photon species specified. Specify using ', &
+              '"identify:brem_photon"'
+        ENDDO
+      ENDIF
+      check_bremsstrahlung_variables = c_err_missing_elements
+      RETURN
+    ENDIF
+
+  END FUNCTION check_bremsstrahlung_variables
+
 #endif
 END MODULE bremsstrahlung

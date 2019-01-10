@@ -129,12 +129,6 @@ END SUBROUTINE bremsstrahlung_deck_finalise
       RETURN
     ENDIF
 
-    IF (str_cmp(element, 'use_continuous') &
-        .OR. str_cmp(element, 'use_continuous_loss')) THEN
-      use_continuous = as_logical_print(value, element, errcode)
-      RETURN
-    ENDIF
-
     IF (str_cmp(element, 'photon_energy_min') &
         .OR. str_cmp(element, 'min_photon_energy') &
         .OR. str_cmp(element, 'photon_energy_min_bremsstrahlung')) THEN
@@ -145,13 +139,6 @@ END SUBROUTINE bremsstrahlung_deck_finalise
     IF (str_cmp(element, 'photon_weight') &
         .OR. str_cmp(element, 'photon_weight_multiplier')) THEN
       photon_weight = as_real_print(value, element, errcode)
-      RETURN
-    ENDIF
-
-    IF (str_cmp(element, 'bremsstrahlung_continuous_limit') &
-        .OR. str_cmp(element, 'continuous_energy_limit') &
-        .OR. str_cmp(element, 'emission_cutoff_energy')) THEN
-      bremsstrahlung_continuous_limit = as_real_print(value, element, errcode)
       RETURN
     ENDIF
 
@@ -194,20 +181,6 @@ END FUNCTION bremsstrahlung_block_handle_element
     errcode = c_err_none
 
 #ifdef BREMSSTRAHLUNG
-    IF (bremsstrahlung_continuous_limit > photon_energy_min_bremsstrahlung) THEN
-      IF (rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*)
-          WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'You cannot set the continuous energy loss cut-off &
-              greater than the minimum photon emission energy, as energies &
-              below the cut-off aren''t treated as discrete emissions.'
-          WRITE(io,*) 'Code will terminate.'
-        ENDDO
-      ENDIF
-      errcode = c_err_bad_value + c_err_terminate
-    ENDIF
 
     IF (photon_weight <= 0.0_num) THEN
       IF (rank == 0) THEN
@@ -217,9 +190,7 @@ END FUNCTION bremsstrahlung_block_handle_element
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'You cannot set the photon_weight to less than or equal &
               to zero. To prevent bremsstrahlung photons from being emitted, &
-              set the continuous limit higher than the most energetic electron &
-              energy with use_continuous = T, or set use_bremsstrahlung = F to &
-              prevent all forms of bremsstrahlung energy loss.'
+              set use_bremsstrahlung = F.'
           WRITE(io,*) 'Code will terminate.'
         ENDDO
       ENDIF

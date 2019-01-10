@@ -207,7 +207,7 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)PARTICLE_ID4
 
 # Include QED routines
-#DEFINES += $(D)PHOTONS
+DEFINES += $(D)PHOTONS
 
 # Include bremsstrahlung routines
 DEFINES += $(D)BREMSSTRAHLUNG
@@ -445,6 +445,8 @@ deck.o: deck.F90 bremsstrahlung.o custom_deck.o deck_boundaries_block.o \
 	version_data.o $(SDFMOD)
 deck_boundaries_block.o: deck_boundaries_block.f90 strings_advanced.o \
   utilities.o
+deck_bremsstrahlung_block.o: deck_bremsstrahlung_block.F90 strings_advanced.o \
+	utilities.o
 deck_collision_block.o: deck_collision_block.F90 collisions.o strings_advanced.o
 deck_constant_block.o: deck_constant_block.f90 evaluate.o shunt.o
 deck_control_block.o: deck_control_block.F90 fields.o strings_advanced.o \
