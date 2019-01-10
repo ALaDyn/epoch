@@ -180,6 +180,15 @@ MODULE constants
   REAL(num), PARAMETER :: tau_c = 1.288088667367242662108649212042082e-21_num
 #endif
 
+  ! Constants used for bremsstrahlung with plasma screening
+#ifdef BREMSSTRAHLUNG
+  REAL(num), PARAMETER :: e_radius = 1.0_num/4_num/pi/epsilon0*q0**2/m0/c**2
+  REAL(num), PARAMETER :: plasma_screen_const_1 = 16.0_num / 3.0_num * alpha * &
+      e_radius**2 * LOG(1.0e9_num)
+  REAL(num), PARAMETER :: plasma_screen_const_2 = SQRT(epsilon0 * kb / q0**2 ) &
+      * m0 * c / 192.0_num / h_bar
+#endif
+
   ! define special particle IDs
   INTEGER, PARAMETER :: c_species_id_generic = 0
   INTEGER, PARAMETER :: c_species_id_photon = 1
@@ -231,6 +240,7 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_deltaf_debug = 2**21
   INTEGER(i8), PARAMETER :: c_def_work_done_integrated = 2**22
   INTEGER(i8), PARAMETER :: c_def_hc_push = 2**23
+  INTEGER(i8), PARAMETER :: c_def_bremsstrahlung = 2**24
 
   ! Stagger types
   INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
@@ -577,10 +587,15 @@ MODULE shared_data
 #endif
 #ifdef PHOTONS
     REAL(num) :: optical_depth
+#endif
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
     REAL(num) :: particle_energy
-#ifdef TRIDENT_PHOTONS
+#endif
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
     REAL(num) :: optical_depth_tri
 #endif
+#ifdef BREMSSTRAHLUNG
+    REAL(num) :: optical_depth_bremsstrahlung
 #endif
   END TYPE particle
 
@@ -644,6 +659,11 @@ MODULE shared_data
 
 #ifndef NO_TRACER_PARTICLES
     LOGICAL :: tracer
+#endif
+
+#ifdef BREMSSTRAHLUNG
+    INTEGER :: atomic_no
+    LOGICAL :: atomic_no_set = .FALSE.
 #endif
 
     ! ID code which identifies if a species is of a special type
@@ -751,16 +771,17 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_part_proc0        = 47
   INTEGER, PARAMETER :: c_dump_ppc               = 48
   INTEGER, PARAMETER :: c_dump_average_weight    = 49
+  INTEGER, PARAMETER :: c_dump_part_opdepth_brem = 50
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 50
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 51
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 52
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 53
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 54
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 55
-  INTEGER, PARAMETER :: num_vars_to_dump         = 55
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 51
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 52
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 53
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 54
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 55
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 56
+  INTEGER, PARAMETER :: num_vars_to_dump         = 56
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 49
+  INTEGER, PARAMETER :: num_vars_to_dump         = 50
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -1035,6 +1056,40 @@ MODULE shared_data
   CHARACTER(LEN=string_length) :: qed_table_location
 #endif
   LOGICAL :: use_qed = .FALSE.
+
+#ifdef BREMSSTRAHLUNG
+  !----------------------------------------------------------------------------
+  ! Bremsstrahlung
+  !----------------------------------------------------------------------------
+  ! Table declarations
+  TYPE brem_tables
+    REAL(num), ALLOCATABLE :: cdf_table(:,:), k_table(:,:)
+    REAL(num), ALLOCATABLE :: cross_section(:), loss_integral(:)
+    REAL(num), ALLOCATABLE :: E_table(:)
+    INTEGER :: size_k, size_T
+  END TYPE brem_tables
+  TYPE(brem_tables), ALLOCATABLE :: brem_array(:)
+  INTEGER, ALLOCATABLE :: Z_values(:)
+  INTEGER, ALLOCATABLE :: Z_to_index(:)
+  INTEGER :: size_brem_array
+
+  ! Bremsstrahlung photon species flag
+  INTEGER :: bremsstrahlung_photon_species = -1
+#ifndef PHOTONS
+  INTEGER :: photon_species = -1
+#endif
+
+  ! Deck variables
+  REAL(num) :: photon_energy_min_bremsstrahlung = EPSILON(1.0_NUM)
+  REAL(num) :: bremsstrahlung_start_time = 0.0_num
+  REAL(num) :: photon_weight = 1.0_num
+  LOGICAL :: use_bremsstrahlung_recoil = .TRUE., use_atomic_screening = .FALSE.
+  LOGICAL :: produce_bremsstrahlung_photons = .FALSE.
+  LOGICAL :: bremsstrahlung_photon_dynamics = .FALSE.
+  LOGICAL :: use_plasma_screening = .FALSE.
+  CHARACTER(LEN=string_length) :: bremsstrahlung_table_location
+#endif
+  LOGICAL :: use_bremsstrahlung = .FALSE.
 
   !----------------------------------------------------------------------------
   ! MPI data

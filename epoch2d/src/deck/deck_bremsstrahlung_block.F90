@@ -1,0 +1,259 @@
+! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
+!
+! This program is free software: you can redistribute it and/or modify
+! it under the terms of the GNU General Public License as published by
+! the Free Software Foundation, either version 3 of the License, or
+! (at your option) any later version.
+!
+! This program is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! GNU General Public License for more details.
+!
+! You should have received a copy of the GNU General Public License
+! along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+MODULE deck_bremsstrahlung_block
+
+  USE strings_advanced
+  USE utilities
+
+  IMPLICIT NONE
+
+  PRIVATE
+  PUBLIC :: bremsstrahlung_deck_initialise, bremsstrahlung_deck_finalise
+  PUBLIC :: bremsstrahlung_block_start, bremsstrahlung_block_end
+  PUBLIC :: bremsstrahlung_block_handle_element, bremsstrahlung_block_check
+
+CONTAINS
+
+  SUBROUTINE bremsstrahlung_deck_initialise
+
+#ifdef BREMSSTRAHLUNG
+    IF (deck_state == c_ds_first) THEN
+      bremsstrahlung_table_location = 'src/physics_packages/TABLES/br'
+      use_bremsstrahlung_recoil = .TRUE.
+    ENDIF
+#endif
+
+END SUBROUTINE bremsstrahlung_deck_initialise
+
+
+
+  SUBROUTINE bremsstrahlung_deck_finalise
+
+    INTEGER :: io, iu
+#ifdef BREMSSTRAHLUNG
+    LOGICAL :: exists
+
+    IF (deck_state == c_ds_first) RETURN
+
+    IF (rank == 0 .AND. use_bremsstrahlung) THEN
+      INQUIRE(file=TRIM(bremsstrahlung_table_location)//'/br1', exist=exists)
+      IF (.NOT.exists) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Unable to find bremsstrahlung tables in the ', &
+              'directory "' // TRIM(bremsstrahlung_table_location) // '"'
+        ENDDO
+        CALL abort_code(c_err_io_error)
+      ENDIF
+    ENDIF
+
+    IF (use_bremsstrahlung) need_random_state = .TRUE.
+#else
+    IF (use_bremsstrahlung) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Unable to set "use_bremsstrahlung=T" in the', &
+              ' "bremsstrahlung" block.'
+          WRITE(io,*) 'Please recompile with the -DBREMSSTRAHLUNG', &
+              'preprocessor flag.'
+        ENDDO
+      ENDIF
+      CALL abort_code(c_err_pp_options_missing)
+    ENDIF
+#endif
+
+END SUBROUTINE bremsstrahlung_deck_finalise
+
+
+
+  SUBROUTINE bremsstrahlung_block_start
+
+  END SUBROUTINE bremsstrahlung_block_start
+
+
+
+  SUBROUTINE bremsstrahlung_block_end
+
+  END SUBROUTINE bremsstrahlung_block_end
+
+
+
+  FUNCTION bremsstrahlung_block_handle_element(element, value) RESULT(errcode)
+
+    CHARACTER(*), INTENT(IN) :: element, value
+    INTEGER :: errcode
+
+    errcode = c_err_none
+    IF (deck_state == c_ds_first) RETURN
+    IF (element == blank .OR. value == blank) RETURN
+
+    IF (str_cmp(element, 'use_bremsstrahlung') &
+        .OR. str_cmp(element, 'bremsstrahlung')) THEN
+      use_bremsstrahlung = as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+#ifdef BREMSSTRAHLUNG
+    IF (str_cmp(element, 'bremsstrahlung_start_time') &
+        .OR. str_cmp(element, 'start_time')) THEN
+      bremsstrahlung_start_time = as_real_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'produce_bremsstrahlung_photons') &
+        .OR. str_cmp(element, 'produce_photons')) THEN
+      produce_bremsstrahlung_photons = as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'use_bremsstrahlung_recoil') &
+        .OR. str_cmp(element, 'use_radiation_reaction')) THEN
+      use_bremsstrahlung_recoil = as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'use_continuous') &
+        .OR. str_cmp(element, 'use_continuous_loss')) THEN
+      use_continuous = as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'photon_energy_min') &
+        .OR. str_cmp(element, 'min_photon_energy') &
+        .OR. str_cmp(element, 'photon_energy_min_bremsstrahlung')) THEN
+      photon_energy_min_bremsstrahlung = as_real_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'photon_weight') &
+        .OR. str_cmp(element, 'photon_weight_multiplier')) THEN
+      photon_weight = as_real_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'bremsstrahlung_continuous_limit') &
+        .OR. str_cmp(element, 'continuous_energy_limit') &
+        .OR. str_cmp(element, 'emission_cutoff_energy')) THEN
+      bremsstrahlung_continuous_limit = as_real_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'bremsstrahlung_table_location')) THEN
+      bremsstrahlung_table_location = TRIM(ADJUSTL(value))
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'photon_dynamics') &
+        .OR. str_cmp(element, 'bremsstrahlung_photon_dynamics')) THEN
+      bremsstrahlung_photon_dynamics = as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'use_atomic_screening') &
+        .OR. str_cmp(element, 'use_screening')) THEN
+      use_atomic_screening = as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'use_plasma_screening')) THEN
+      use_plasma_screening = as_logical_print(value, element, errcode)
+      RETURN
+    ENDIF
+
+    errcode = c_err_unknown_element
+#endif
+
+END FUNCTION bremsstrahlung_block_handle_element
+
+
+
+  FUNCTION bremsstrahlung_block_check() RESULT(errcode)
+
+    INTEGER :: errcode
+#ifdef BREMSSTRAHLUNG
+    INTEGER :: io, iu
+#endif
+
+    errcode = c_err_none
+
+#ifdef BREMSSTRAHLUNG
+    IF (bremsstrahlung_continuous_limit > photon_energy_min_bremsstrahlung) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'You cannot set the continuous energy loss cut-off &
+              greater than the minimum photon emission energy, as energies &
+              below the cut-off aren''t treated as discrete emissions.'
+          WRITE(io,*) 'Code will terminate.'
+        ENDDO
+      ENDIF
+      errcode = c_err_bad_value + c_err_terminate
+    ENDIF
+
+    IF (photon_weight <= 0.0_num) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'You cannot set the photon_weight to less than or equal &
+              to zero. To prevent bremsstrahlung photons from being emitted, &
+              set the continuous limit higher than the most energetic electron &
+              energy with use_continuous = T, or set use_bremsstrahlung = F to &
+              prevent all forms of bremsstrahlung energy loss.'
+          WRITE(io,*) 'Code will terminate.'
+        ENDDO
+      ENDIF
+      errcode = c_err_bad_value + c_err_terminate
+    ENDIF
+
+    IF (photon_weight > 1.0_num) THEN
+      photon_weight = 1.0_num
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** WARNING ***'
+          WRITE(io,*) 'You cannot set photon_weight > 1.0. This variable &
+              been truncated to 1.0.'
+        ENDDO
+      ENDIF
+    ENDIF
+
+    IF (use_atomic_screening .AND. use_plasma_screening) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'You cannot set both use_atomic_screening = T and &
+              use_plasma_screening = T'
+          WRITE(io,*) 'Code will terminate.'
+        ENDDO
+      ENDIF
+      errcode = c_err_bad_value + c_err_terminate
+    ENDIF
+#endif
+
+END FUNCTION bremsstrahlung_block_check
+
+END MODULE deck_bremsstrahlung_block
