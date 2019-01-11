@@ -17,7 +17,7 @@
 MODULE partlist
 
   USE shared_data
-#ifdef PHOTONS
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
   USE random_generator
 #endif
 
@@ -62,10 +62,16 @@ CONTAINS
     nvar = nvar+1
 #endif
 #ifdef PHOTONS
-    nvar = nvar+2
-#ifdef TRIDENT_PHOTONS
     nvar = nvar+1
 #endif
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
+    nvar = nvar+1
+#endif
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
+    nvar = nvar+1
+#endif
+#ifdef BREMSSTRAHLUNG
+    nvar = nvar+1
 #endif
 #ifdef WORK_DONE_INTEGRATED
     nvar = nvar+6
@@ -407,12 +413,19 @@ CONTAINS
 #endif
 #ifdef PHOTONS
     array(cpos) = a_particle%optical_depth
-    array(cpos+1) = a_particle%particle_energy
-    cpos = cpos+2
-#ifdef TRIDENT_PHOTONS
+    cpos = cpos+1
+#endif
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
+    array(cpos) = a_particle%particle_energy
+    cpos = cpos+1
+#endif
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
     array(cpos) = a_particle%optical_depth_tri
     cpos = cpos+1
 #endif
+#ifdef BREMSSTRAHLUNG
+    array(cpos) = a_particle%optical_depth_bremsstrahlung
+    cpos = cpos+1
 #endif
 #ifdef WORK_DONE_INTEGRATED
     array(cpos) = a_particle%work_x
@@ -470,12 +483,19 @@ CONTAINS
 #endif
 #ifdef PHOTONS
     a_particle%optical_depth = array(cpos)
-    a_particle%particle_energy = array(cpos+1)
-    cpos = cpos+2
-#ifdef TRIDENT_PHOTONS
+    cpos = cpos + 1
+#endif
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
+    a_particle%particle_energy = array(cpos)
+    cpos = cpos+1
+#endif
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
     a_particle%optical_depth_tri = array(cpos)
     cpos = cpos+1
 #endif
+#ifdef BREMSSTRAHLUNG
+    a_particle%optical_depth_bremsstrahlung = array(cpos)
+    cpos = cpos+1
 #endif
 #ifdef WORK_DONE_INTEGRATED
     a_particle%work_x = array(cpos)
@@ -514,13 +534,19 @@ CONTAINS
 #ifdef COLLISIONS_TEST
     new_particle%coll_count = 0
 #endif
-#ifdef PHOTONS
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
     ! This assigns an optical depth to newly created particle
     new_particle%particle_energy = 0.0_num
+#endif
+#ifdef PHOTONS
     new_particle%optical_depth = LOG(1.0_num / (1.0_num - random()))
 #ifdef TRIDENT_PHOTONS
     new_particle%optical_depth_tri = LOG(1.0_num / (1.0_num - random()))
 #endif
+#endif
+#ifdef BREMSSTRAHLUNG
+    new_particle%optical_depth_bremsstrahlung = &
+        LOG(1.0_num / (1.0_num - random()))
 #endif
 
   END SUBROUTINE init_particle
