@@ -76,12 +76,18 @@ CONTAINS
     io_block_name (c_dump_part_opdepth     ) = ''
     io_block_name (c_dump_part_qed_energy  ) = ''
     io_block_name (c_dump_part_opdepth_tri ) = ''
+    io_block_name (c_dump_part_opdepth_brem) = ''
 #ifdef PHOTONS
     io_block_name (c_dump_part_opdepth     ) = 'optical_depth'
+#endif
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
     io_block_name (c_dump_part_qed_energy  ) = 'qed_energy'
-#ifdef TRIDENT_PHOTONS
+#endif
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
     io_block_name (c_dump_part_opdepth_tri ) = 'trident_optical_depth'
 #endif
+#ifdef BREMSSTRAHLUNG
+    io_block_name (c_dump_part_opdepth_brem) = 'bremsstrahlung_optical_depth'
 #endif
 #ifdef WORK_DONE_INTEGRATED
     io_block_name (c_dump_part_work_x      ) = 'work_x'
@@ -929,12 +935,18 @@ CONTAINS
 #ifdef PHOTONS
     io_block%dumpmask(c_dump_part_opdepth) = &
         IOR(io_block%dumpmask(c_dump_part_opdepth), c_io_restartable)
+#endif
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
     io_block%dumpmask(c_dump_part_qed_energy) = &
         IOR(io_block%dumpmask(c_dump_part_qed_energy), c_io_restartable)
-#ifdef TRIDENT_PHOTONS
+#endif
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
     io_block%dumpmask(c_dump_part_opdepth_tri) = &
         IOR(io_block%dumpmask(c_dump_part_opdepth_tri), c_io_restartable)
 #endif
+#ifdef BREMSSTRAHLUNG
+    io_block%dumpmask(c_dump_part_opdepth_brem) = &
+        IOR(io_block%dumpmask(c_dump_part_opdepth_brem), c_io_restartable)
 #endif
     ! Fields
     io_block%dumpmask(c_dump_grid) = &
