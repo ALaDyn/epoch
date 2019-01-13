@@ -152,12 +152,10 @@ CONTAINS
     INTEGER :: i_species, iZ, jZ
     INTEGER, ALLOCATABLE :: Z_flags(:)
     CHARACTER(LEN=3) :: Z_string
-    INTEGER :: n_line, size_k_file, size_k, size_T, lower_k
+    INTEGER :: n_line, size_k_file, size_k, size_T
     REAL(num), ALLOCATABLE :: k_read(:), T_read(:), sdcs_read(:,:)
     REAL(num), ALLOCATABLE :: temp_array(:), dcs(:)
-    REAL(num), ALLOCATABLE :: k_undercut(:), k_overcut(:)
-    REAL(num), ALLOCATABLE :: sdcs_undercut(:), sdcs_overcut(:)
-    REAL(num) :: gradient, beta2, k_cut, sdcs_cut
+    REAL(num) :: gradient, beta2, k_cut, sdcs_cut, lower_k
     REAL(num) :: max_loss_integral
     INTEGER :: i, j, j_cut
     INTEGER :: buf_index, buf_size
