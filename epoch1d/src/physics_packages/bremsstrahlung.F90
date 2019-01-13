@@ -477,6 +477,177 @@ CONTAINS
 
 
 
+  ! Deallocates the shared_data created in setup_tables_bremsstrahlung
+  SUBROUTINE deallocate_tables_bremsstrahlung
+
+    INTEGER :: i
+
+    IF (.NOT. use_plasma_screening) THEN
+      DO i = 1,size_brem_array
+        DEALLOCATE(brem_array(i)%k_table)
+        DEALLOCATE(brem_array(i)%cdf_table)
+        DEALLOCATE(brem_array(i)%cross_section)
+        DEALLOCATE(brem_array(i)%loss_integral)
+        DEALLOCATE(brem_array(i)%E_table)
+      END DO
+
+      DEALLOCATE(brem_array)
+    END IF
+
+  END SUBROUTINE deallocate_tables_bremsstrahlung
+
+
+
+  ! Calculate the change in optical depth during this timestep, given by:
+  ! (ion number density) * (emission cross section) * (distance traversed)
+  ! Here, cross sections are determined from Geant4 look-up tables
+  FUNCTION delta_optical_depth_atomic(Z, part_E, part_v, part_ni)
+
+    INTEGER, INTENT(in) :: Z
+    REAL(num), INTENT(in) :: part_E, part_v, part_ni
+    INTEGER :: brem_index
+    REAL(num) :: cross_sec_val
+    REAL(num) :: delta_optical_depth_atomic
+
+    brem_index = Z_to_index(Z)
+
+    cross_sec_val = find_value_from_table_1d(part_E, &
+        brem_array(brem_index)%size_T, brem_array(brem_index)%E_table, &
+        brem_array(brem_index)%cross_section)
+
+    delta_optical_depth_atomic = part_ni * cross_sec_val * part_v * dt &
+        / photon_weight
+
+  END FUNCTION delta_optical_depth_atomic
+
+
+
+  ! Calculate the change in optical depth during this timestep, given by:
+  ! (ion number density) * (emission cross section) * (distance traversed)
+  ! Here, cross sections are deduced from the plasma screening model.
+  ! Z: Charge of ion species
+  ! A: Atomic number of ion species
+  ! Te: Temperature of background electron species at the electron
+  ! part_ne: Number density of background electron species at the electron
+  ! part_v: Speed of electron to have optical depth updated
+  ! part_ni: Number density of ion species at the electron
+  FUNCTION delta_optical_depth_plasma(Z, A, Te, part_ne, part_v, part_ni)
+
+    INTEGER, INTENT(in) :: A, Z
+    REAL(num), INTENT(in) :: Te, part_ne, part_v, part_ni
+    INTEGER :: brem_index
+    REAL(num) :: cross_sec_val, plasma_screen
+    REAL(num) :: delta_optical_depth_plasma
+
+    ! Code will break if Te or ne are zero
+    IF (part_ne < 1.0e-50_num .OR. Te < 1.0e-10_num) THEN
+      plasma_screen = 0.0_num
+    ELSE
+      plasma_screen = &
+        LOG(plasma_screen_const_2 * SQRT(Te/part_ne) * A**(1.0_num/3.0_num))
+    END IF
+
+    ! Obtain emission cross section
+    IF (Z > 0) THEN
+      cross_sec_val = plasma_screen_const_1 * Z**2 * (A**2 / Z**2 * &
+          LOG(192.0_num * A**(-1.0_num/3.0_num)) + plasma_screen)
+    ELSE
+      cross_sec_val = plasma_screen_const_1 * A**2 * &
+          LOG(192.0_num * A**(-1.0_num/3.0_num))
+    END IF
+    delta_optical_depth_plasma = part_ni * cross_sec_val * part_v * dt &
+        / photon_weight
+
+    IF (delta_optical_depth_plasma < 0.0_num) THEN
+      delta_optical_depth_plasma = 0.0_num
+    END IF
+
+  END FUNCTION delta_optical_depth_plasma
+
+
+
+  ! Draws a new random number for the exponentially distributed optical depths
+  FUNCTION reset_optical_depth()
+
+    REAL(num) :: reset_optical_depth
+    REAL(num) :: p_tau
+
+    p_tau = random()
+    reset_optical_depth = -LOG(1.0_num - p_tau)
+
+  END FUNCTION reset_optical_depth
+
+
+
+  ! Generates a photon moving in same direction as the electron, calculating
+  ! electron recoil if appropriate
+  SUBROUTINE generate_photon(electron, Z, iphoton)
+
+    TYPE(particle), POINTER :: electron
+    INTEGER, INTENT(IN) :: iphoton, Z
+    INTEGER :: brem_index
+    REAL(num) :: dir_x, dir_y, dir_z, mag_p
+    REAL(num) :: rand_temp, photon_energy, part_E
+    TYPE(particle), POINTER :: new_photon
+
+    ! Obtain electron direction (magnitude must be > 0 to prevent 1/0 issues)
+    part_E = electron%particle_energy
+    mag_p = MAX(SQRT(electron%part_p(1)**2 + electron%part_p(2)**2 &
+        + electron%part_p(3)**2), c_tiny)
+    dir_x = electron%part_p(1) / mag_p
+    dir_y = electron%part_p(2) / mag_p
+    dir_z = electron%part_p(3) / mag_p
+
+    ! Determine photon energy
+    rand_temp = random()
+    IF (use_plasma_screening) THEN
+      photon_energy = 10.0_num**(9.0_num*(random()-1.0_num))*part_E
+    ELSE
+      brem_index = Z_to_index(Z)
+      photon_energy = find_value_from_table_alt(part_E, rand_temp, &
+          brem_array(brem_index)%size_T, brem_array(brem_index)%size_k, &
+          brem_array(brem_index)%E_table, brem_array(brem_index)%k_table, &
+          brem_array(brem_index)%cdf_table)
+    END IF
+
+    ! Calculate electron recoil
+    IF (use_bremsstrahlung_recoil) THEN
+      mag_p = mag_p - photon_weight * photon_energy / c
+      electron%part_p(1) = dir_x * mag_p
+      electron%part_p(2) = dir_y * mag_p
+      electron%part_p(3) = dir_z * mag_p
+      electron%particle_energy = electron%particle_energy - photon_energy
+    END IF
+
+    ! This will only create photons that have energies above a user specified
+    ! cutoff and if photon generation is turned on.
+    IF (photon_energy > photon_energy_min_bremsstrahlung .AND. &
+        produce_bremsstrahlung_photons) THEN
+
+      ! Ensure photon_energy is a number we can handle at our precision
+      IF (photon_energy < c_tiny) photon_energy = c_tiny
+
+      ! Create new photon at the electron position, in the electron direction
+      CALL create_particle(new_photon)
+      new_photon%part_pos = electron%part_pos
+      new_photon%part_p(1) = dir_x * photon_energy / c
+      new_photon%part_p(2) = dir_y * photon_energy / c
+      new_photon%part_p(3) = dir_z * photon_energy / c
+#ifdef PHOTONS
+      new_photon%optical_depth = reset_optical_depth()
+#endif
+      new_photon%particle_energy = photon_energy
+      new_photon%weight = electron%weight * photon_weight
+
+      CALL add_particle_to_partlist(species_list(iphoton)%attached_list, &
+          new_photon)
+
+    END IF
+
+  END SUBROUTINE generate_photon
+
+
+
   ! For a function y(x), with values in arrays x and y, we return an array with
   ! elements i given by the integral y(x)dx between limits x=x(1) and x=x(i)
   SUBROUTINE get_cumulative_array(x,y,size,output)
@@ -533,6 +704,214 @@ CONTAINS
     END DO
 
   END SUBROUTINE get_integral_limit
+
+
+
+  ! For a pair of arrays, x and values, of size nx, this function returns the
+  ! interpolated value of "values" corresponding to x_in in the x array. This
+  ! uses linear interpolation, unlike in photons.F90 which is logarithmic
+  FUNCTION find_value_from_table_1d(x_in, nx, x, values)
+
+    REAL(num) :: find_value_from_table_1d
+    REAL(num), INTENT(IN) :: x_in
+    INTEGER, INTENT(IN) :: nx
+    REAL(num), INTENT(IN) :: x(nx), values(nx)
+    REAL(num) :: fx, x_value, value_interp, xdif1, xdif2, xdifm
+    INTEGER :: i1, i2, im
+    LOGICAL, SAVE :: warning = .TRUE.
+
+    x_value = x_in
+
+    ! Use bisection to find the nearest cells i1, i2
+    i1 = 1
+    i2 = nx
+    xdif1 = x(i1) - x_value
+    xdif2 = x(i2) - x_value
+    IF (xdif1 * xdif2 < 0) THEN
+      DO
+        im = (i1 + i2) / 2
+        xdifm = x(im) - x_value
+        IF (xdif1 * xdifm < 0) THEN
+          i2 = im
+        ELSE
+          i1 = im
+          xdif1 = xdifm
+        END IF
+        IF (i2 - i1 == 1) EXIT
+      END DO
+
+      ! Interpolate in x to find fraction between the cells
+      fx = (x_value - x(i1)) / (x(i2) - x(i1))
+
+    ! Our x_in value falls outside of the x array - truncate the value
+    ELSE
+      IF (warning .AND. rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*,'Argument to "find_value_from_table_1d" in bremsstrahlung.F90', &
+            ' outside the range of the table.'
+        PRINT*,'Using truncated value. No more warnings will be issued.'
+        warning = .FALSE.
+      END IF
+      IF (xdif1 >= 0) THEN
+        fx = 0.0_num
+      ELSE
+        fx = 1.0_num
+      END IF
+    END IF
+
+    ! Corresponding number from value array, a fraction fx between i1 and i2
+    value_interp = (1.0_num - fx) * values(i1) + fx * values(i2)
+    find_value_from_table_1d = value_interp
+
+  END FUNCTION find_value_from_table_1d
+
+
+
+  ! For each element of x, we have a 1D array of y values and a 1D array of P
+  ! values, such that the 1D array x has a corresponding 2D array of y and P.
+  ! The P values represent the cumulative probability of finding a particular y
+  ! value for a given x. This function returns a y value for a given probability
+  ! p_value, at a particular x value x_in, and is used in the code to obtain
+  ! photon energies (y) for a given incident electron energy (x).
+  FUNCTION find_value_from_table_alt(x_in, p_value, nx, ny, x, y, p_table)
+
+    REAL(num) :: find_value_from_table_alt
+    REAL(num), INTENT(IN) :: x_in, p_value
+    INTEGER, INTENT(IN) :: nx, ny
+    REAL(num), INTENT(IN) :: x(nx), y(nx,ny), p_table(nx,ny)
+    INTEGER :: ix, index_lt, index_gt, i1, i2, im
+    REAL(num) :: fx, fp, y_lt, y_gt, y_interp, xdif1, xdif2, xdifm
+    LOGICAL, SAVE :: warning = .TRUE.
+
+    ! Scan through x to find correct row of table
+    i1 = 1
+    i2 = nx
+    xdif1 = x(i1) - x_in
+    xdif2 = x(i2) - x_in
+    IF (xdif1 * xdif2 < 0) THEN
+      ! Use bisection to find the nearest cell
+      DO
+        im = (i1 + i2) / 2
+        xdifm = x(im) - x_in
+        IF (xdif1 * xdifm < 0) THEN
+          i2 = im
+        ELSE
+          i1 = im
+          xdif1 = xdifm
+        END IF
+        IF (i2 - i1 == 1) EXIT
+      END DO
+      ! Interpolate in x
+      fx = (x_in - x(i1)) / (x(i2) - x(i1))
+    ELSE
+      IF (warning .AND. rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*,'Argument to "find_value_from_table_alt" outside the range ', &
+            'of the table.'
+        PRINT*,'Using truncated value. No more warnings will be issued.'
+        warning = .FALSE.
+      END IF
+      IF (xdif1 >= 0) THEN
+        fx = 0.0_num
+      ELSE
+        fx = 1.0_num
+      END IF
+    END IF
+
+    index_lt = i1
+    index_gt = i2
+
+    ix = index_lt
+    ! Scan through table row to find p_value
+    i1 = 1
+    i2 = ny
+    xdif1 = p_table(ix,i1) - p_value
+    xdif2 = p_table(ix,i2) - p_value
+    IF (xdif1 * xdif2 < 0) THEN
+      ! Use bisection to find the nearest cell
+      DO
+        im = (i1 + i2) / 2
+        xdifm = p_table(ix,im) - p_value
+        IF (xdif1 * xdifm < 0) THEN
+          i2 = im
+        ELSE
+          i1 = im
+          xdif1 = xdifm
+        END IF
+        IF (i2 - i1 == 1) EXIT
+      END DO
+      ! Interpolate in x
+      fp = (p_value - p_table(ix,i1)) / (p_table(ix,i2) - p_table(ix,i1))
+    ELSE
+      IF (warning .AND. rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*,'Argument to "find_value_from_table_alt" outside the range ', &
+            'of the table.'
+        PRINT*,'Using truncated value. No more warnings will be issued.'
+        warning = .FALSE.
+      END IF
+      IF (xdif1 >= 0) THEN
+        fp = 0.0_num
+      ELSE
+        fp = 1.0_num
+      END IF
+    END IF
+
+    y_lt = (1.0_num - fp) * y(ix,i1) + fp * y(ix,i2)
+
+    ix = index_gt
+    ! Scan through table row to find p_value
+    i1 = 1
+    i2 = ny
+    xdif1 = p_table(ix,i1) - p_value
+    xdif2 = p_table(ix,i2) - p_value
+    IF (xdif1 * xdif2 < 0) THEN
+      ! Use bisection to find the nearest cell
+      DO
+        im = (i1 + i2) / 2
+        xdifm = p_table(ix,im) - p_value
+        IF (xdif1 * xdifm < 0) THEN
+          i2 = im
+        ELSE
+          i1 = im
+          xdif1 = xdifm
+        END IF
+        IF (i2 - i1 == 1) EXIT
+      END DO
+      ! Interpolate in x
+      fp = (p_value - p_table(ix,i1)) / (p_table(ix,i2) - p_table(ix,i1))
+    ELSE
+      IF (warning .AND. rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*,'Argument to "find_value_from_table_alt" outside the range ', &
+            'of the table.'
+        PRINT*,'Using truncated value. No more warnings will be issued.'
+        warning = .FALSE.
+      END IF
+      IF (xdif1 >= 0) THEN
+        fp = 0.0_num
+      ELSE
+        fp = 1.0_num
+      END IF
+    END IF
+
+    y_gt = (1.0_num - fp) * y(ix,i1) + fp * y(ix,i2)
+
+    ! Interpolate in x
+    y_interp = (1.0_num - fx) * y_lt + fx * y_gt
+
+    find_value_from_table_alt = y_interp
+
+  END FUNCTION find_value_from_table_alt
+
+
+
+  ! Shuts down the bremsstrahlung module - to keep consistency with photons.F90
+  SUBROUTINE shutdown_bremsstrahlung_module
+
+    CALL deallocate_tables_bremsstrahlung
+
+  END SUBROUTINE
 
 #endif
 END MODULE bremsstrahlung
