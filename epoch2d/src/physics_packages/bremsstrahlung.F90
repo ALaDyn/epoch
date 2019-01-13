@@ -24,7 +24,58 @@ MODULE bremsstrahlung
 
 CONTAINS
 
-  !Function to ensure all required species are present
+  ! Confirm that the correct particles are present to actually use the
+  ! bremsstrahlung routines, and warn the user if they're not. Then call
+  ! subroutines to initialise the bremsstrahlung table array, and give all
+  ! particles an optical depth for bremsstrahlung emission (if appropriate)
+  SUBROUTINE setup_bremsstrahlung_module
+
+    INTEGER :: ispecies, iu, io
+    LOGICAL :: found
+
+    IF (produce_bremsstrahlung_photons .AND. .NOT. ic_from_restart) THEN
+      ! Look for electron and photon species. This is a secondary sanity check -
+      ! full check appears in check_bremsstrahlung_variables
+      found = .FALSE.
+      DO ispecies = 1, n_species
+        IF (species_list(ispecies)%count <= 0) CYCLE
+        IF (species_list(ispecies)%species_type == c_species_id_electron &
+            .OR. ispecies == bremsstrahlung_photon_species ) THEN
+          found = .TRUE.
+          EXIT
+        END IF
+      END DO
+
+     ! Print warning if the correct species aren't present
+      IF (.NOT. found) THEN
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units
+            io = io_units(iu)
+            WRITE(io,*)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Electron and photon species are either ', &
+                'unspecified or contain no'
+            WRITE(io,*) 'particles. Bremsstrahlung routines will do nothing.'
+          END DO
+        END IF
+      END IF
+    END IF
+
+    ! Load the tables for the bremsstrahlung routines
+    IF (.NOT. use_plasma_screening) THEN
+      CALL setup_tables_bremsstrahlung
+    END IF
+    IF (.NOT. ic_from_restart) THEN
+      DO ispecies = 1, n_species
+        CALL initialise_optical_depth(species_list(ispecies))
+      END DO
+    END IF
+
+  END SUBROUTINE setup_bremsstrahlung_module
+
+
+
+  ! Function to ensure all required species are present
   FUNCTION check_bremsstrahlung_variables()
     INTEGER :: check_bremsstrahlung_variables
     INTEGER :: io, iu
@@ -44,8 +95,8 @@ CONTAINS
       IF (species_list(ispecies)%species_type == c_species_id_electron &
           .AND. first_electron == -1) THEN
         first_electron = ispecies
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
     ! Print warning if there is no electron species
     IF (first_electron < 0) THEN
@@ -57,11 +108,11 @@ CONTAINS
           WRITE(io,*) 'Specify using "identify:electron".'
           WRITE(io,*) 'Bremsstrahlung routines require at least one species' , &
               ' of electrons.'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       check_bremsstrahlung_variables = c_err_missing_elements
       RETURN
-    ENDIF
+    END IF
 
 #ifdef PHOTONS
     ! photon_species can act as bremsstrahlung_photon_species if no
@@ -72,7 +123,7 @@ CONTAINS
     END IF
 #endif
 
-    !Check if there exists a species to populate with bremsstrahlung photons
+    ! Check if there exists a species to populate with bremsstrahlung photons
     IF (bremsstrahlung_photon_species < 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units
@@ -80,13 +131,410 @@ CONTAINS
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'No photon species specified. Specify using ', &
               '"identify:brem_photon"'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       check_bremsstrahlung_variables = c_err_missing_elements
       RETURN
-    ENDIF
+    END IF
 
   END FUNCTION check_bremsstrahlung_variables
-  
+
+
+
+  ! Subroutine to generate tables of bremsstrahlung cross sections as a function
+  ! of incident electron kinetic energy, T. Also computes a table of cumlative
+  ! probabilities for each photon energy, k, and each value of T. All tables are
+  ! stored in an array (brem_array) as the variable type brem_tables. Each
+  ! element of brem_array correpsonds to a different target atomic number.
+  SUBROUTINE setup_tables_bremsstrahlung
+
+    INTEGER :: Z_temp, iu, io
+    INTEGER :: i_species, iZ, jZ
+    INTEGER, ALLOCATABLE :: Z_flags(:)
+    CHARACTER(LEN=3) :: Z_string
+    INTEGER :: n_line, size_k_file, size_k, size_T, lower_k
+    REAL(num), ALLOCATABLE :: k_read(:), T_read(:), sdcs_read(:,:)
+    REAL(num), ALLOCATABLE :: temp_array(:), dcs(:)
+    REAL(num), ALLOCATABLE :: k_undercut(:), k_overcut(:)
+    REAL(num), ALLOCATABLE :: sdcs_undercut(:), sdcs_overcut(:)
+    REAL(num) :: gradient, beta2, k_cut, sdcs_cut
+    REAL(num) :: max_loss_integral
+    INTEGER :: i, j, j_cut
+    INTEGER :: buf_index, buf_size
+    INTEGER, ALLOCATABLE :: int_buf(:)
+    REAL(num), ALLOCATABLE :: real_buf(:)
+
+    ! Do all analysis on rank 0, then MPI_BROADCAST to other ranks
+    IF (rank == 0) THEN
+
+      ! For each unique atomic number, Z, let Z_flags(Z) = 1
+      ALLOCATE(Z_flags(100))
+      Z_flags(:) = 0
+      DO i_species=1,n_species
+        Z_temp = species_list(i_species)%atomic_no
+        IF (Z_temp > 0 .AND. Z_temp < 101) THEN
+          Z_flags(Z_temp) = 1;
+
+        ! We only have tables up to Z=100
+        ELSE IF (Z_temp > 100) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Species with atomic numbers over 100 cannot be ', &
+                'modelled using bremsstrahlung libraries, and will be ignored'
+          END DO
+        END IF
+      END DO
+
+      ! Create brem_array to store tables for each atomic number, Z. The value
+      ! of Z_to_index(Z) is the brem_array index for tables of atomic number Z.
+      ! Z_values contains the Z values present.
+      size_brem_array = SUM(Z_flags)
+      ALLOCATE(brem_array(size_brem_array))
+      ALLOCATE(Z_values(size_brem_array))
+      ALLOCATE(Z_to_index(100))
+      iZ = 1
+      DO jZ = 1 ,100
+        IF (Z_flags(jZ) == 1) THEN
+          Z_to_index(jZ) = iZ
+          Z_values(iZ) = jZ
+          iZ = iZ + 1
+        ELSE
+          Z_to_index(jZ) = 0
+        END IF
+      END DO
+      DEALLOCATE(Z_flags)
+
+      ! Obtain tables for each brem_array value
+      DO iZ = 1,size_brem_array
+        Z_temp = Z_values(iZ)
+
+        ! Open table corresponding to screening choice
+        IF (use_atomic_screening) THEN
+          IF (Z_temp < 10) THEN
+            WRITE(Z_string, '(I1)') Z_temp
+          ELSE IF (Z_temp < 100) THEN
+            WRITE(Z_string, '(I2)') Z_temp
+          ELSE
+            WRITE(Z_string, '(I3)') Z_temp
+          END IF
+          OPEN(unit = lu, file = TRIM(bremsstrahlung_table_location) // '/br' &
+              // Z_string, status = 'OLD')
+        ELSE
+          OPEN(unit = lu, file = TRIM(bremsstrahlung_table_location)// &
+              '/brNoScreen', status = 'OLD')
+        END IF
+
+        ! Extract data from the table file
+        ! File format: n_line (number of ln(T) values) (number of k/T values)
+        !              Line of k/T values (photon energy/electron KE)
+        !              Line of ln(T) values (T is e- kinetic energy in MeV)
+        !              Table of scaled differential cross sections (1e-31 m²)
+        ! In the table, rows correspond to constant electron kinetic energy,
+        ! columns to constant photon fractional energy, and the scaling is
+        ! (beta²)/Z² * k * do/dk, where beta is the electron velocity
+        ! normalised to c, and o is the cross section in mb
+        READ(lu,*) n_line, size_k_file, size_T
+        ! Include a k_cut, such that only the fraction 1e-9 of the total
+        ! radiation is neglected (same way photons.F90 works).
+        ! Include 100 extra values for padding between the first two k/T points
+        ! which are 1e-12 and 0.025 (linear interpolation is not appropriate
+        ! here, cross section is predominantly distributed near 1e-12).
+        size_k = size_k_file + 1 + 100
+        ALLOCATE(T_read(size_T))
+        ALLOCATE(k_read(size_k))
+        ALLOCATE(sdcs_read(size_T,size_k))
+        READ(lu,*) k_read(1:size_k_file)
+        READ(lu,*) T_read
+
+        ! Add k padding, spaced logarithmically between first two points (check
+        ! first k > 0 to ensure logarithms run)
+        k_read(2+100:size_k-1) = k_read(2:size_k_file)
+        IF (k_read(1) <= 1.0e-15_num) THEN
+          lower_k = 1.0e-10_num*k_read(102)
+        ELSE
+          lower_k = k_read(1)
+        END IF
+        DO i = 1, 100
+          k_read(i+1) = EXP((REAL(i, num)/101.0_num) &
+              * ABS(LOG(lower_k)-LOG(k_read(102))) + LOG(lower_k))
+        END DO
+
+        ! Read scaled differential cross sections (sdcs)
+        DO i = 1, size_T
+            READ(lu,*) sdcs_read(i,1:size_k_file)
+            ! Interpolate for padded k values
+            sdcs_read(i,2+100:size_k-1) = sdcs_read(i,2:size_k_file)
+            gradient = (sdcs_read(i,102)-sdcs_read(i,1))/(k_read(102)-k_read(1))
+            DO j = 1, 100
+              sdcs_read(i,j+1) = gradient*(k_read(j+1)-k_read(1)) &
+                  + sdcs_read(i,1)
+            END DO
+        END DO
+
+        CLOSE(unit = lu)
+
+        ! Using these tables, fill the data of type brem_tables in brem_array
+        ALLOCATE(brem_array(iZ)%cross_section(size_T))
+        ALLOCATE(brem_array(iZ)%k_table(size_T,size_k))
+        ALLOCATE(brem_array(iZ)%cdf_table(size_T, size_k))
+        ALLOCATE(brem_array(iZ)%E_table(size_T))
+        brem_array(iZ)%size_T = size_T
+        brem_array(iZ)%size_k = size_k
+        brem_array(iZ)%E_table = exp(T_read)*q0*1.0e6_num + m0*c**2
+
+        ! Loop over all kinetic energies T, create array of total cross sections
+        ! and a CDF table for photon energies
+        DO i = 1, size_T
+
+          ! Get the actual beta² and k values in SI units for this T
+          brem_array(iZ)%k_table(i,:) = exp(T_read(i))*q0*1.0e6_num*k_read
+          beta2 = 1.0_num - (exp(T_read(i))*q0*1.0e6_num/m0/c/c + 1.0_num)**(-2)
+
+          ! Move unassigned k value (will be 0) to the front of the array
+          brem_array(iZ)%k_table(i,2:size_k) = &
+              brem_array(iZ)%k_table(i,1:size_k-1)
+          sdcs_read(i,2:size_k) = sdcs_read(i,1:size_k-1)
+          brem_array(iZ)%k_table(i,1) = brem_array(iZ)%k_table(i,2)
+          sdcs_read(i,1) = 0.0_num
+
+          ! Find the k_cut value at which the emitted photon energy will be
+          ! 10^{-9} times the total emitted energy
+          ALLOCATE(temp_array(size_k))
+          CALL get_cumulative_array(brem_array(iZ)%k_table(i,:), &
+              sdcs_read(i,:), size_k,temp_array)
+          max_loss_integral = temp_array(size_k)
+          CALL get_integral_limit(brem_array(iZ)%k_table(i,:), &
+              sdcs_read(i,:), size_k, 1.0e-9_num*max_loss_integral, k_cut, &
+              sdcs_cut)
+          DEALLOCATE(temp_array)
+
+          ! Omit all k values lower than k_cut
+          DO j=1,size_k
+            IF (brem_array(iZ)%k_table(i,j) < k_cut) THEN
+              brem_array(iZ)%k_table(i,j) = k_cut
+              sdcs_read(i,j) = sdcs_cut
+            END IF
+          END DO
+
+          ! Obtain cross_section and cdf_table row (dcs = do/dk in mb/J)
+          ALLOCATE(dcs(size_k))
+          dcs = sdcs_read(i,:)*Z_temp**2/beta2/brem_array(iZ)%k_table(i,:)
+          CALL get_cumulative_array(brem_array(iZ)%k_table(i,:), dcs(:), &
+              size_k, brem_array(iZ)%cdf_table(i,:))
+          brem_array(iZ)%cross_section(i) = &
+              brem_array(iZ)%cdf_table(i,size_k)*1.0e-31_num
+          brem_array(iZ)%cdf_table(i,:) = brem_array(iZ)%cdf_table(i,:) &
+              / brem_array(iZ)%cdf_table(i,size_k)
+          DEALLOCATE(dcs)
+
+        END DO
+
+        DEALLOCATE(T_read)
+        DEALLOCATE(k_read)
+        DEALLOCATE(sdcs_read)
+
+      END DO
+
+      ! Pack data for broadcast to other ranks
+      ! How many brem_tables do we need to load in brem_array?
+      CALL MPI_BCAST(size_brem_array, 1, MPI_INTEGER, 0, comm, errcode)
+
+      ! Pack Z values and array sizes into int_buf
+      buf_size = 3*size_brem_array + 100
+      ALLOCATE(int_buf(buf_size))
+      buf_index = 1
+      DO i = 1, size_brem_array
+        int_buf(buf_index) = Z_values(i)
+        buf_index = buf_index + 1
+      END DO
+      DO i = 1, 100
+        int_buf(buf_index) = Z_to_index(i)
+        buf_index = buf_index + 1
+      END DO
+      DO i = 1, size_brem_array
+        int_buf(buf_index) = brem_array(i)%size_k
+        buf_index = buf_index + 1
+        int_buf(buf_index) = brem_array(i)%size_T
+        buf_index = buf_index + 1
+      END DO
+      CALL MPI_BCAST(int_buf, buf_size, MPI_INTEGER, 0, comm, errcode)
+
+      ! Pack array data into real_buf and broadcast
+      buf_size = 0
+      DO i = 1, size_brem_array
+        buf_size = brem_array(i)%size_T*(2*brem_array(i)%size_k + 2) + buf_size
+      END DO
+      ALLOCATE(real_buf(buf_size))
+      buf_index = 1
+      DO i = 1, size_brem_array
+        size_k = brem_array(i)%size_k
+        DO j = 1, brem_array(i)%size_T
+          real_buf(buf_index:buf_index+size_k-1) = brem_array(i)%cdf_table(j,:)
+          buf_index = buf_index + size_k
+          real_buf(buf_index:buf_index+size_k-1) = brem_array(i)%k_table(j,:)
+          buf_index = buf_index + size_k
+          real_buf(buf_index) = brem_array(i)%cross_section(j)
+          buf_index = buf_index + 1
+          real_buf(buf_index) = brem_array(i)%E_table(j)
+          buf_index = buf_index + 1
+        END DO
+      END DO
+      CALL MPI_BCAST(real_buf, buf_size, mpireal, 0, comm, errcode)
+
+    ! All other ranks
+    ELSE
+
+      ! First call to get number of Z values present in simulation
+      CALL MPI_BCAST(size_brem_array, 1, MPI_INTEGER, 0, comm, errcode)
+
+      ALLOCATE(brem_array(size_brem_array))
+
+      ! Second call to get sizes to allocate arrays, and integer Z values
+      buf_size = 3*size_brem_array + 100
+      ALLOCATE(int_buf(buf_size))
+      CALL MPI_BCAST(int_buf, buf_size, MPI_INTEGER, 0, comm, errcode)
+
+      ! Get Z arrays
+      ALLOCATE(Z_values(size_brem_array))
+      ALLOCATE(Z_to_index(100))
+      buf_index = 1
+      DO i = 1, size_brem_array
+        Z_values(i) = int_buf(buf_index)
+        buf_index = buf_index + 1
+      END DO
+      DO i = 1, 100
+        Z_to_index(i) = int_buf(buf_index)
+        buf_index = buf_index + 1
+      END DO
+
+      ! Get brem table sizes
+      DO i = 1,size_brem_array
+        brem_array(i)%size_k = int_buf(buf_index)
+        buf_index = buf_index + 1
+        brem_array(i)%size_T = int_buf(buf_index)
+        buf_index = buf_index + 1
+      END DO
+
+      ! Allocate brem tables
+      DO i = 1, size_brem_array
+        size_T = brem_array(i)%size_T
+        size_k = brem_array(i)%size_k
+        ALLOCATE(brem_array(i)%cdf_table(size_T,size_k))
+        ALLOCATE(brem_array(i)%k_table(size_T,size_k))
+        ALLOCATE(brem_array(i)%cross_section(size_T))
+        ALLOCATE(brem_array(i)%E_table(size_T))
+      END DO
+
+      ! Final MPI call to get data for tables
+      buf_size = 0
+      DO i = 1,size_brem_array
+        buf_size = brem_array(i)%size_T*(2*brem_array(i)%size_k + 2) + buf_size
+      END DO
+      ALLOCATE(real_buf(buf_size))
+      CALL MPI_BCAST(real_buf, buf_size, mpireal, 0, comm, errcode)
+
+      ! Load real_buf into brem_array
+      buf_index = 1
+      DO i = 1, size_brem_array
+        size_k = brem_array(i)%size_k
+        DO j = 1, brem_array(i)%size_T
+          brem_array(i)%cdf_table(j,:) = real_buf(buf_index:buf_index+size_k-1)
+          buf_index = buf_index + size_k
+          brem_array(i)%k_table(j,:) = real_buf(buf_index:buf_index+size_k-1)
+          buf_index = buf_index + size_k
+          brem_array(i)%cross_section(j) = real_buf(buf_index)
+          buf_index = buf_index + 1
+          brem_array(i)%E_table(j) = real_buf(buf_index)
+          buf_index = buf_index + 1
+        END DO
+      END DO
+
+    END IF
+
+    DEALLOCATE(int_buf)
+    DEALLOCATE(real_buf)
+
+  END SUBROUTINE setup_tables_bremsstrahlung
+
+
+
+  ! Loops through all particles in a species and sets a bremsstrahlung optical
+  ! depth
+  SUBROUTINE initialise_optical_depth(current_species)
+
+    TYPE(particle_species) :: current_species
+    TYPE(particle), POINTER :: current
+    REAL(num) :: p_tau
+
+    ! Randomly sample the optical depth from an exponential distribution
+    current => current_species%attached_list%head
+    DO WHILE(ASSOCIATED(current))
+      p_tau = random()
+      current%optical_depth_bremsstrahlung = -LOG(1.0_num - p_tau)
+      current => current%next
+    END DO
+
+  END SUBROUTINE initialise_optical_depth
+
+
+
+  ! For a function y(x), with values in arrays x and y, we return an array with
+  ! elements i given by the integral y(x)dx between limits x=x(1) and x=x(i)
+  SUBROUTINE get_cumulative_array(x,y,size,output)
+
+    INTEGER, PARAMETER :: num = KIND(1.d0)
+    INTEGER, INTENT(in) :: size
+    REAL(num), INTENT(in) :: x(size), y(size)
+    REAL(num) :: output(size)
+    INTEGER :: i
+
+    output(1) = 0
+    DO i = 2, size
+      output(i) = (x(i)-x(i-1)) * (0.5_num*(y(i)+y(i-1))) + output(i-1)
+    ENDDO
+
+  END SUBROUTINE get_cumulative_array
+
+
+
+  ! For a function y(x), with values in arrays x and y, this returns the limit
+  ! x_val such that the integral y(x)dx between limits x=x(1) and x=x_val is
+  ! equal to the argument value int_val
+  SUBROUTINE get_integral_limit(x,y,size,int_val,x_val,y_val)
+
+    INTEGER, INTENT(in) :: size
+    REAL(num), INTENT(in) :: x(size), y(size)
+    REAL(num), INTENT(in) :: int_val
+    REAL(num) :: x_val, y_val
+    REAL(num) :: y_sum(size), c0, c1, c2, c3
+    INTEGER :: i
+
+    ! Identify the indices surrounding x_val
+    y_sum(1) = 0.0_num
+    DO i = 2, size
+      y_sum(i) = 0.5_num*(x(i)-x(i-1))*(y(i)+y(i-1)) + y_sum(i-1)
+
+      ! Solve sum(i-1) + 0.5*(x_val - x(i-1))*(y_val + y(i-1)) = int_val
+      ! where y(i-1) to y_val is the linear interpolation of x(i-1) to x_val.
+      ! This function assumes x and y are always positive.
+      IF (y_sum(i) > int_val) THEN
+        c0 = (y(i)-y(i-1))/(x(i)-x(i-1))
+        IF (c0 == 0.0_num) THEN
+          c1 = 0.5_num*c0
+          c2 = y(i-1) - c0*x(i-1)
+          c3 = 0.5_num*c0*x(i-1)**2 - x(i-1)*y(i-1) + y_sum(i-1) - int_val
+          x_val = (-c2 + SQRT(c2**2 - 4.0_num*c1*c3))/(2.0_num*c1)
+        ELSE
+          ! Gradient is zero, no need to interpolate to find y_val
+          x_val = (int_val-y_sum(i-1))/y(i-1) + x(i-1)
+        END IF
+        y_val = c0*(x_val - x(i-1)) + y(i-1)
+        RETURN
+      END IF
+    END DO
+
+  END SUBROUTINE get_integral_limit
+
 #endif
 END MODULE bremsstrahlung
