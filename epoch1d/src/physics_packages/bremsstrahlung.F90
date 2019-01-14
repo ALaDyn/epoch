@@ -498,6 +498,140 @@ CONTAINS
 
 
 
+  ! Updates the optical depth for electrons. This subroutine is responsible for
+  ! also calling the function which calculates the optical depth change, and
+  ! calling the generate_photon subroutine. This subroutine serves as the main
+  ! interface to the bremsstrahlung module for main-loop processes in
+  ! epoch1d.F90
+  SUBROUTINE bremsstrahlung_update_optical_depth
+
+    INTEGER :: ispecies, iZ, Z_temp
+    TYPE(particle), POINTER :: current
+    REAL(num), ALLOCATABLE :: grid_num_density_electron_temp(:)
+    REAL(num), ALLOCATABLE :: grid_num_density_electron(:)
+    REAL(num), ALLOCATABLE :: grid_temperature_electron_temp(:)
+    REAL(num), ALLOCATABLE :: grid_temperature_electron(:)
+    REAL(num) :: grid_num_density_ion(1-ng:nx+ng)
+    REAL(num) :: part_ux, part_uy, part_uz, gamma_rel
+    REAL(num) :: part_x, part_E, part_ni, part_v
+    REAL(num) :: part_ne, electron_temperature
+
+    ! Calculate electron number density and temperature, summed over all
+    ! electron species
+    IF (use_plasma_screening) THEN
+
+      ALLOCATE(grid_num_density_electron_temp(1-ng:nx+ng))
+      ALLOCATE(grid_num_density_electron(1-ng:nx+ng))
+      ALLOCATE(grid_temperature_electron_temp(1-ng:nx+ng))
+      ALLOCATE(grid_temperature_electron(1-ng:nx+ng))
+      grid_num_density_electron = 0.0_num
+      grid_temperature_electron = 0.0_num
+
+      DO ispecies = 1, n_species
+        IF (species_list(ispecies)%species_type == c_species_id_electron) THEN
+          CALL calc_number_density(grid_num_density_electron_temp, ispecies)
+          CALL calc_temperature(grid_temperature_electron_temp, ispecies)
+
+          ! Sum the densities, perform a weighted mean to find mean temperature
+          grid_num_density_electron = grid_num_density_electron + &
+              grid_num_density_electron_temp
+          grid_temperature_electron = grid_temperature_electron + &
+              grid_temperature_electron_temp*grid_num_density_electron_temp
+        END IF
+      END DO
+      grid_temperature_electron = grid_temperature_electron / &
+          grid_num_density_electron
+
+      DEALLOCATE(grid_num_density_electron_temp)
+      DEALLOCATE(grid_temperature_electron_temp)
+    END IF
+
+    ! Calculate the number density of each ion species
+    DO iZ = 1, n_species
+
+      ! Identify if the charge is greater than 1
+      Z_temp = species_list(iZ)%atomic_no
+
+      IF (Z_temp < 1 .OR. Z_temp > 100) THEN
+        CYCLE
+      ENDIF
+      CALL calc_number_density(grid_num_density_ion,iZ)
+
+      ! Update the optical depth for each electron species
+      DO ispecies = 1, n_species
+
+        ! Only update optical_depth_bremsstrahlung for the electron species
+        IF (species_list(ispecies)%species_type == c_species_id_electron) THEN
+
+          ! Cycle through all electrons in this species
+          current => species_list(ispecies)%attached_list%head
+          DO WHILE(ASSOCIATED(current))
+
+            ! Get electron energy
+            part_ux = current%part_p(1) / mc0
+            part_uy = current%part_p(2) / mc0
+            part_uz = current%part_p(3) / mc0
+            gamma_rel = SQRT(part_ux**2 + part_uy**2 + part_uz**2 + 1.0_num)
+            part_E = gamma_rel*m0*c**2
+            current%particle_energy = part_E
+
+            ! Don't update the optical depth if the particle hasn't moved
+            IF (gamma_rel - 1.0_num < 1.0e-15_num) THEN
+              current => current%next
+              CYCLE
+            END IF
+
+            !Get electron speed
+            part_v = SQRT(current%part_p(1)**2 + current%part_p(2)**2 + &
+                current%part_p(3)**2) * c**2 / part_E
+
+            !Get number density at electron
+            part_x = current%part_pos - x_grid_min_local
+            CALL grid_centred_var_at_particle(part_x, part_ni, iZ, &
+                grid_num_density_ion)
+
+            ! Update the optical depth for the screening option chosen
+            IF (use_plasma_screening) THEN
+
+              !Obtain extra parameters needed for plasma screening model
+              CALL grid_centred_var_at_particle(part_x, part_ne, iZ, &
+                  grid_num_density_electron)
+              CALL grid_centred_var_at_particle(part_x, electron_temperature, &
+                  iZ, grid_temperature_electron)
+
+              current%optical_depth_bremsstrahlung = &
+                  current%optical_depth_bremsstrahlung &
+                  - delta_optical_depth_plasma( &
+                  NINT(species_list(iZ)%charge/q0), Z_temp, &
+                  electron_temperature, part_ne, part_v, part_ni)
+
+            ELSE
+
+              current%optical_depth_bremsstrahlung = &
+                  current%optical_depth_bremsstrahlung &
+                  - delta_optical_depth_atomic(Z_temp, part_E, part_v, part_ni)
+
+            END IF
+
+            ! If optical depth dropped below zero generate photon and reset
+            ! optical depth
+            IF (current%optical_depth_bremsstrahlung <= 0.0_num) THEN
+              CALL generate_photon(current, Z_temp, &
+                  bremsstrahlung_photon_species)
+              current%optical_depth_bremsstrahlung = reset_optical_depth()
+            END IF
+
+            current => current%next
+
+          END DO
+        END IF
+      END DO
+    END DO
+
+  END SUBROUTINE bremsstrahlung_update_optical_depth
+
+
+
   ! Calculate the change in optical depth during this timestep, given by:
   ! (ion number density) * (emission cross section) * (distance traversed)
   ! Here, cross sections are determined from Geant4 look-up tables
@@ -645,6 +779,67 @@ CONTAINS
     END IF
 
   END SUBROUTINE generate_photon
+
+
+
+  ! Calculates the value of a grid-centred variable "part_var" stored in the
+  ! grid "grid_var", averaged over the particle shape for a particle at part_x
+  ! of species current_species
+  SUBROUTINE grid_centred_var_at_particle(part_x, part_var, current_species, &
+      grid_var)
+
+    REAL(num), INTENT(in) :: part_x
+    INTEGER, INTENT(in) :: current_species
+    REAL(num), INTENT(in) :: grid_var(1-ng:nx+ng)
+    REAL(num), INTENT(out) :: part_var
+    INTEGER :: cell_x1
+    REAL(num) :: cell_x_r
+    REAL(num) :: cell_frac_x
+    REAL(num), DIMENSION(sf_min:sf_max) :: gx
+#ifdef PARTICLE_SHAPE_BSPLINE3
+    REAL(num) :: cf2
+    REAL(num), PARAMETER :: fac = (1.0_num / 24.0_num)**c_ndims
+#elif  PARTICLE_SHAPE_TOPHAT
+    REAL(num), PARAMETER :: fac = (1.0_num)**c_ndims
+#else
+    REAL(num) :: cf2
+    REAL(num), PARAMETER :: fac = (0.5_num)**c_ndims
+#endif
+
+    ! The following method is lifted from photons.F90 (field_at_particle), for
+    ! the cell-centered fields, taking into account the various particle shapes
+#ifdef PARTICLE_SHAPE_TOPHAT
+    cell_x_r = part_x / dx - 0.5_num
+#else
+    cell_x_r = part_x / dx
+#endif
+    cell_x1 = FLOOR(cell_x_r + 0.5_num)
+    cell_frac_x = REAL(cell_x1, num) - cell_x_r
+    cell_x1 = cell_x1 + 1
+
+#ifdef PARTICLE_SHAPE_BSPLINE3
+#include "bspline3/gx.inc"
+    part_var = &
+          gx(-2) * grid_var(cell_x1-2) &
+        + gx(-1) * grid_var(cell_x1-1) &
+        + gx( 0) * grid_var(cell_x1  ) &
+        + gx( 1) * grid_var(cell_x1+1) &
+        + gx( 2) * grid_var(cell_x1+2)
+#elif  PARTICLE_SHAPE_TOPHAT
+#include "tophat/gx.inc"
+    part_var = &
+          gx(0) * grid_var(cell_x1  ) &
+        + gx(1) * grid_var(cell_x1+1)
+#else
+#include "triangle/gx.inc"
+    part_var = &
+          gx(-1) * grid_var(cell_x1-1) &
+        + gx( 0) * grid_var(cell_x1  ) &
+        + gx( 1) * grid_var(cell_x1+1)
+#endif
+    part_var = fac*part_var
+
+  END SUBROUTINE grid_centred_var_at_particle
 
 
 
