@@ -487,7 +487,6 @@ CONTAINS
         DEALLOCATE(brem_array(i)%k_table)
         DEALLOCATE(brem_array(i)%cdf_table)
         DEALLOCATE(brem_array(i)%cross_section)
-        DEALLOCATE(brem_array(i)%loss_integral)
         DEALLOCATE(brem_array(i)%E_table)
       END DO
 
@@ -628,6 +627,11 @@ CONTAINS
         END IF
       END DO
     END DO
+
+    IF (use_plasma_screening) THEN
+      DEALLOCATE(grid_num_density_electron)
+      DEALLOCATE(grid_temperature_electron)
+    END IF
 
   END SUBROUTINE bremsstrahlung_update_optical_depth
 
