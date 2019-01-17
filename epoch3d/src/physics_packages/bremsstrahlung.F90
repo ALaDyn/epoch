@@ -681,21 +681,21 @@ CONTAINS
     REAL(num) :: cross_sec_val, plasma_screen
     REAL(num) :: delta_optical_depth_plasma
 
-    ! Code will break if Te or ne are zero
+    ! Code will break if Te or ne are zero. Assume atomic screening in this case
     IF (part_ne < 1.0e-50_num .OR. Te < 1.0e-10_num) THEN
       plasma_screen = 0.0_num
     ELSE
       plasma_screen = &
-        LOG(plasma_screen_const_2 * SQRT(Te/part_ne) * A**(1.0_num/3.0_num))
+        LOG(plasma_screen_const_3 * SQRT(Te/part_ne) * A**(1.0_num/3.0_num))
     END IF
 
     ! Obtain emission cross section
     IF (Z > 0) THEN
       cross_sec_val = plasma_screen_const_1 * Z**2 * (A**2 / Z**2 * &
-          LOG(192.0_num * A**(-1.0_num/3.0_num)) + plasma_screen)
+          LOG(plasma_screen_const_2 * A**(-1.0_num/3.0_num)) + plasma_screen)
     ELSE
       cross_sec_val = plasma_screen_const_1 * A**2 * &
-          LOG(192.0_num * A**(-1.0_num/3.0_num))
+          LOG(plasma_screen_const_2 * A**(-1.0_num/3.0_num))
     END IF
     delta_optical_depth_plasma = part_ni * cross_sec_val * part_v * dt &
         / photon_weight

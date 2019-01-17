@@ -185,8 +185,9 @@ MODULE constants
   REAL(num), PARAMETER :: e_radius = 1.0_num/4_num/pi/epsilon0*q0**2/m0/c**2
   REAL(num), PARAMETER :: plasma_screen_const_1 = 16.0_num / 3.0_num * alpha * &
       e_radius**2 * LOG(1.0e9_num)
-  REAL(num), PARAMETER :: plasma_screen_const_2 = SQRT(epsilon0 * kb / q0**2 ) &
-      * m0 * c / 192.0_num / h_bar
+  REAL(num), PARAMETER :: plasma_screen_const_2 = 1.4_num / alpha
+  REAL(num), PARAMETER :: plasma_screen_const_3 = SQRT(epsilon0 * kb / q0**2 ) &
+      * m0 * c * alpha / 1.4_num / h_bar
 #endif
 
   ! define special particle IDs
