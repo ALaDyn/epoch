@@ -748,8 +748,8 @@ CONTAINS
     TYPE(subset), INTENT(IN), POINTER :: current_subset
     REAL(num) :: dir_min, dir_max, dir_d
 
-    global_ranges(1,:) = -HUGE(num)
-    global_ranges(2,:) = HUGE(num)
+    global_ranges(1,:) = -HUGE(1.0_num)
+    global_ranges(2,:) = HUGE(1.0_num)
 
     dir_min = x_min
     dir_max = x_max
