@@ -437,6 +437,15 @@ MODULE shared_data
     ! Thermal boundaries
     REAL(num), DIMENSION(:), POINTER :: ext_temp_x_min, ext_temp_x_max
 
+    ! Return boundaries. Only allow drift perp. to boundary
+    REAL(num) :: ext_drift_x_min, ext_drift_x_max
+    REAL(num) :: ext_dens_x_min, ext_dens_x_max
+    REAL(num) :: net_px_min, net_px_max
+    REAL(num) :: ext_plasma_freq_min, ext_plasma_freq_max
+
+    !TODO something better here
+    TYPE(injector_block), POINTER :: injector_x_min, injector_x_max
+
     ! Species_ionisation
     LOGICAL :: electron
     LOGICAL :: ionise
@@ -877,7 +886,8 @@ MODULE shared_data
     TYPE(primitive_stack) :: density_function
     TYPE(primitive_stack) :: temperature_function(3)
     TYPE(primitive_stack) :: drift_function(3)
-
+    REAL(num), DIMENSION(3) :: temperature, drift
+    REAL(num) :: density
     REAL(num) :: t_start, t_end
     LOGICAL :: has_t_end
     REAL(num) :: depth, dt_inject

@@ -213,7 +213,8 @@ CONTAINS
     current => injector_x_min
     DO WHILE(ASSOCIATED(current))
       IF (current%species == -1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error, 2)
+      IF (.NOT. (current%density_function%init &
+          .OR. current%density > c_tiny )) error = IOR(error, 2)
       IF (error == 0) use_injectors = .TRUE.
       current => current%next
     END DO
@@ -221,7 +222,8 @@ CONTAINS
     current => injector_x_max
     DO WHILE(ASSOCIATED(current))
       IF (current%species == -1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error, 2)
+      IF (.NOT. (current%density_function%init &
+          .OR. current%density > c_tiny )) error = IOR(error, 2)
       IF (error == 0) use_injectors = .TRUE.
       current => current%next
     END DO

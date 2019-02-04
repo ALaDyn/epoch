@@ -38,7 +38,9 @@ CONTAINS
     injector%has_t_end = .FALSE.
     injector%density_min = 0.0_num
     injector%use_flux_injector = .FALSE.
-
+    injector%temperature = 0.0_num
+    injector%drift = 0.0_num
+    injector%density = 0.0_num
     injector%depth = 1.0_num
     injector%dt_inject = -1.0_num
     NULLIFY(injector%next)
@@ -254,8 +256,13 @@ CONTAINS
 
       DO idir = 1, 3
         IF (flux_fn) THEN
-          new%part_p(idir) = flux_momentum_from_temperature(mass, &
-              temperature(idir), drift(idir)) * dir_mult(idir)
+          IF(ABS(drift(idir)) > c_tiny) THEN
+            new%part_p(idir) = drifting_flux_momentum_from_temperature(mass, &
+                temperature(idir), drift(idir)) * dir_mult(idir)
+          ELSE
+            new%part_p(idir) = flux_momentum_from_temperature(mass, &
+                temperature(idir), drift(idir)) * dir_mult(idir)
+          END IF
         ELSE
           new%part_p(idir) = momentum_from_temperature(mass, &
               temperature(idir), drift(idir))
@@ -287,9 +294,12 @@ CONTAINS
     INTEGER :: errcode, i
 
     errcode = 0
-    density = MAX(evaluate_with_parameters(injector%density_function, &
-        parameters, errcode), 0.0_num)
-
+    IF (injector%density_function%init) THEN
+      density = MAX(evaluate_with_parameters(injector%density_function, &
+          parameters, errcode), 0.0_num)
+    ELSE
+      density = injector%density
+    END IF
     ! Stack can only be time varying if valid. Change if this isn't true
     DO i = 1, 3
       IF (injector%temperature_function(i)%init) THEN
@@ -297,19 +307,61 @@ CONTAINS
             MAX(evaluate_with_parameters(injector%temperature_function(i), &
                 parameters, errcode), 0.0_num)
       ELSE
-        temperature(i) = 0.0_num
+        temperature(i) = injector%temperature(i)
       END IF
       IF (injector%drift_function(i)%init) THEN
         drift(i) = &
             evaluate_with_parameters(injector%drift_function(i), &
                                      parameters, errcode)
       ELSE
-        drift(i) = 0.0_num
+        drift(i) = injector%drift(i)
       END IF
     END DO
 
     IF (errcode /= c_err_none) CALL abort_code(errcode)
 
   END SUBROUTINE populate_injector_properties
+
+
+  SUBROUTINE update_dt_inject(injector)
+
+    TYPE(injector_block), POINTER :: injector
+    REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
+    REAL(num) :: gamma_mass, v_inject, vol
+    REAL(num) :: v_inject_s
+    INTEGER :: dir_index
+    REAL(num), DIMENSION(3) :: temperature, drift
+    TYPE(parameter_pack) :: parameters
+
+    IF (injector%boundary == c_bd_x_min) THEN
+      parameters%pack_ix = 1
+      vol = dx
+      dir_index = 1
+    ELSE IF (injector%boundary == c_bd_x_max) THEN
+      parameters%pack_ix = nx
+      vol = dx
+      dir_index = 1
+    ENDIF
+
+    CALL populate_injector_properties(injector, parameters, density_grid, &
+        temperature, drift)
+
+    mass = species_list(injector%species)%mass
+    typical_mc2 = (mass * c)**2
+
+
+    ! Assume agressive maximum thermal momentum, all components
+    ! like hottest component
+    p_therm = SQRT(mass * kb * MAXVAL(temperature))
+    p_inject_drift = drift(dir_index)
+    gamma_mass = SQRT((p_therm + p_inject_drift)**2 + typical_mc2) / c
+    v_inject_s = p_inject_drift / gamma_mass
+    v_inject = ABS(v_inject_s)
+
+    injector%dt_inject = vol &
+        / MAX(injector%npart_per_cell * v_inject, c_tiny)
+
+  END SUBROUTINE update_dt_inject
+
 
 END MODULE injectors
