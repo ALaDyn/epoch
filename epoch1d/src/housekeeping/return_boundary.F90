@@ -98,7 +98,6 @@ CONTAINS
     TYPE(particle_species), POINTER :: species
     !TODO Need to verfy this really is a return injector?
 
-PRINT*, injector%species
     species => species_list(injector%species)
 
     IF (injector%boundary == c_bd_x_min) THEN
@@ -108,7 +107,6 @@ PRINT*, injector%species
       injector%temperature = species%ext_temp_x_max
       injector%drift(1) = species%ext_drift_x_max
     END IF
-  PRINT*, species%ext_temp_x_max, species%ext_drift_x_max
     CALL update_dt_inject(injector)
 
   END SUBROUTINE

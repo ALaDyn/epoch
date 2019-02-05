@@ -404,6 +404,7 @@ CONTAINS
             'laser_x_min_phase')
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
             'laser_x_max_phase')
+        CALL write_return_injectors(sdf_handle)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
@@ -908,6 +909,41 @@ CONTAINS
 
   END SUBROUTINE write_laser_phases
 
+
+
+  SUBROUTINE write_return_injectors(sdf_handle)
+
+    TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
+    REAL(num), DIMENSION(:), ALLOCATABLE :: values
+
+    TYPE(particle_species), POINTER :: curr_species
+    INTEGER :: i, ispecies, return_species
+
+    return_species = -1
+    DO ispecies = 1, n_species
+      DO i = 1, c_ndims
+        IF(species_list(ispecies)%bc_particle(i) == c_bc_return) THEN
+          return_species = ispecies
+        END IF
+      END DO
+    END DO
+
+    IF (return_species /= -1) THEN
+      ALLOCATE(values(6))
+      curr_species => species_list(return_species)
+      values(1) = curr_species%net_px_min
+      values(2) = curr_species%net_px_max
+      values(3) = curr_species%ext_drift_x_min
+      values(4) = curr_species%ext_drift_x_max
+      values(5) = curr_species%ext_dens_x_min
+      values(6) = curr_species%ext_dens_x_max
+
+     CALL sdf_write_srl(sdf_handle, 'return_injector', 'return_injector', &
+          6, values, 0)
+      DEALLOCATE(values)
+    END IF
+
+  END SUBROUTINE write_return_injectors
 
 
   SUBROUTINE check_name_length(shorten, string)

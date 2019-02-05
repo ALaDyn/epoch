@@ -1008,6 +1008,7 @@ CONTAINS
             block_id, ndims, 'laser_x_min_phase', 'x_min')
         CALL read_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
             block_id, ndims, 'laser_x_max_phase', 'x_max')
+        CALL read_return_injectors(sdf_handle, block_id, ndims)
 
       CASE(c_blocktype_constant)
         IF (str_cmp(block_id, 'dt_plasma_frequency')) THEN
@@ -1676,6 +1677,57 @@ CONTAINS
   END FUNCTION it_optical_depth_trident
 #endif
 #endif
+
+
+  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims)
+
+    TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_in
+    INTEGER, INTENT(IN) :: ndims
+    TYPE(particle_species), POINTER :: curr_species
+    INTEGER :: i, ispecies, return_species
+    REAL(KIND=num), DIMENSION(:), ALLOCATABLE :: values
+    INTEGER, DIMENSION(4) :: dims
+
+    IF (str_cmp(block_id_in, 'return_injector')) THEN
+      CALL sdf_read_array_info(sdf_handle, dims)
+
+      !3 sets of 2 values in 1-D
+      !In 2-d there are 3 sets of 2 strips etc
+      IF (ndims /= 1 .OR. dims(1) /= 6) THEN
+        PRINT*, '*** WARNING ***'
+        PRINT*, 'Number of values does not match number required.'
+        PRINT*, 'Return boundaries may not operate correctly'
+      END IF
+
+      return_species = -1
+      DO ispecies = 1, n_species
+        DO i = 1, ndims
+          IF(species_list(ispecies)%bc_particle(i) == c_bc_return) THEN
+            return_species = ispecies
+          END IF
+        END DO
+      END DO
+      IF(return_species == -1) RETURN
+
+      ALLOCATE(values(dims(1)))
+      CALL sdf_read_srl(sdf_handle, values)
+
+      curr_species=>species_list(return_species)
+
+      !Actually only the first two NEED storing
+      !But is not fun to extract the others from deck
+      curr_species%net_px_min = values(1)
+      curr_species%net_px_max = values(2)
+      curr_species%ext_drift_x_min = values(3)
+      curr_species%ext_drift_x_max = values(4)
+      curr_species%ext_dens_x_min = values(5)
+      curr_species%ext_dens_x_max = values(6)
+
+      DEALLOCATE(values)
+    END IF
+
+  END SUBROUTINE read_return_injectors
 
 
 
