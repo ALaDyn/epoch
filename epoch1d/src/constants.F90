@@ -246,6 +246,11 @@ MODULE constants
   INTEGER, PARAMETER :: c_stagger_jy = c_stagger_ey
   INTEGER, PARAMETER :: c_stagger_jz = c_stagger_ez
 
+  ! Frame types
+  INTEGER, PARAMETER :: c_frame_none = 0
+  INTEGER, PARAMETER :: c_frame_lab = 1
+  INTEGER, PARAMETER :: c_frame_boost = 2
+
   ! Length of a standard string
   INTEGER, PARAMETER :: string_length = 256
 

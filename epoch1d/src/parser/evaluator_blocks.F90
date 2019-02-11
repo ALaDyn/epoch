@@ -20,6 +20,7 @@ MODULE evaluator_blocks
   USE custom_parser
   USE stack
   USE strings
+  USE lorentz
 
   IMPLICIT NONE
 
@@ -180,27 +181,55 @@ CONTAINS
     END IF
 
     IF (opcode == c_const_time) THEN
-      CALL push_on_eval(time)
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        IF (parameters%use_grid_position) THEN
+          val = x(parameters%pack_ix)
+        ELSE
+          val = parameters%pack_pos
+        END IF
+        val = transform_time(global_boost_info, time, val, &
+            inverse = .TRUE.)
+        val = val * (1.0_num - global_boost_info%vx / parameters%v_prop)
+      ELSE
+#endif
+        val = time
+#ifdef BOOSTED_FRAME
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify
       RETURN
     END IF
 
     IF (opcode == c_const_x) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(x(parameters%pack_ix))
+        val = x(parameters%pack_ix)
       ELSE
-        CALL push_on_eval(parameters%pack_pos)
+        val = parameters%pack_pos
       END IF
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify_xt
       RETURN
     END IF
 
     IF (opcode == c_const_xb) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(xb(parameters%pack_ix))
+        val = xb(parameters%pack_ix)
       ELSE
-        CALL push_on_eval(parameters%pack_pos)
+        val = parameters%pack_pos
       END IF
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify_xt
       RETURN
     END IF
@@ -243,20 +272,32 @@ CONTAINS
 
     IF (opcode == c_const_r_xy) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(x(parameters%pack_ix)))
+        val = ABS(x(parameters%pack_ix))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos))
+        val = ABS(parameters%pack_pos)
       END IF
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify_xt
       RETURN
     END IF
 
     IF (opcode == c_const_r_xz) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(x(parameters%pack_ix)))
+        val = ABS(x(parameters%pack_ix))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos))
+        val = ABS(parameters%pack_pos)
       END IF
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify_xt
       RETURN
     END IF
@@ -268,10 +309,16 @@ CONTAINS
 
     IF (opcode == c_const_r_xyz) THEN
       IF (parameters%use_grid_position) THEN
-        CALL push_on_eval(ABS(x(parameters%pack_ix)))
+        val = ABS(x(parameters%pack_ix))
       ELSE
-        CALL push_on_eval(ABS(parameters%pack_pos))
+        val = ABS(parameters%pack_pos)
       END IF
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify_xt
       RETURN
     END IF
@@ -475,7 +522,22 @@ CONTAINS
     END IF
 
     IF (opcode == c_const_t_end) THEN
-      CALL push_on_eval(t_end)
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        IF (parameters%use_grid_position) THEN
+          val = x(parameters%pack_ix)
+        ELSE
+          val = parameters%pack_pos
+        END IF
+        val = transform_time(global_boost_info, t_end, val, &
+            inverse = .TRUE.)
+      ELSE
+#endif
+        val = t_end
+#ifdef BOOSTED_FRAME
+      END IF
+#endif
+      CALL push_on_eval(val)
       RETURN
     END IF
 
@@ -485,23 +547,47 @@ CONTAINS
     END IF
 
     IF (opcode == c_const_lx) THEN
-      CALL push_on_eval(length_x)
+      val = length_x
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_length(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       RETURN
     END IF
 
     IF (opcode == c_const_dx) THEN
-      CALL push_on_eval(dx)
+      val = dx
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       RETURN
     END IF
 
     IF (opcode == c_const_x_min) THEN
-      CALL push_on_eval(x_min)
+      val = x_min
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify_window
       RETURN
     END IF
 
     IF (opcode == c_const_x_max) THEN
-      CALL push_on_eval(x_max)
+      val = x_max
+#ifdef BOOSTED_FRAME
+      IF (use_boosted_frame .AND. in_boosted_frame) THEN
+        val = transform_position(global_boost_info, val, inverse = .TRUE.)
+      END IF
+#endif
+      CALL push_on_eval(val)
       err = err_simplify_window
       RETURN
     END IF

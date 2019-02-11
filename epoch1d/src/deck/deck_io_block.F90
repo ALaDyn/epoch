@@ -462,6 +462,15 @@ CONTAINS
         io_block%prefix_index = nfile_prefixes
       END IF
 
+    ELSE IF (str_cmp(element, 'frame')) THEN
+      IF (str_cmp(value, 'lab')) THEN
+        io_block%frame = c_frame_lab
+      ELSE IF (str_cmp(value, 'boost')) THEN
+        io_block%frame = c_frame_boost
+      ELSE
+        errcode = IOR(errcode, c_err_bad_value)
+      END IF
+
     ELSE IF (str_cmp(element, 'dump_cycle_first_index')) THEN
       io_block%dump_cycle_first_index = &
           as_integer_print(value, element, errcode)
@@ -976,6 +985,11 @@ CONTAINS
     DO i = 1, num_vars_to_dump
       io_block%averaged_data(i)%dump_single = .FALSE.
     END DO
+
+    !Default is the boosted frame since this is the
+    !"natural" frame of the simulation. If there is
+    !no boost then it's the same as the lab frame
+    io_block%frame = c_frame_boost
 
   END SUBROUTINE init_io_block
 

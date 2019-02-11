@@ -240,6 +240,8 @@ MODULE shared_data
     INTEGER :: pack_ix = 1
     REAL(num) :: pack_pos = 0.0_num
     REAL(num), DIMENSION(c_ndirs) :: pack_p = 0.0_num
+
+    REAL(num) :: v_prop = 0.0_num
   END TYPE parameter_pack
 
   TYPE stack_element
@@ -253,6 +255,7 @@ MODULE shared_data
 
   TYPE primitive_stack
     TYPE(stack_element), POINTER :: entries(:)
+    REAL(num) :: post_multiply = 1.0_num
     INTEGER :: stack_point, stack_size
     LOGICAL :: init = .FALSE.
     LOGICAL :: is_time_varying = .FALSE.
@@ -576,6 +579,10 @@ MODULE shared_data
     LOGICAL :: disabled
     INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
     TYPE(averaged_data_block), DIMENSION(num_vars_to_dump) :: averaged_data
+
+    REAL(num) :: dt_snapshot_lab = -1.0_num
+    REAL(num) :: time_prev_lab = 0.0_num
+    INTEGER :: frame
   END TYPE io_block_type
 
   TYPE(io_block_type), POINTER :: io_block_list(:)
@@ -586,7 +593,21 @@ MODULE shared_data
   REAL(num) :: time_start, time_stop
   REAL(num) :: walltime_start, walltime_stop
   INTEGER :: nstep_start, nstep_stop
+
+  INTEGER :: current_prefix = -1
   CHARACTER(LEN=c_id_length), ALLOCATABLE :: file_prefixes(:)
+#ifdef BOOSTED_FRAME
+  TYPE prefix_boost_info
+    INTEGER :: frame = c_frame_boost
+    REAL(num) :: next_dump = 0.0_num
+    TYPE(particle_species), DIMENSION(:), POINTER :: &
+        particle_lists => NULL()
+    REAL(num), DIMENSION(:, :), ALLOCATABLE :: field_lists
+    LOGICAL :: io_assigned = .FALSE.
+  END TYPE prefix_boost_info
+  TYPE(prefix_boost_info), DIMENSION(:), ALLOCATABLE :: prefix_boosts
+#endif
+
   INTEGER, ALLOCATABLE :: file_numbers(:)
   INTEGER(i8) :: sdf_buffer_size
 
@@ -749,6 +770,7 @@ MODULE shared_data
   LOGICAL :: use_more_setup_memory = .FALSE.
 
   REAL(num) :: dt, t_end, time, dt_multiplier, dt_laser, dt_plasma_frequency
+  REAL(num) :: dt_domain
   REAL(num) :: dt_from_restart
   REAL(num) :: dt_min_average, cfl
   ! x_min is the left-hand edge of the simulation domain as specified in
@@ -803,6 +825,20 @@ MODULE shared_data
   INTEGER :: bc_x_min_after_move
   INTEGER :: bc_x_max_after_move
   REAL(num) :: window_shift
+
+
+  !----------------------------------------------------------------------------
+  ! Boosted Frame
+  !----------------------------------------------------------------------------
+  TYPE boost_info_object
+    REAL(num) :: vx = 0.0_num
+    REAL(num) :: lorentz_gamma = 1.0_num
+    REAL(num) :: beta = 0.0_num
+  END TYPE boost_info_object
+#ifdef BOOSTED_FRAME
+  LOGICAL :: use_boosted_frame = .FALSE., in_boosted_frame = .FALSE.
+  TYPE(boost_info_object), SAVE :: global_boost_info
+#endif
 
 #ifdef PHOTONS
   !----------------------------------------------------------------------------
@@ -900,10 +936,16 @@ MODULE shared_data
     REAL(num) :: phase
     REAL(num) :: current_integral_phase
 
+    !Used for boosted frame
+    REAL(num) :: x_at_t0
+    REAL(num) :: kx_mult
+
     LOGICAL :: use_time_function, use_phase_function, use_profile_function
     LOGICAL :: use_omega_function
     TYPE(primitive_stack) :: time_function, phase_function, profile_function
     TYPE(primitive_stack) :: omega_function
+
+    LOGICAL :: move_x_min
 
     REAL(num) :: amp, omega, pol_angle, t_start, t_end
     INTEGER :: omega_func_type

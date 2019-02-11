@@ -51,6 +51,7 @@ PROGRAM pic
   USE calc_df
   USE injectors
   USE current_smooth
+  USE boosted_frame
 #ifdef PHOTONS
   USE photons
 #endif
@@ -139,22 +140,28 @@ PROGRAM pic
   ! .TRUE. to over_ride balance fraction check
   IF (npart_global > 0) CALL balance_workload(.TRUE.)
 
-  IF (use_current_correction) CALL calc_initial_current
   CALL particle_bcs
   CALL efield_bcs
 
   IF (ic_from_restart) THEN
     IF (dt_from_restart > 0) dt = dt_from_restart
     time = time + dt / 2.0_num
+#ifdef BOOSTED_FRAME
+    CALL restart_boost
+#endif
     CALL update_eb_fields_final
     CALL moving_window
   ELSE
+#ifdef BOOSTED_FRAME
+    CALL new_simulation_boost
+#endif
     dt_store = dt
     dt = dt / 2.0_num
     time = time + dt
     CALL bfield_final_bcs
     dt = dt_store
   END IF
+  IF (use_current_correction) CALL calc_initial_current
   CALL count_n_zeros
 
   ! Setup particle migration between species
@@ -227,6 +234,9 @@ PROGRAM pic
     CALL check_for_stop_condition(halt, force_dump)
     IF (halt) EXIT
     step = step + 1
+#ifdef BOOSTED_FRAME
+    CALL record_fields
+#endif
     time = time + dt / 2.0_num
     CALL output_routines(step)
     time = time + dt / 2.0_num

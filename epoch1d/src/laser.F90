@@ -18,6 +18,7 @@
 MODULE laser
 
   USE custom_laser
+  USE lorentz
   USE evaluator
 
   IMPLICIT NONE
@@ -41,6 +42,11 @@ CONTAINS
     laser%t_start = 0.0_num
     laser%t_end = t_end
     laser%current_integral_phase = 0.0_num
+
+    laser%move_x_min = .FALSE.
+    laser%x_at_t0 = 0.0_num
+    laser%kx_mult = 0.0_num
+
     NULLIFY(laser%next)
 
     laser%profile = 1.0_num
@@ -119,9 +125,13 @@ CONTAINS
 
     IF (boundary == c_bd_x_min) THEN
       n_laser_x_min = n_laser_x_min + 1
+      laser%x_at_t0 = x_min
+      laser%kx_mult = 1.0_num
       CALL attach_laser_to_list(laser_x_min, laser)
     ELSE IF (boundary == c_bd_x_max) THEN
       n_laser_x_max = n_laser_x_max + 1
+      laser%x_at_t0 = x_max
+      laser%kx_mult = -1.0_num
       CALL attach_laser_to_list(laser_x_max, laser)
     END IF
 
@@ -138,6 +148,11 @@ CONTAINS
     TYPE(parameter_pack), INTENT(INOUT) :: parameters
 
     parameters%pack_ix = 0
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame) THEN
+      parameters%v_prop = c * laser%kx_mult
+    END IF
+#endif
 
     SELECT CASE(laser%boundary)
       CASE(c_bd_x_min)
@@ -158,8 +173,8 @@ CONTAINS
     TYPE(parameter_pack) :: parameters
 
     err = 0
-    CALL populate_pack_from_laser(laser, parameters)
     IF (laser%use_time_function) THEN
+      CALL populate_pack_from_laser(laser, parameters)
       laser_time_profile = evaluate_with_parameters(laser%time_function, &
           parameters, err)
       RETURN
@@ -206,6 +221,7 @@ CONTAINS
     TYPE(laser_block), POINTER :: laser
     INTEGER :: err
     TYPE(parameter_pack) :: parameters
+    REAL(num) :: omega_before
 
     err = 0
     CALL populate_pack_from_laser(laser, parameters)
@@ -215,6 +231,12 @@ CONTAINS
         laser%omega = 2.0_num * pi * laser%omega
     IF (laser%omega_func_type == c_of_lambda) &
         laser%omega = 2.0_num * pi * c / laser%omega
+
+    omega_before = laser%omega
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame) laser%omega = transform_frequency(global_boost_info, &
+        laser%omega, laser%omega / c * laser%kx_mult)
+#endif
 
   END SUBROUTINE laser_update_omega
 
@@ -344,6 +366,15 @@ CONTAINS
       END DO
     END IF
 
+#ifdef BOOSTED_FRAME
+    IF (use_boosted_frame) THEN
+      source1 = source1 * global_boost_info%lorentz_gamma &
+          * (1.0_num - global_boost_info%beta)
+      source2 = source2 * global_boost_info%lorentz_gamma &
+          * (1.0_num + global_boost_info%beta)
+    END IF
+#endif
+
     bz(laserpos-1) = sum * ( 4.0_num * source1 &
         + 2.0_num * (ey_x_min + c * bz_x_min) &
         - 2.0_num * ey(laserpos) &
@@ -409,6 +440,15 @@ CONTAINS
         current => current%next
       END DO
     END IF
+
+#ifdef BOOSTED_FRAME
+    IF (use_boosted_frame) THEN
+      source1 = source1 * global_boost_info%lorentz_gamma &
+          * (1.0_num - global_boost_info%beta)
+      source2 = source2 * global_boost_info%lorentz_gamma &
+          * (1.0_num + global_boost_info%beta)
+    END IF
+#endif
 
     bz(laserpos) = sum * (-4.0_num * source1 &
         - 2.0_num * (ey_x_max - c * bz_x_max) &

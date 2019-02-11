@@ -50,6 +50,7 @@ CONTAINS
     LOGICAL, SAVE :: first_flag = .TRUE.
     LOGICAL :: first_message, restarting, full_check, attempt_balance
     LOGICAL :: use_redistribute_domain, use_redistribute_particles
+    INTEGER :: iprefix
 #ifdef PARTICLE_DEBUG
     TYPE(particle), POINTER :: current
     INTEGER :: ispecies
@@ -190,7 +191,17 @@ CONTAINS
     END IF
 
     ! Redistribute the particles onto their new processors
-    IF (use_redistribute_particles) CALL distribute_particles
+    IF (use_redistribute_particles) THEN
+      CALL distribute_particles(species_list)
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame) THEN
+        DO iprefix = 1, SIZE(file_prefixes)
+          IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
+          CALL distribute_particles(prefix_boosts(iprefix)%particle_lists)
+        END DO
+      END IF
+#endif
+    END IF
 
     ! If running with particle debugging then set the t = 0 processor if
     ! over_ride = true
@@ -1246,11 +1257,12 @@ CONTAINS
 
 
   ! This subroutine is used to rearrange particles over processors
-  SUBROUTINE distribute_particles
+  SUBROUTINE distribute_particles(species_list)
 
     ! This subroutine moves particles which are on the wrong processor
     ! to the correct processor.
 
+    TYPE(particle_species), DIMENSION(:), INTENT(INOUT) :: species_list
     TYPE(particle_list), DIMENSION(:), ALLOCATABLE :: pointers_send
     TYPE(particle_list), DIMENSION(:), ALLOCATABLE :: pointers_recv
     TYPE(particle), POINTER :: current, next
