@@ -28,6 +28,7 @@ MODULE random_generator
   TYPE :: random_state_type
     INTEGER :: x, y, z, w
     LOGICAL :: box_muller_cached
+    DOUBLE PRECISION :: cached_bm_value
   END TYPE random_state_type
 
   TYPE(random_state_type), TARGET, SAVE :: global_random
@@ -97,6 +98,7 @@ CONTAINS
     current_state%z = init_z + seed
     current_state%w = init_w + seed
     current_state%box_muller_cached = .FALSE.
+    current_state%cached_bm_value = 0.0d0
 
     ! 'Warm-up' the generator by cycling through a few times
     DO i = 1, 1000
@@ -128,7 +130,13 @@ CONTAINS
       mu_val = 0.0D0
     END IF
 
-    IF (PRESENT(state)) cached = state%box_muller_cached
+    IF (PRESENT(state)) THEN
+      cached = state%box_muller_cached
+      cached_random_value = state%cached_bm_value
+    ELSE
+      cached = global_random%box_muller_cached
+      cached_random_value = global_random%cached_bm_value
+    END IF
 
     IF (cached) THEN
       cached = .FALSE.
@@ -154,7 +162,13 @@ CONTAINS
       cached_random_value = rand2 * w
     END IF
 
-    IF (PRESENT(state)) state%box_muller_cached = cached
+    IF (PRESENT(state)) THEN
+      state%box_muller_cached = cached
+      state%cached_bm_value = cached_random_value
+    ELSE
+      global_random%box_muller_cached = cached
+      global_random%cached_bm_value = cached_random_value
+    ENDIF
 
   END FUNCTION random_box_muller
 
@@ -170,8 +184,9 @@ CONTAINS
     state(4) = global_random%w
     IF (global_random%box_muller_cached) THEN
       state(5) = 1
+      state(6:7) = TRANSFER(global_random%cached_bm_value, state, 2)
     ELSE
-      state(5) = 0
+      state(5:7) = 0
     END IF
 
   END SUBROUTINE get_random_state
@@ -188,8 +203,11 @@ CONTAINS
     global_random%w = state(4)
     IF (state(5) == 1) THEN
       global_random%box_muller_cached = .TRUE.
+      global_random%cached_bm_value = TRANSFER(state(6:7), &
+          global_random%cached_bm_value)
     ELSE
       global_random%box_muller_cached = .FALSE.
+      global_random%cached_bm_value = 0.0d0
     END IF
 
   END SUBROUTINE set_random_state
