@@ -143,25 +143,25 @@ CONTAINS
     basetype = mpireal
 
     IF (direction == c_dir_x) THEN
-      IF (.NOT. x_min_boundary .OR. bc_field(c_bd_x_min) == c_bc_periodic) THEN
+      IF (.NOT. y_min_boundary .OR. bc_field(c_bd_y_min) == c_bc_periodic) THEN
         proc1_min = proc_y_min
       ELSE
         proc1_min = MPI_PROC_NULL
       END IF
 
-      IF (.NOT. x_min_boundary .OR. bc_field(c_bd_x_min) == c_bc_periodic) THEN
+      IF (.NOT. y_min_boundary .OR. bc_field(c_bd_y_min) == c_bc_periodic) THEN
         proc1_max = proc_y_max
       ELSE
         proc1_max = MPI_PROC_NULL
       END IF
     ELSE
-      IF (.NOT. y_min_boundary .OR. bc_field(c_bd_y_min) == c_bc_periodic) THEN
+      IF (.NOT. x_min_boundary .OR. bc_field(c_bd_x_min) == c_bc_periodic) THEN
         proc1_min = proc_x_min
       ELSE
         proc1_min = MPI_PROC_NULL
       END IF
-      IF (.NOT. y_max_boundary .OR. bc_field(c_bd_y_max) == c_bc_periodic) THEN
-        proc1_max = proc_y_min
+      IF (.NOT. x_max_boundary .OR. bc_field(c_bd_x_max) == c_bc_periodic) THEN
+        proc1_max = proc_x_min
       ELSE
         proc1_max = MPI_PROC_NULL
       END IF
