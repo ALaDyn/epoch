@@ -149,7 +149,7 @@ CONTAINS
         proc1_min = MPI_PROC_NULL
       END IF
 
-      IF (.NOT. y_min_boundary .OR. bc_field(c_bd_y_min) == c_bc_periodic) THEN
+      IF (.NOT. y_max_boundary .OR. bc_field(c_bd_y_max) == c_bc_periodic) THEN
         proc1_max = proc_y_max
       ELSE
         proc1_max = MPI_PROC_NULL
@@ -161,7 +161,7 @@ CONTAINS
         proc1_min = MPI_PROC_NULL
       END IF
       IF (.NOT. x_max_boundary .OR. bc_field(c_bd_x_max) == c_bc_periodic) THEN
-        proc1_max = proc_x_min
+        proc1_max = proc_x_max
       ELSE
         proc1_max = MPI_PROC_NULL
       END IF
