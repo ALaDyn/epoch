@@ -200,7 +200,7 @@ PROGRAM pic
       ! .FALSE. this time to use load balancing threshold
       IF (use_balance) CALL balance_workload(.FALSE.)
       CALL push_particles
-      IF (use_particle_lists .AND. MOD(step, collision_supercycle) .EQ. 0) THEN
+      IF (use_particle_lists) THEN
         ! After this line, the particles can be accessed on a cell by cell basis
         ! Using the particle_species%secondary_list property
         CALL reorder_particles_to_grid

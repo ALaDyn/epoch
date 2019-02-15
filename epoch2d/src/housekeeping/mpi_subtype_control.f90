@@ -194,13 +194,13 @@ CONTAINS
 
   SUBROUTINE create_accum_subtypes
 
-    INTEGER, DIMENSION(c_ndims + 1) :: n_local, n_global, starts
+    ! This subroutines creates the MPI types which represent the data for the
+    ! field data in accumulated form
+    INTEGER, DIMENSION(c_ndims+1) :: n_local, n_global, starts
     TYPE(subset), POINTER :: sub
     INTEGER, DIMENSION(2,c_ndims) :: ranges
     LOGICAL :: proc_outside_range
     INTEGER :: i, mpitype, n_times
-    ! This subroutines creates the MPI types which represent the data for the
-    ! field data in accumulated form
 
     n_times = io_block_list(1)%accumulate_counter%dump_step
 
@@ -208,8 +208,7 @@ CONTAINS
       sub => subset_list(i)
 
       ranges = cell_global_ranges(global_ranges(sub))
-      n_global = (/ ranges(2,1) - ranges(1,1), ranges(2,2) - ranges(1,2), &
-          n_times /)
+      n_global = [ranges(2,1) - ranges(1,1), ranges(2,2) - ranges(1,2), n_times]
       ranges = cell_local_ranges(global_ranges(sub))
 
       ! These calculations rely on the original domain size, so will be wrong
@@ -217,21 +216,21 @@ CONTAINS
       proc_outside_range = .FALSE.
       IF (ranges(2,1) - ranges(1,1) <= c_tiny) proc_outside_range = .TRUE.
       IF (ranges(2,2) - ranges(1,2) <= c_tiny) proc_outside_range = .TRUE.
-      IF (n_times < 1 ) proc_outside_range = .TRUE.
-      n_local =  (/ ranges(2,1) - ranges(1,1), ranges(2,2) - ranges(1,2), &
-          n_times /)
+      IF (n_times < 1) proc_outside_range = .TRUE.
+
+      n_local = [ranges(2,1) - ranges(1,1), ranges(2,2) - ranges(1,2), n_times]
       starts(1:c_ndims) = cell_starts(ranges, global_ranges(sub))
       starts(c_ndims+1) = 0
       ranges = cell_section_ranges(ranges)
 
-      IF ( .NOT. sub%skip ) THEN
+      IF (.NOT. sub%skip) THEN
         mpitype = MPI_DATATYPE_NULL
         IF (proc_outside_range) THEN
           CALL MPI_TYPE_CONTIGUOUS(0, mpireal, mpitype, errcode)
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims+1, n_global, n_local, &
               starts, MPI_ORDER_FORTRAN, mpireal, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%acc_subtype = mpitype
@@ -241,7 +240,7 @@ CONTAINS
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims+1, n_global, n_local, &
               starts, MPI_ORDER_FORTRAN, MPI_REAL4, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%acc_subtype_r4 = mpitype
@@ -253,7 +252,7 @@ CONTAINS
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims+1, n_local, n_local, &
               starts, MPI_ORDER_FORTRAN, mpireal, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%acc_subarray = mpitype
@@ -264,15 +263,14 @@ CONTAINS
         ELSE
           CALL MPI_TYPE_CREATE_SUBARRAY(c_ndims+1, n_local, n_local, &
               starts, MPI_ORDER_FORTRAN, MPI_REAL4, mpitype, errcode)
-        ENDIF
+        END IF
         CALL MPI_TYPE_COMMIT(mpitype, errcode)
 
         sub%acc_subarray_r4 = mpitype
-      ENDIF
-    ENDDO
+      END IF
+    END DO
 
   END SUBROUTINE create_accum_subtypes
-
 
 
 
@@ -299,18 +297,19 @@ CONTAINS
       CALL MPI_TYPE_FREE(sub%subarray, errcode)
       CALL MPI_TYPE_FREE(sub%subtype_r4, errcode)
       CALL MPI_TYPE_FREE(sub%subarray_r4, errcode)
-    ENDDO
-    IF ( any_accumulate ) THEN
+    END DO
+
+    IF (any_accumulate) THEN
       DO i = 1, n_subsets
         sub => subset_list(i)
-        IF ( .NOT. sub%skip ) THEN
+        IF (.NOT. sub%skip) THEN
           CALL MPI_TYPE_FREE(sub%acc_subtype, errcode)
           CALL MPI_TYPE_FREE(sub%acc_subarray, errcode)
           CALL MPI_TYPE_FREE(sub%acc_subtype_r4, errcode)
           CALL MPI_TYPE_FREE(sub%acc_subarray_r4, errcode)
-        ENDIF
-      ENDDO
-    ENDIF
+        END IF
+      END DO
+    END IF
 
   END SUBROUTINE free_subtypes
 
@@ -757,8 +756,8 @@ CONTAINS
     REAL(num) :: dir_min, dir_max, dir_d
     INTEGER :: idim
 
-    global_ranges(1,:) = -HUGE(num)
-    global_ranges(2,:) = HUGE(num)
+    global_ranges(1,:) = -HUGE(1.0_num)
+    global_ranges(2,:) = HUGE(1.0_num)
 
     DO idim = 1, c_ndims
       IF (idim == 1) THEN

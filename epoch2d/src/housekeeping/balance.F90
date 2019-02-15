@@ -723,50 +723,7 @@ CONTAINS
       END IF
     END DO
 
-    !Accumulated fields in io_block_list
-    counter => io_block_list(1)%accumulate_counter
-    DO id = 1, num_vars_to_dump
-      io = 1
-      IF (io_block_list(io)%accumulated_data(id)%dump_single) THEN
-        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%r4array)) CYCLE
-
-        ALLOCATE(r4temp_sum(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
-        !This is inefficient but gets something working faster
-        DO i = 1, counter%nsteps
-          CALL remap_field_r4(&
-              io_block_list(io)%accumulated_data(id)%r4array(:,:,i), &
-              r4temp_sum(:,:,i))
-        ENDDO
-
-        DEALLOCATE(io_block_list(io)%accumulated_data(id)%r4array)
-        ALLOCATE(io_block_list(io)%accumulated_data(id)&
-            %r4array(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
-
-        io_block_list(io)%accumulated_data(id)%r4array = r4temp_sum
-
-        DEALLOCATE(r4temp_sum)
-      ELSE
-        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%array)) CYCLE
-
-        ALLOCATE(temp_sum(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
-
-        DO i = 1, counter%nsteps
-          CALL remap_field(&
-              io_block_list(io)%accumulated_data(id)%array(:,:,i), &
-              temp_sum(:,:,i))
-        ENDDO
-
-        DEALLOCATE(io_block_list(io)%accumulated_data(id)%array)
-        ALLOCATE(io_block_list(io)%accumulated_data(id)&
-            %array(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
-
-        io_block_list(io)%accumulated_data(id)%array = temp_sum
-
-        DEALLOCATE(temp_sum)
-      ENDIF
-    ENDDO
-
-   ! Slice in X-direction
+    ! Slice in X-direction
 
     ALLOCATE(temp_slice(1-ng:ny_new+ng))
 
@@ -1117,6 +1074,52 @@ CONTAINS
     END DO
 
     IF (ALLOCATED(temp)) DEALLOCATE(temp)
+
+    ! Accumulated fields in io_block_list
+    counter => io_block_list(1)%accumulate_counter
+    DO id = 1, num_vars_to_dump
+      io = 1
+      IF (io_block_list(io)%accumulated_data(id)%dump_single) THEN
+        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%r4array)) &
+            CYCLE
+
+        ALLOCATE(r4temp_sum(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
+
+        ! This is inefficient but gets something working faster
+        DO i = 1, counter%nsteps
+          CALL remap_field_r4(&
+              io_block_list(io)%accumulated_data(id)%r4array(:,:,i), &
+              r4temp_sum(:,:,i))
+        END DO
+
+        DEALLOCATE(io_block_list(io)%accumulated_data(id)%r4array)
+        ALLOCATE(io_block_list(io)%accumulated_data(id)&
+            %r4array(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
+
+        io_block_list(io)%accumulated_data(id)%r4array = r4temp_sum
+
+        DEALLOCATE(r4temp_sum)
+      ELSE
+        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%array)) &
+            CYCLE
+
+        ALLOCATE(temp_sum(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
+
+        DO i = 1, counter%nsteps
+          CALL remap_field(&
+              io_block_list(io)%accumulated_data(id)%array(:,:,i), &
+              temp_sum(:,:,i))
+        END DO
+
+        DEALLOCATE(io_block_list(io)%accumulated_data(id)%array)
+        ALLOCATE(io_block_list(io)%accumulated_data(id)&
+            %array(1-ng:nx_new+ng, 1-ng:ny_new+ng, counter%nsteps))
+
+        io_block_list(io)%accumulated_data(id)%array = temp_sum
+
+        DEALLOCATE(temp_sum)
+      END IF
+    END DO
 
   END SUBROUTINE redistribute_fields
 

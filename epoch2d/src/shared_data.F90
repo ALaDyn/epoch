@@ -605,7 +605,7 @@ MODULE shared_data
     INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
     TYPE(averaged_data_block), DIMENSION(num_vars_to_dump) :: averaged_data
     TYPE(accumulator_type) :: accumulate_counter
-    TYPE(accumulated_data_block), DIMENSION(num_vars_to_dump) :: accumulated_data
+    TYPE(accumulated_data_block) :: accumulated_data(num_vars_to_dump)
   END TYPE io_block_type
 
   TYPE(io_block_type), POINTER :: io_block_list(:)
@@ -622,7 +622,7 @@ MODULE shared_data
   INTEGER(i8) :: sdf_buffer_size
   LOGICAL, ALLOCATABLE :: file_accum_reset(:)
 
- !----------------------------------------------------------------------------
+  !----------------------------------------------------------------------------
   ! Extended IO information
   !----------------------------------------------------------------------------
 

@@ -50,7 +50,7 @@ MODULE diagnostics
   INTEGER(i8), ALLOCATABLE :: ejected_offset(:)
   LOGICAL :: reset_ejected, done_species_offset_init, done_subset_init
   LOGICAL :: restart_flag, dump_source_code, dump_input_decks
-  LOGICAL :: dump_field_grid, dump_accum_grid, skipped_any_set
+  LOGICAL :: dump_field_grid, skipped_any_set
   LOGICAL :: got_request_dump_name = .FALSE.
   LOGICAL :: got_request_dump_restart = .FALSE.
   CHARACTER(LEN=string_length) :: request_dump_name = ''
@@ -329,17 +329,16 @@ CONTAINS
       ALLOCATE(dump_point_grid(1))
     END IF
 
-   DO iprefix = 1,SIZE(file_prefixes)
+    DO iprefix = 1,SIZE(file_prefixes)
       CALL io_test(iprefix, step, print_arrays, force, prefix_first_call)
 
       acc_counter => io_block_list(1)%accumulate_counter
       IF (acc_counter%reset .AND. file_accum_reset(iprefix)) THEN
-        !PRINT*, acc_counter%current_step, iprefix
         io_block_list(1)%accumulate_counter%dump_step = &
-          io_block_list(1)%accumulate_counter%current_step - 1
+            io_block_list(1)%accumulate_counter%current_step - 1
         acc_counter%reset = .FALSE.
         acc_counter%current_step = 1
-      ENDIF
+      END IF
 
       IF (.NOT.print_arrays) CYCLE
 
@@ -746,9 +745,9 @@ CONTAINS
       dumped_skip_dir = 0
       dumped = 1
       dumped_acc_sz = .FALSE.
+
       DO io = 1, n_subsets
         sub => subset_list(io)
-!        IF (sub%dump_acc_grid .AND. acc_counter%current_step > 1) THEN
         IF (sub%dump_acc_grid .AND. .NOT. dumped_acc_sz) THEN
           temp_block_id = 'grid_acc/' // TRIM(sub%name)
           temp_name = 'Grid_A/' // TRIM(sub%name)
@@ -769,9 +768,9 @@ CONTAINS
                 yb_offset_global(ranges(1,2):ranges(2,2)), &
                 acc_counter%time(1:acc_counter%dump_step), &
                 convert)
-          ENDIF
+          END IF
           sub%dump_acc_grid = .FALSE.
-        ENDIF
+        END IF
 
         IF (.NOT.sub%dump_field_grid) CYCLE
 
@@ -1141,6 +1140,7 @@ CONTAINS
     INTEGER :: id, io, is, nstep_next = 0, av_block
     REAL(num) :: t0, t1, time_first
     LOGICAL :: last_call, dump
+    TYPE(accumulator_type), POINTER :: ac
 
     IF (.NOT.ALLOCATED(iodumpmask)) &
         ALLOCATE(iodumpmask(n_subsets+1,num_vars_to_dump))
@@ -1249,8 +1249,8 @@ CONTAINS
           IF (io_block_list(io)%any_accumulate &
               .AND. file_accum_reset(iprefix)) THEN
             io_block_list(1)%accumulate_counter%reset = .TRUE.
-         ENDIF
-        ENDIF
+          END IF
+        END IF
       ELSE
         ! Next I/O dump based on nstep_snapshot
         time_first = t1
@@ -1276,9 +1276,9 @@ CONTAINS
           IF (io_block_list(io)%any_accumulate &
                .AND. file_accum_reset(iprefix)) THEN
             io_block_list(1)%accumulate_counter%reset = .TRUE.
-         ENDIF
-        ENDIF
-      ENDIF
+          END IF
+        END IF
+      END IF
 
       IF (got_request_dump_name) THEN
         IF (str_cmp(request_dump_name, io_block_list(io)%name)) THEN
@@ -1329,25 +1329,25 @@ CONTAINS
 
     DO io = 1, 1
       IF (.NOT. io_block_list(io)%any_accumulate) CYCLE
-      IF ( (io_block_list(io)%accumulate_counter%dt_acc > 0 .AND. &
-          time >= io_block_list(io)%accumulate_counter%last_accumulate_time + &
-          io_block_list(io)%accumulate_counter%dt_acc - dt/2.0_num) .OR. &
-          (io_block_list(io)%accumulate_counter%nstep_acc > 0 .AND. &
-          step >= io_block_list(io)%accumulate_counter%last_accumulate_step + &
-           io_block_list(io)%accumulate_counter%nstep_acc - 0.5_num)) THEN
+
+      ac => io_block_list(io)%accumulate_counter
+
+      IF ((ac%dt_acc > 0.0_num &
+          .AND. time >= ac%last_accumulate_time + ac%dt_acc - 0.5_num * dt) &
+          .OR. (ac%nstep_acc > 0.0_num &
+          .AND. step >= ac%last_accumulate_step + ac%nstep_acc - 0.5_num)) THEN
         DO id = 1, num_vars_to_dump
-!          IF (IAND(io_block_list(io)%dumpmask(id), c_io_accumulate) /= 0) THEN
           IF (io_block_list(io)%accumulated_data(id)%array_assoc) THEN
-            CALL accumulate_field(id, io_block_list(io)%accumulate_counter, &
+            CALL accumulate_field(id, ac, &
                 io_block_list(io)%accumulated_data(id))
-          ENDIF
-        ENDDO
-        io_block_list(io)%accumulate_counter%current_step = &
-            io_block_list(io)%accumulate_counter%current_step + 1
-        io_block_list(io)%accumulate_counter%last_accumulate_time = time
-        io_block_list(io)%accumulate_counter%last_accumulate_step = step
-     ENDIF
-    ENDDO
+          END IF
+        END DO
+
+        ac%current_step = ac%current_step + 1
+        ac%last_accumulate_time = time
+        ac%last_accumulate_step = step
+      END IF
+    END DO
 
     IF (MOD(file_numbers(1), restart_dump_every) == 0 &
         .AND. restart_dump_every > -1) restart_flag = .TRUE.
@@ -1635,57 +1635,62 @@ CONTAINS
     TYPE(accumulator_type) :: accum
     TYPE(accumulated_data_block) :: accum_block
 
-     IF ( .NOT. ASSOCIATED(accum_block%array)) RETURN
-     IF ( accum%current_step > accum%nsteps ) THEN
-       PRINT*, "WARNING: Accumulator overflow", accum%current_step, accum%nsteps
+     IF (.NOT. ASSOCIATED(accum_block%array)) RETURN
+
+     IF (accum%current_step > accum%nsteps) THEN
+       PRINT*, 'WARNING: Accumulator overflow', accum%current_step, &
+           accum%nsteps
        RETURN
-     ENDIF
+     END IF
+
      accum%time(accum%current_step) = time
-     IF(accum_block%dump_single) THEN
+
+     IF (accum_block%dump_single) THEN
        SELECT CASE(ioutput)
-        CASE(c_dump_ex)
-          accum_block%r4array(:,:,accum%current_step) = REAL(ex,r4)
-        CASE(c_dump_ey)
-          accum_block%r4array(:,:,accum%current_step) = REAL(ey,r4)
-        CASE(c_dump_ez)
-          accum_block%r4array(:,:,accum%current_step) = REAL(ez,r4)
-        CASE(c_dump_bx)
-          accum_block%r4array(:,:,accum%current_step) = REAL(bx,r4)
-        CASE(c_dump_by)
-          accum_block%r4array(:,:,accum%current_step) = REAL(by,r4)
-        CASE(c_dump_bz)
-          accum_block%r4array(:,:,accum%current_step) = REAL(bz,r4)
-        CASE(c_dump_jx)
-          accum_block%r4array(:,:,accum%current_step) = REAL(jx,r4)
-        CASE(c_dump_jy)
-          accum_block%r4array(:,:,accum%current_step) = REAL(jy,r4)
-        CASE(c_dump_jz)
-          accum_block%r4array(:,:,accum%current_step) = REAL(jz,r4)
-        END SELECT
+       CASE(c_dump_ex)
+         accum_block%r4array(:,:,accum%current_step) = REAL(ex,r4)
+       CASE(c_dump_ey)
+         accum_block%r4array(:,:,accum%current_step) = REAL(ey,r4)
+       CASE(c_dump_ez)
+         accum_block%r4array(:,:,accum%current_step) = REAL(ez,r4)
+       CASE(c_dump_bx)
+         accum_block%r4array(:,:,accum%current_step) = REAL(bx,r4)
+       CASE(c_dump_by)
+         accum_block%r4array(:,:,accum%current_step) = REAL(by,r4)
+       CASE(c_dump_bz)
+         accum_block%r4array(:,:,accum%current_step) = REAL(bz,r4)
+       CASE(c_dump_jx)
+         accum_block%r4array(:,:,accum%current_step) = REAL(jx,r4)
+       CASE(c_dump_jy)
+         accum_block%r4array(:,:,accum%current_step) = REAL(jy,r4)
+       CASE(c_dump_jz)
+         accum_block%r4array(:,:,accum%current_step) = REAL(jz,r4)
+       END SELECT
      ELSE
        SELECT CASE(ioutput)
-        CASE(c_dump_ex)
-          accum_block%array(:,:,accum%current_step) = ex
-        CASE(c_dump_ey)
-          accum_block%array(:,:,accum%current_step) = ey
-        CASE(c_dump_ez)
-          accum_block%array(:,:,accum%current_step) = ez
-        CASE(c_dump_bx)
-          accum_block%array(:,:,accum%current_step) = bx
-        CASE(c_dump_by)
-          accum_block%array(:,:,accum%current_step) = by
-        CASE(c_dump_bz)
-          accum_block%array(:,:,accum%current_step) = bz
-        CASE(c_dump_jx)
-          accum_block%array(:,:,accum%current_step) = jx
-        CASE(c_dump_jy)
-          accum_block%array(:,:,accum%current_step) = jy
-        CASE(c_dump_jz)
-          accum_block%array(:,:,accum%current_step) = jz
-        END SELECT
-     ENDIF
+       CASE(c_dump_ex)
+         accum_block%array(:,:,accum%current_step) = ex
+       CASE(c_dump_ey)
+         accum_block%array(:,:,accum%current_step) = ey
+       CASE(c_dump_ez)
+         accum_block%array(:,:,accum%current_step) = ez
+       CASE(c_dump_bx)
+         accum_block%array(:,:,accum%current_step) = bx
+       CASE(c_dump_by)
+         accum_block%array(:,:,accum%current_step) = by
+       CASE(c_dump_bz)
+         accum_block%array(:,:,accum%current_step) = bz
+       CASE(c_dump_jx)
+         accum_block%array(:,:,accum%current_step) = jx
+       CASE(c_dump_jy)
+         accum_block%array(:,:,accum%current_step) = jy
+       CASE(c_dump_jz)
+         accum_block%array(:,:,accum%current_step) = jz
+       END SELECT
+     END IF
 
   END SUBROUTINE accumulate_field
+
 
 
   SUBROUTINE write_field(id, code, block_id, name, units, stagger, array)
@@ -1909,22 +1914,22 @@ CONTAINS
       avg%started = .FALSE.
     END DO
 
-    !Do accumulated data
+    ! Do accumulated data
     dump_acc = .FALSE.
     DO ib = 1, n_io_blocks
       iob => io_block_list(ib)
       IF (iob%dump) dump_acc = .TRUE.
-    ENDDO
-    !All blocks use the data from block 1
+    END DO
+
+    ! All blocks use the data from block 1
     accum => io_block_list(1)%accumulated_data(id)
     acc_counter => io_block_list(1)%accumulate_counter
 
-    !Current_step is not yet filled
-    acc_dims(c_ndims+1) = MIN(acc_counter%dump_step, &
-        max_accumulate_steps)
+    ! Current_step is not yet filled
+    acc_dims(c_ndims+1) = MIN(acc_counter%dump_step, max_accumulate_steps)
 
-    IF ( .NOT. IAND(mask, c_io_accumulate) == 0 .AND. dump_acc &
-      .AND. acc_dims(c_ndims+1) > 0 ) THEN
+    IF (.NOT. IAND(mask, c_io_accumulate) == 0 &
+        .AND. dump_acc .AND. acc_dims(c_ndims+1) > 0) THEN
       DO io = 1, n_subsets
         IF (IAND(iodumpmask(io+1,id), code) == 0) CYCLE
         sub => subset_list(io)
@@ -1936,11 +1941,11 @@ CONTAINS
           IF (ranges(2,i) <= ranges(1,i)) THEN
             skip_this_set = .TRUE.
             skipped_any_set = .TRUE.
-          ENDIF
+          END IF
         ENDDO
-        IF (skip_this_set) THEN
-          CYCLE
-        ENDIF
+
+        IF (skip_this_set) CYCLE
+
         new_dims = (/ ranges(2,1) - ranges(1,1), ranges(2,2) - ranges(1,2) /)
         acc_dims(1:c_ndims) = new_dims
 
@@ -1960,14 +1965,13 @@ CONTAINS
         IF (i1 < i0) THEN
           i0 = 1
           i1 = i0
-        ENDIF
+        END IF
         IF (j1 < j0) THEN
           j0 = 1
           j1 = j0
-        ENDIF
+        END IF
 
         IF (accum%dump_single) THEN
-
           CALL sdf_write_plain_variable(sdf_handle, &
               temp_block_id, TRIM(temp_name), &
               TRIM(units), acc_dims, stagger, 'grid_accum', &
@@ -1979,13 +1983,10 @@ CONTAINS
               TRIM(units), acc_dims, stagger, 'grid_accum', &
               accum%array(i0:i1,j0:j1,:acc_dims(c_ndims+1)), &
               sub%acc_subtype, sub%acc_subarray)
-        ENDIF
+        END IF
         sub%dump_acc_grid = .TRUE.
-      ENDDO
-    ENDIF
-
-
-
+      END DO
+    END IF
 
   END SUBROUTINE write_field
 

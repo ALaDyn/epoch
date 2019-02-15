@@ -547,15 +547,14 @@ MODULE shared_data
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
-
   !----------------------------------------------------------------------------
   ! Accumulated IO
   !----------------------------------------------------------------------------
 
   TYPE accumulator_type
     INTEGER :: nsteps, current_step, dump_step
-    INTEGER :: nstep_acc = 0, last_accumulate_step
-    REAL(num) :: last_accumulate_time, dt_acc = 0.0
+    INTEGER :: nstep_acc, last_accumulate_step
+    REAL(num) :: last_accumulate_time, dt_acc
     REAL(num), DIMENSION(:), ALLOCATABLE :: time
     LOGICAL :: reset
   END TYPE accumulator_type
@@ -601,7 +600,7 @@ MODULE shared_data
     INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
     TYPE(averaged_data_block), DIMENSION(num_vars_to_dump) :: averaged_data
     TYPE(accumulator_type) :: accumulate_counter
-    TYPE(accumulated_data_block), DIMENSION(num_vars_to_dump) :: accumulated_data
+    TYPE(accumulated_data_block) :: accumulated_data(num_vars_to_dump)
   END TYPE io_block_type
 
   TYPE(io_block_type), POINTER :: io_block_list(:)
@@ -817,9 +816,6 @@ MODULE shared_data
 
   LOGICAL :: use_field_ionisation, use_collisional_ionisation
   LOGICAL :: use_multiphoton, use_bsi
-
-  REAL(num) :: collision_super_multiplier = 1.0
-  INTEGER :: collision_supercycle = 1
 
   INTEGER :: maxwell_solver = c_maxwell_solver_yee
   REAL(num) :: dt_custom

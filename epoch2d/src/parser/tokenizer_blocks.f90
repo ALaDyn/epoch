@@ -189,7 +189,6 @@ CONTAINS
     IF (str_cmp(name, 'accumulate_single')) &
         as_constant = c_const_io_accumulate_single
 
-
     ! Distribution function constants
     IF (str_cmp(name, 'dir_x')) as_constant = c_const_dir_x
     IF (str_cmp(name, 'dir_y')) as_constant = c_const_dir_y

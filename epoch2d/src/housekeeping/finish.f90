@@ -88,11 +88,13 @@ CONTAINS
       IF (ASSOCIATED(io_block_list(i)%dump_at_nsteps)) &
           DEALLOCATE(io_block_list(i)%dump_at_nsteps, STAT=stat)
     END DO
+
     DEALLOCATE(io_block_list, STAT=stat)
     DEALLOCATE(io_list_data, STAT=stat)
     DEALLOCATE(file_prefixes, STAT=stat)
     DEALLOCATE(file_numbers, STAT=stat)
     DEALLOCATE(file_accum_reset, STAT=stat)
+
     DO i = 1, n_subsets
       DEALLOCATE(subset_list(i)%dumpmask, STAT=stat)
       DEALLOCATE(subset_list(i)%use_species, STAT=stat)
@@ -101,6 +103,7 @@ CONTAINS
         DEALLOCATE(current_hash)
       END IF
     END DO
+
     DEALLOCATE(subset_list, STAT=stat)
     CALL id_registry%reset
 

@@ -334,9 +334,9 @@ CONTAINS
 
 
 
-  SUBROUTINE setup_data_accumulate()
+  SUBROUTINE setup_data_accumulate
 
-    INTEGER :: io, n_steps, mask, nstep_acc
+    INTEGER :: io, n_steps, nstep_acc
     INTEGER :: iu
     INTEGER, DIMENSION(num_vars_to_dump) :: combined_mask
     REAL(num) :: dt_accum, dt_snap
@@ -352,9 +352,10 @@ CONTAINS
     DO io = 1, num_vars_to_dump
       accum => io_block_list(1)%accumulated_data(io)
       NULLIFY(accum%r4array, accum%array)
-    ENDDO
+    END DO
 
     IF (.NOT. any_accumulate) RETURN
+
     dt_accum = -1
     n_steps = 0
     nstep_acc = -1
@@ -362,17 +363,19 @@ CONTAINS
     combined_mask = 0
     DO io = 1, n_io_blocks
       combined_mask = IOR(combined_mask, io_block_list(io)%dumpmask)
-      !Take first block's values
+      ! Take first block's values
       IF (n_steps > 0) CYCLE
-      IF(io_block_list(io)%any_accumulate) THEN
+
+      IF (io_block_list(io)%any_accumulate) THEN
         file_accum_reset(io_block_list(io)%prefix_index) = .TRUE.
-        !PRINT*, io_block_list(io)%prefix_index, file_prefixes(io_block_list(io)%prefix_index)
+
         IF (io_block_list(io)%dt_snapshot > 0 ) THEN
           dt_snap = io_block_list(io)%dt_snapshot
         ELSE IF (io_block_list(io)%nstep_snapshot > 0) THEN
          !This should be accurate enough for the sizes, and we add one
          dt_snap = io_block_list(io)%nstep_snapshot * dt
-        ENDIF
+        END IF
+
         IF (io_block_list(io)%accumulate_counter%dt_acc > 0) THEN
           n_steps = CEILING(dt_snap &
               / io_block_list(io)%accumulate_counter%dt_acc) + 1
@@ -383,9 +386,9 @@ CONTAINS
           n_steps = CEILING(dt_snap / dt_accum) + 1
           nstep_acc = io_block_list(io)%accumulate_counter%nstep_acc
           dt_accum = -1
-        ENDIF
-      ENDIF
-    ENDDO
+        END IF
+      END IF
+    END DO
 
     IF (dt_snap < 0) THEN
       io_block_list(1)%any_accumulate = .FALSE.
@@ -394,12 +397,13 @@ CONTAINS
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
           WRITE(io,*) '*** WARNING ***'
-          WRITE(io,*) 'No snapshot interval specified. &
-              & To use accumulation please set either dt_snapshot or&
-              & nstep_snapshot for accumulated blocks'
-        ENDDO
-      ENDIF
-    ENDIF
+          WRITE(io,*) 'No snapshot interval specified.', &
+              'To use accumulation please set either dt_snapshot or ', &
+              'nstep_snapshot for accumulated blocks'
+        END DO
+      END IF
+    END IF
+
     IF (dt_accum < 0.0_num .AND. nstep_acc == -1) RETURN
 
     io_block_list(1)%any_accumulate = .TRUE.
@@ -408,23 +412,22 @@ CONTAINS
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
           WRITE(io,*) '*** WARNING ***'
-          WRITE(io,'(A,I3,A, E10.3)') 'Attempting to accumulate &
-              & more than ', max_accumulate_steps, &
-              ' times. Some data will not be written'
+          WRITE(io,'(A,I3,A, E10.3)') 'Attempting to accumulate ', &
+              'more than ', max_accumulate_steps, &
+              'times. Some data will not be written'
           WRITE(io,*) 'To accumulate further adjust max_accumulate_steps'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       n_steps = max_accumulate_steps
-    ENDIF
+    END IF
 
     counter%dt_acc = dt_accum
     counter%nstep_acc = nstep_acc
     counter%nsteps = n_steps
-    IF( .NOT. ALLOCATED(counter%time)) ALLOCATE(counter%time(n_steps))
+    IF (.NOT. ALLOCATED(counter%time)) ALLOCATE(counter%time(n_steps))
+
     DO io = 1, num_vars_to_dump
-      !mask = io_block_list(1)%dumpmask(io)
-      !Currently only accumulate core fields, so no per species option
-!      IF (IAND(mask, c_io_no_sum) /= 0) CYCLE
+      ! Currently only accumulate core fields, so no per species option
       io_block_list(1)%accumulated_data(io)%array_assoc = .FALSE.
       IF (IAND(combined_mask(io), c_io_accumulate) == 0) CYCLE
       accum => io_block_list(1)%accumulated_data(io)
@@ -436,8 +439,8 @@ CONTAINS
         ALLOCATE(accum%array(-ng+1:nx+ng, -ng+1:ny+ng, n_steps))
         accum%array = 0.0_num
         accum%array_assoc = .TRUE.
-      ENDIF
-   ENDDO
+      END IF
+    END DO
 
   END SUBROUTINE setup_data_accumulate
 

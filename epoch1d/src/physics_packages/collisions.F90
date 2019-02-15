@@ -1502,8 +1502,6 @@ CONTAINS
     coll_sort_array_size = 1
     ALLOCATE(coll_sort_array(coll_sort_array_size))
 
-    collision_super_multiplier = REAL(collision_supercycle)
-
   END SUBROUTINE setup_collisions
 
 

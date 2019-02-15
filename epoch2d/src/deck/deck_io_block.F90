@@ -118,24 +118,26 @@ CONTAINS
             END IF
             io_block_list(i)%dt_average = t_end
           ENDIF
-          IF (io_block_list(i)%any_accumulate .AND. &
-              io_block_list(i)%dt_snapshot &
-              / io_block_list(i)%accumulate_counter%dt_acc &
-              >= max_accumulate_steps) THEN
-            io_block_list(i)%accumulate_counter%dt_acc = &
-                io_block_list(i)%dt_snapshot / max_accumulate_steps
-            IF (rank == 0) THEN
-              DO iu = 1, nio_units ! Print to stdout and to file
-                io = io_units(iu)
-                WRITE(io,*) '*** WARNING ***'
-                WRITE(io,*) 'Attempting to accumulate more than', &
-                    max_accumulate_steps, &
-                    'times. Using dt_accumulate of', &
-                    io_block_list(i)%accumulate_counter%dt_acc
- !               WRITE(io,*) 'To use more rows TBA!!'
-              ENDDO
-            ENDIF
-          ENDIF
+
+          IF (io_block_list(i)%any_accumulate &
+              .AND. io_block_list(i)%accumulate_counter%dt_acc > 0) THEN
+            IF (io_block_list(i)%dt_snapshot &
+                / io_block_list(i)%accumulate_counter%dt_acc &
+                >= max_accumulate_steps) THEN
+              io_block_list(i)%accumulate_counter%dt_acc = &
+                  io_block_list(i)%dt_snapshot / max_accumulate_steps
+              IF (rank == 0) THEN
+                DO iu = 1, nio_units ! Print to stdout and to file
+                  io = io_units(iu)
+                  WRITE(io,*) '*** WARNING ***'
+                  WRITE(io,*) 'Attempting to accumulate more than', &
+                      max_accumulate_steps, &
+                      'times. Using dt_accumulate of', &
+                      io_block_list(i)%accumulate_counter%dt_acc
+                END DO
+              END IF
+            END IF
+          END IF
 
           IF (io_block_list(i)%dump_cycle_first_index &
                 > io_block_list(i)%dump_cycle) THEN
@@ -201,7 +203,7 @@ CONTAINS
           file_prefixes(i) = TRIM(io_prefixes(i))
           file_numbers(i) = 0
           file_accum_reset(i) = .FALSE.
-        ENDDO
+        END DO
         DEALLOCATE(io_prefixes)
 
 #ifndef NO_IO
@@ -762,9 +764,10 @@ CONTAINS
               // '" should be moved to ', 'an "output_global" block.'
           WRITE(io,*) 'Its value will be applied to all output blocks.'
           WRITE(io,*)
-        ENDDO
-      ENDIF
-    ENDIF
+        END DO
+      END IF
+    END IF
+
     IF (acc_dt .AND. acc_nstep .AND. .NOT. done_warning) THEN
       done_warning = .TRUE.
       IF (rank == 0) THEN
@@ -772,9 +775,9 @@ CONTAINS
           io = io_units(iu)
           WRITE(io,*)
           WRITE(io,*) '*** WARNING ***', iu
-          WRITE(io,*) 'Setting both dt_accumulate and' &
-              // ' nstep_accumulate may give unpredictable behaviour.' &
-              // 'Using nstep_accumulate value!'
+          WRITE(io,*) 'Setting both dt_accumulate and ', &
+              'nstep_accumulate may give unpredictable behaviour.', &
+              'Using nstep_accumulate value!'
         ENDDO
       ENDIF
       io_block%accumulate_counter%dt_acc = -1
@@ -887,17 +890,17 @@ CONTAINS
               WRITE(io,*) 'Attempting to set accumulate property for "' &
                   // TRIM(element) // '" which'
               WRITE(io,*) 'does not support this property. Ignoring.'
-            ENDDO
-          ENDIF
+            END DO
+          END IF
           mask = IAND(mask, NOT(c_io_accumulate))
         ELSE
           any_accumulate = .TRUE.
           io_block%any_accumulate = .TRUE.
           IF (IAND(mask, c_io_accumulate_single) /= 0 .AND. num /= r4) THEN
             io_block%accumulated_data(mask_element)%dump_single = .TRUE.
-          ENDIF
-        ENDIF
-      ENDIF
+          END IF
+        END IF
+      END IF
 
       IF (IAND(mask, c_io_averaged) /= 0) THEN
         bad = .TRUE.
@@ -1068,7 +1071,7 @@ CONTAINS
     DO i = 1, num_vars_to_dump
       io_block%averaged_data(i)%dump_single = .FALSE.
       io_block%accumulated_data(i)%dump_single = .FALSE.
-    ENDDO
+    END DO
 
   END SUBROUTINE init_io_block
 
