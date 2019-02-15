@@ -49,10 +49,11 @@ PROGRAM pic
   USE particle_migration
   USE ionise
   USE calc_df
+  USE injectors
+  USE current_smooth
 #ifdef PHOTONS
   USE photons
 #endif
-  USE injectors
 
   IMPLICIT NONE
 
@@ -117,6 +118,7 @@ PROGRAM pic
     CALL restart_data(step)
   ELSE
     ! auto_load particles
+    CALL pre_load_balance
     CALL auto_load
     time = 0.0_num
   END IF
@@ -157,8 +159,13 @@ PROGRAM pic
 
   ! Setup particle migration between species
   IF (use_particle_migration) CALL initialise_migration
+  CALL build_persistent_subsets
 
-  IF (rank == 0) PRINT *, 'Equilibrium set up OK, running code'
+  IF (rank == 0) THEN
+    PRINT*
+    PRINT*, 'Equilibrium set up OK, running code'
+    PRINT*
+  END IF
 #ifdef PHOTONS
   IF (use_qed) CALL setup_qed_module()
 #endif
@@ -213,6 +220,7 @@ PROGRAM pic
       END IF
       IF (use_particle_migration) CALL migrate_particles(step)
       IF (use_field_ionisation) CALL ionise_particles
+      CALL current_finish
       CALL update_particle_count
     END IF
 

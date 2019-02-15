@@ -18,13 +18,17 @@ MODULE random_generator
   IMPLICIT NONE
   PRIVATE
   PUBLIC :: random, random_init, get_random_state, set_random_state
-  PUBLIC :: random_box_muller, random_state_type
+  PUBLIC :: random_box_muller, random_state_type, random_flush_cache
+
+  INTEGER, PARAMETER :: init_x = 123456789
+  INTEGER, PARAMETER :: init_y = 362436069
+  INTEGER, PARAMETER :: init_z = 521288629
+  INTEGER, PARAMETER :: init_w = 916191069
 
   TYPE :: random_state_type
-    INTEGER :: x = 123456789
-    INTEGER :: y = 362436069
-    INTEGER :: z = 521288629
-    INTEGER :: w = 916191069
+    INTEGER :: x, y, z, w
+    LOGICAL :: box_muller_cached
+    DOUBLE PRECISION :: cached_random_value
   END TYPE random_state_type
 
   TYPE(random_state_type), TARGET, SAVE :: global_random
@@ -89,10 +93,12 @@ CONTAINS
       current_state => global_random
     END IF
 
-    current_state%x = current_state%x + seed
-    current_state%y = current_state%y + seed
-    current_state%z = current_state%z + seed
-    current_state%w = current_state%w + seed
+    current_state%x = init_x + seed
+    current_state%y = init_y + seed
+    current_state%z = init_z + seed
+    current_state%w = init_w + seed
+    current_state%box_muller_cached = .FALSE.
+    current_state%cached_random_value = 0.0d0
 
     ! 'Warm-up' the generator by cycling through a few times
     DO i = 1, 1000
@@ -124,6 +130,14 @@ CONTAINS
       mu_val = 0.0D0
     END IF
 
+    IF (PRESENT(state)) THEN
+      cached = state%box_muller_cached
+      cached_random_value = state%cached_random_value
+    ELSE
+      cached = global_random%box_muller_cached
+      cached_random_value = global_random%cached_random_value
+    END IF
+
     IF (cached) THEN
       cached = .FALSE.
       random_box_muller = cached_random_value * stdev + mu_val
@@ -147,6 +161,14 @@ CONTAINS
       random_box_muller = rand1 * w * stdev + mu_val
       cached_random_value = rand2 * w
     END IF
+
+    IF (PRESENT(state)) THEN
+      state%box_muller_cached = cached
+      state%cached_random_value = cached_random_value
+    ELSE
+      global_random%box_muller_cached = cached
+      global_random%cached_random_value = cached_random_value
+    ENDIF
 
   END FUNCTION random_box_muller
 
@@ -175,5 +197,21 @@ CONTAINS
     global_random%w = state(4)
 
   END SUBROUTINE set_random_state
+
+
+
+  SUBROUTINE random_flush_cache(state)
+
+    TYPE(random_state_type), INTENT(INOUT), OPTIONAL :: state
+
+    IF (PRESENT(state)) THEN
+      state%box_muller_cached = .FALSE.
+      state%cached_random_value = 0.0d0
+    ELSE
+      global_random%box_muller_cached = .FALSE.
+      global_random%cached_random_value = 0.0d0
+    END IF
+
+  END SUBROUTINE random_flush_cache
 
 END MODULE random_generator

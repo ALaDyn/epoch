@@ -380,9 +380,7 @@ CONTAINS
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
-          WRITE(io,*) 'Initial conditions complete and valid. Attempting' &
-            // ' to load particles'
-          WRITE(io,*)
+          WRITE(io,*) 'Initial conditions complete and valid.'
         END DO
       END IF
     END IF
@@ -790,8 +788,10 @@ CONTAINS
     END IF
 
 #ifndef NO_IO
-    CLOSE(du)
-    CLOSE(duc)
+    IF (first_call .AND. rank == 0) THEN
+      CLOSE(du)
+      CLOSE(duc)
+    ENDIF
 #endif
 
     IF (terminate) CALL abort_code(c_err_generic_error)
