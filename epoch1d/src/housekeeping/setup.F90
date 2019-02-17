@@ -202,6 +202,7 @@ CONTAINS
     INTEGER :: i
 
     CALL setup_data_averaging
+    CALL setup_data_accumulate
     CALL setup_split_particles
     CALL setup_field_boundaries
 
@@ -311,6 +312,8 @@ CONTAINS
 
     DO io = 1, num_vars_to_dump
       accum => io_block_list(1)%accumulated_data(io)
+      accum%dump_single = .FALSE.
+      accum%array_assoc = .FALSE.
       NULLIFY(accum%r4array, accum%array)
     END DO
 
