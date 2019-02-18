@@ -69,7 +69,7 @@ endif
 # gfortran
 # ========
 ifeq ($(strip $(COMPILER)),gfortran)
-  FFLAGS = -O3 -g
+  FFLAGS = -O3 -g -pg
 
   GNUVER := $(shell gfortran -dumpversion | head -1 \
       | sed 's/[^0-9\.]*\([0-9\.]\+\).*/\1/')
@@ -207,7 +207,7 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)PARTICLE_ID4
 
 # Include QED routines
-DEFINES += $(D)PHOTONS
+#DEFINES += $(D)PHOTONS
 
 # Include bremsstrahlung routines
 DEFINES += $(D)BREMSSTRAHLUNG

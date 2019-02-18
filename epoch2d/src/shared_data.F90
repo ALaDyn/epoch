@@ -1092,8 +1092,7 @@ MODULE shared_data
   ! Table declarations
   TYPE brem_tables
     REAL(num), ALLOCATABLE :: cdf_table(:,:), k_table(:,:)
-    REAL(num), ALLOCATABLE :: cross_section(:), loss_integral(:)
-    REAL(num), ALLOCATABLE :: E_table(:)
+    REAL(num), ALLOCATABLE :: cross_section(:), E_table(:)
     INTEGER :: size_k, size_T
   END TYPE brem_tables
   TYPE(brem_tables), ALLOCATABLE :: brem_array(:)
