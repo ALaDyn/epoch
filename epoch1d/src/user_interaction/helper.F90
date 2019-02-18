@@ -41,7 +41,7 @@ CONTAINS
     IF (species%bc_particle(c_bd_x_min) == c_bc_thermal &
         .OR. species%bc_particle(c_bd_x_min) == c_bc_return) THEN
       species%ext_temp_x_min(:) = species_temp(1,:)
-      species%ext_drift_x_min = species_drift(1,1)
+      IF (.NOT. ic_from_restart) species%ext_drift_x_min = species_drift(1,1)
       species%ext_dens_x_min = species_density(1)
       species%ext_plasma_freq_min = SQRT(species%ext_dens_x_min * &
           q0*q0 / epsilon0 / m0 )
@@ -49,7 +49,7 @@ CONTAINS
     IF (species%bc_particle(c_bd_x_max) == c_bc_thermal &
          .OR. species%bc_particle(c_bd_x_max) == c_bc_return) THEN
       species%ext_temp_x_max(:) = species_temp(nx,:)
-      species%ext_drift_x_max = species_drift(nx,1)
+      IF (.NOT. ic_from_restart) species%ext_drift_x_max = species_drift(nx,1)
       species%ext_dens_x_max = species_density(nx)
       species%ext_plasma_freq_max = SQRT(species%ext_dens_x_max * &
           q0*q0 / epsilon0 / m0 )

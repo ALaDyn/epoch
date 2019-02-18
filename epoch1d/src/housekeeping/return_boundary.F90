@@ -40,6 +40,7 @@ CONTAINS
     DO i = 1, c_ndims*2
       IF (bcs(i) /= c_bc_return) CYCLE
       use_injectors = .TRUE.
+      need_random_state = .TRUE.
       ALLOCATE(working_injector)
       CALL init_injector(i,  working_injector)
       working_injector%species = ispecies
@@ -84,7 +85,6 @@ CONTAINS
         working_injector => species_list(i)%injector_x_max
         working_injector%npart_per_cell = &
             FLOOR(species_list(i)%npart_per_cell)
-
         CALL update_return_injector(working_injector)
       END IF
     END DO

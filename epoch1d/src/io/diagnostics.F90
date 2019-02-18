@@ -407,7 +407,10 @@ CONTAINS
             'laser_x_min_phase')
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
             'laser_x_max_phase')
-        CALL write_return_injectors(sdf_handle)
+        CALL write_return_injectors(sdf_handle, 'return_injector_x_min', &
+             c_bd_x_min, x_min_boundary)
+        CALL write_return_injectors(sdf_handle, 'return_injector_x_max', &
+             c_bd_x_max, x_max_boundary)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
@@ -914,13 +917,19 @@ CONTAINS
 
 
 
-  SUBROUTINE write_return_injectors(sdf_handle)
+
+  SUBROUTINE write_return_injectors(sdf_handle, block_name, boundary, &
+      runs_this_rank)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
+    CHARACTER(LEN=*), INTENT(IN) :: block_name
+    INTEGER, INTENT(IN) :: boundary
+    LOGICAL, INTENT(IN) :: runs_this_rank
+
     REAL(num), DIMENSION(:), ALLOCATABLE :: values
 
     TYPE(particle_species), POINTER :: curr_species
-    INTEGER :: i, ispecies, return_species
+    INTEGER :: i, ispecies, return_species, ierr
 
     return_species = -1
     DO ispecies = 1, n_species
@@ -932,17 +941,29 @@ CONTAINS
     END DO
 
     IF (return_species /= -1) THEN
-      ALLOCATE(values(6))
+      ALLOCATE(values(3))
       curr_species => species_list(return_species)
-      values(1) = curr_species%net_px_min
-      values(2) = curr_species%net_px_max
-      values(3) = curr_species%ext_drift_x_min
-      values(4) = curr_species%ext_drift_x_max
-      values(5) = curr_species%ext_dens_x_min
-      values(6) = curr_species%ext_dens_x_max
-
-     CALL sdf_write_srl(sdf_handle, 'return_injector', 'return_injector', &
-          6, values, 0)
+      IF (boundary == c_bd_x_min) THEN
+        values(1) = curr_species%net_px_min
+        values(2) = curr_species%ext_drift_x_min
+        values(3) = curr_species%ext_dens_x_min
+      ELSE IF(boundary == c_bd_x_max) THEN
+        values(1) = curr_species%net_px_max
+        values(2) = curr_species%ext_drift_x_max
+        values(3) = curr_species%ext_dens_x_max
+      ENDIF
+  PRINT*, rank, values
+      IF (.NOT. runs_this_rank) values = HUGE(0.0_num)
+      IF (rank == 0) THEN
+        CALL MPI_Reduce(MPI_IN_PLACE, values, 3, mpireal, MPI_MIN, &
+          0, MPI_COMM_WORLD, ierr)
+      ELSE
+        CALL MPI_Reduce(values, values, 3, mpireal, MPI_MIN, &
+          0, MPI_COMM_WORLD, ierr)
+      END IF
+  PRINT*, rank, values
+      CALL sdf_write_srl(sdf_handle, TRIM(block_name), TRIM(block_name), &
+          3, values, 0)
       DEALLOCATE(values)
     END IF
 

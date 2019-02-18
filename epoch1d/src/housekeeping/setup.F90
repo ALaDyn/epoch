@@ -1018,7 +1018,10 @@ CONTAINS
             block_id, ndims, 'laser_x_min_phase', 'x_min')
         CALL read_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
             block_id, ndims, 'laser_x_max_phase', 'x_max')
-        CALL read_return_injectors(sdf_handle, block_id, ndims)
+        CALL read_return_injectors(sdf_handle, block_id, ndims, &
+            c_bd_x_min, 'x_min')
+        CALL read_return_injectors(sdf_handle, block_id, ndims, &
+            c_bd_x_max, 'x_max')
 
       CASE(c_blocktype_constant)
         IF (str_cmp(block_id, 'dt_plasma_frequency')) THEN
@@ -1690,22 +1693,26 @@ CONTAINS
 #endif
 
 
-  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims)
+  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims, &
+      boundary, direction_name)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
-    CHARACTER(LEN=*), INTENT(IN) :: block_id_in
-    INTEGER, INTENT(IN) :: ndims
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_in, direction_name
+    INTEGER, INTENT(IN) :: ndims, boundary
     TYPE(particle_species), POINTER :: curr_species
     INTEGER :: i, ispecies, return_species
     REAL(KIND=num), DIMENSION(:), ALLOCATABLE :: values
     INTEGER, DIMENSION(4) :: dims
 
-    IF (str_cmp(block_id_in, 'return_injector')) THEN
+    IF (str_cmp(block_id_in(1:LEN('return_injector')), &
+        'return_injector') .AND. str_cmp(TRIM(block_id_in( &
+        LEN('return_injector')+2:LEN(block_id_in))), TRIM(direction_name))) &
+        THEN
       CALL sdf_read_array_info(sdf_handle, dims)
 
       !3 sets of 2 values in 1-D
       !In 2-d there are 3 sets of 2 strips etc
-      IF (ndims /= 1 .OR. dims(1) /= 6) THEN
+      IF (ndims /= 1 .OR. dims(1) /= 3) THEN
         PRINT*, '*** WARNING ***'
         PRINT*, 'Number of values does not match number required.'
         PRINT*, 'Return boundaries may not operate correctly'
@@ -1728,12 +1735,15 @@ CONTAINS
 
       !Actually only the first two NEED storing
       !But is not fun to extract the others from deck
-      curr_species%net_px_min = values(1)
-      curr_species%net_px_max = values(2)
-      curr_species%ext_drift_x_min = values(3)
-      curr_species%ext_drift_x_max = values(4)
-      curr_species%ext_dens_x_min = values(5)
-      curr_species%ext_dens_x_max = values(6)
+      IF (boundary == c_bd_x_min) THEN
+        curr_species%net_px_min = values(1)
+        curr_species%ext_drift_x_min = values(2)
+        curr_species%ext_dens_x_min = values(3)
+      ELSE IF(boundary == c_bd_x_max) THEN
+        curr_species%net_px_max = values(1)
+        curr_species%ext_drift_x_max = values(2)
+        curr_species%ext_dens_x_max = values(3)
+      ENDIF
 
       DEALLOCATE(values)
     END IF
