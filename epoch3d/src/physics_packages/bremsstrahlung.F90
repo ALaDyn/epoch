@@ -142,7 +142,7 @@ CONTAINS
 
 
   ! Subroutine to generate tables of bremsstrahlung cross sections as a function
-  ! of incident electron kinetic energy, T. Also computes a table of cumlative
+  ! of incident electron energy, T. Also computes a table of cumlative
   ! probabilities for each photon energy, k, and each value of T. All tables are
   ! stored in an array (brem_array) as the variable type brem_tables. Each
   ! element of brem_array correpsonds to a different target atomic number.
@@ -152,12 +152,8 @@ CONTAINS
     INTEGER :: i_species, iZ, jZ
     INTEGER, ALLOCATABLE :: Z_flags(:)
     CHARACTER(LEN=3) :: Z_string
-    INTEGER :: n_line, size_k_file, size_k, size_T
-    REAL(num), ALLOCATABLE :: k_read(:), T_read(:), sdcs_read(:,:)
-    REAL(num), ALLOCATABLE :: temp_array(:), dcs(:)
-    REAL(num) :: gradient, beta2, k_cut, sdcs_cut, lower_k
-    REAL(num) :: max_loss_integral
-    INTEGER :: i, j, j_cut
+    INTEGER :: size_k, size_T
+    INTEGER :: i, j
     INTEGER :: buf_index, buf_size
     INTEGER, ALLOCATABLE :: int_buf(:)
     REAL(num), ALLOCATABLE :: real_buf(:)
@@ -168,7 +164,7 @@ CONTAINS
       ! For each unique atomic number, Z, let Z_flags(Z) = 1
       ALLOCATE(Z_flags(100))
       Z_flags(:) = 0
-      DO i_species=1,n_species
+      DO i_species = 1, n_species
         Z_temp = species_list(i_species)%atomic_no
         IF (Z_temp > 0 .AND. Z_temp < 101) THEN
           Z_flags(Z_temp) = 1;
@@ -207,130 +203,55 @@ CONTAINS
       DO iZ = 1,size_brem_array
         Z_temp = Z_values(iZ)
 
-        ! Open table corresponding to screening choice
-        IF (use_atomic_screening) THEN
-          IF (Z_temp < 10) THEN
-            WRITE(Z_string, '(I1)') Z_temp
-          ELSE IF (Z_temp < 100) THEN
-            WRITE(Z_string, '(I2)') Z_temp
-          ELSE
-            WRITE(Z_string, '(I3)') Z_temp
-          END IF
-          OPEN(unit = lu, file = TRIM(bremsstrahlung_table_location) // '/br' &
-              // Z_string, status = 'OLD')
+        ! Open table for given Z value
+        IF (Z_temp < 10) THEN
+          WRITE(Z_string, '(I1)') Z_temp
+        ELSE IF (Z_temp < 100) THEN
+          WRITE(Z_string, '(I2)') Z_temp
+        ELSE IF (Z_temp == 100) THEN
+          WRITE(Z_string, '(I3)') Z_temp
         ELSE
-          OPEN(unit = lu, file = TRIM(bremsstrahlung_table_location)// &
-              '/brNoScreen', status = 'OLD')
+          CYCLE
         END IF
+        OPEN(unit = lu, file = TRIM(bremsstrahlung_table_location) // '/br' &
+            // Z_string, status = 'OLD')
+
 
         ! Extract data from the table file
-        ! File format: n_line (number of ln(T) values) (number of k/T values)
-        !              Line of k/T values (photon energy/electron KE)
-        !              Line of ln(T) values (T is e- kinetic energy in MeV)
-        !              Table of scaled differential cross sections (1e-31 m²)
-        ! In the table, rows correspond to constant electron kinetic energy,
-        ! columns to constant photon fractional energy, and the scaling is
-        ! (beta²)/Z² * k * do/dk, where beta is the electron velocity
-        ! normalised to c, and o is the cross section in mb
-        READ(lu,*) n_line, size_k_file, size_T
-        ! Include a k_cut, such that only the fraction 1e-9 of the total
-        ! radiation is neglected (same way photons.F90 works).
-        ! Include 100 extra values for padding between the first two k/T points
-        ! which are 1e-12 and 0.025 (linear interpolation is not appropriate
-        ! here, cross section is predominantly distributed near 1e-12).
-        size_k = size_k_file + 1 + 100
-        ALLOCATE(T_read(size_T))
-        ALLOCATE(k_read(size_k))
-        ALLOCATE(sdcs_read(size_T,size_k))
-        READ(lu,*) k_read(1:size_k_file)
-        READ(lu,*) T_read
-
-        ! Add k padding, spaced logarithmically between first two points (check
-        ! first k > 0 to ensure logarithms run)
-        k_read(2+100:size_k-1) = k_read(2:size_k_file)
-        IF (k_read(1) <= 1.0e-15_num) THEN
-          lower_k = 1.0e-10_num*k_read(102)
-        ELSE
-          lower_k = k_read(1)
-        END IF
-        DO i = 1, 100
-          k_read(i+1) = EXP((REAL(i, num)/101.0_num) &
-              * ABS(LOG(lower_k)-LOG(k_read(102))) + LOG(lower_k))
-        END DO
-
-        ! Read scaled differential cross sections (sdcs)
-        DO i = 1, size_T
-            READ(lu,*) sdcs_read(i,1:size_k_file)
-            ! Interpolate for padded k values
-            sdcs_read(i,2+100:size_k-1) = sdcs_read(i,2:size_k_file)
-            gradient = (sdcs_read(i,102)-sdcs_read(i,1))/(k_read(102)-k_read(1))
-            DO j = 1, 100
-              sdcs_read(i,j+1) = gradient*(k_read(j+1)-k_read(1)) &
-                  + sdcs_read(i,1)
-            END DO
-        END DO
-
-        CLOSE(unit = lu)
-
-        ! Using these tables, fill the data of type brem_tables in brem_array
+        ! File format: (number of k values) (number of e- energy values)
+        !              Line of electron eneries [J]
+        !              Line of corresponding cross sections [m²]
+        !              Table of k values [J]
+        !              Table of CDF values for photon emission
+        ! In the table, rows correspond to constant electron energy, and columns
+        ! at different photon energies, k. Data taken from Geant4 scaled
+        ! differential cross section libraries, and processed to include a cut
+        ! off k for each electron energy which ignores a fraction (1e-9) of the
+        ! radiated energy produced by the lowest energy photons. This is for
+        ! consistency with photons.F90.
+        READ(lu,*) size_k, size_T
         ALLOCATE(brem_array(iZ)%cross_section(size_T))
         ALLOCATE(brem_array(iZ)%k_table(size_T,size_k))
         ALLOCATE(brem_array(iZ)%cdf_table(size_T, size_k))
         ALLOCATE(brem_array(iZ)%E_table(size_T))
         brem_array(iZ)%size_T = size_T
         brem_array(iZ)%size_k = size_k
-        brem_array(iZ)%E_table = exp(T_read)*q0*1.0e6_num + m0*c**2
 
-        ! Loop over all kinetic energies T, create array of total cross sections
-        ! and a CDF table for photon energies
+        ! Read electron energies and cross sections
+        READ(lu,*) brem_array(iZ)%E_table(1:size_T)
+        READ(lu,*) brem_array(iZ)%cross_section(1:size_T)
+
+        ! Read table of k values
         DO i = 1, size_T
-
-          ! Get the actual beta² and k values in SI units for this T
-          brem_array(iZ)%k_table(i,:) = exp(T_read(i))*q0*1.0e6_num*k_read
-          beta2 = 1.0_num - (exp(T_read(i))*q0*1.0e6_num/m0/c/c + 1.0_num)**(-2)
-
-          ! Move unassigned k value (will be 0) to the front of the array
-          brem_array(iZ)%k_table(i,2:size_k) = &
-              brem_array(iZ)%k_table(i,1:size_k-1)
-          sdcs_read(i,2:size_k) = sdcs_read(i,1:size_k-1)
-          brem_array(iZ)%k_table(i,1) = brem_array(iZ)%k_table(i,2)
-          sdcs_read(i,1) = 0.0_num
-
-          ! Find the k_cut value at which the emitted photon energy will be
-          ! 10^{-9} times the total emitted energy
-          ALLOCATE(temp_array(size_k))
-          CALL get_cumulative_array(brem_array(iZ)%k_table(i,:), &
-              sdcs_read(i,:), size_k,temp_array)
-          max_loss_integral = temp_array(size_k)
-          CALL get_integral_limit(brem_array(iZ)%k_table(i,:), &
-              sdcs_read(i,:), size_k, 1.0e-9_num*max_loss_integral, k_cut, &
-              sdcs_cut)
-          DEALLOCATE(temp_array)
-
-          ! Omit all k values lower than k_cut
-          DO j=1,size_k
-            IF (brem_array(iZ)%k_table(i,j) < k_cut) THEN
-              brem_array(iZ)%k_table(i,j) = k_cut
-              sdcs_read(i,j) = sdcs_cut
-            END IF
-          END DO
-
-          ! Obtain cross_section and cdf_table row (dcs = do/dk in mb/J)
-          ALLOCATE(dcs(size_k))
-          dcs = sdcs_read(i,:)*Z_temp**2/beta2/brem_array(iZ)%k_table(i,:)
-          CALL get_cumulative_array(brem_array(iZ)%k_table(i,:), dcs(:), &
-              size_k, brem_array(iZ)%cdf_table(i,:))
-          brem_array(iZ)%cross_section(i) = &
-              brem_array(iZ)%cdf_table(i,size_k)*1.0e-31_num
-          brem_array(iZ)%cdf_table(i,:) = brem_array(iZ)%cdf_table(i,:) &
-              / brem_array(iZ)%cdf_table(i,size_k)
-          DEALLOCATE(dcs)
-
+            READ(lu,*) brem_array(iZ)%k_table(i,1:size_k)
         END DO
 
-        DEALLOCATE(T_read)
-        DEALLOCATE(k_read)
-        DEALLOCATE(sdcs_read)
+        ! Read table of cdf values
+        DO i = 1, size_T
+            READ(lu,*) brem_array(iZ)%cdf_table(i,1:size_k)
+        END DO
+
+        CLOSE(unit = lu)
 
       END DO
 
@@ -869,46 +790,6 @@ CONTAINS
     ENDDO
 
   END SUBROUTINE get_cumulative_array
-
-
-
-  ! For a function y(x), with values in arrays x and y, this returns the limit
-  ! x_val such that the integral y(x)dx between limits x=x(1) and x=x_val is
-  ! equal to the argument value int_val
-  SUBROUTINE get_integral_limit(x,y,size,int_val,x_val,y_val)
-
-    INTEGER, INTENT(in) :: size
-    REAL(num), INTENT(in) :: x(size), y(size)
-    REAL(num), INTENT(in) :: int_val
-    REAL(num) :: x_val, y_val
-    REAL(num) :: y_sum(size), c0, c1, c2, c3
-    INTEGER :: i
-
-    ! Identify the indices surrounding x_val
-    y_sum(1) = 0.0_num
-    DO i = 2, size
-      y_sum(i) = 0.5_num*(x(i)-x(i-1))*(y(i)+y(i-1)) + y_sum(i-1)
-
-      ! Solve sum(i-1) + 0.5*(x_val - x(i-1))*(y_val + y(i-1)) = int_val
-      ! where y(i-1) to y_val is the linear interpolation of x(i-1) to x_val.
-      ! This function assumes x and y are always positive.
-      IF (y_sum(i) > int_val) THEN
-        c0 = (y(i)-y(i-1))/(x(i)-x(i-1))
-        IF (c0 == 0.0_num) THEN
-          c1 = 0.5_num*c0
-          c2 = y(i-1) - c0*x(i-1)
-          c3 = 0.5_num*c0*x(i-1)**2 - x(i-1)*y(i-1) + y_sum(i-1) - int_val
-          x_val = (-c2 + SQRT(c2**2 - 4.0_num*c1*c3))/(2.0_num*c1)
-        ELSE
-          ! Gradient is zero, no need to interpolate to find y_val
-          x_val = (int_val-y_sum(i-1))/y(i-1) + x(i-1)
-        END IF
-        y_val = c0*(x_val - x(i-1)) + y(i-1)
-        RETURN
-      END IF
-    END DO
-
-  END SUBROUTINE get_integral_limit
 
 
 

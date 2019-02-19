@@ -142,7 +142,7 @@ CONTAINS
 
 
   ! Subroutine to generate tables of bremsstrahlung cross sections as a function
-  ! of incident electron kinetic energy, T. Also computes a table of cumlative
+  ! of incident electron energy, T. Also computes a table of cumlative
   ! probabilities for each photon energy, k, and each value of T. All tables are
   ! stored in an array (brem_array) as the variable type brem_tables. Each
   ! element of brem_array correpsonds to a different target atomic number.
@@ -164,7 +164,7 @@ CONTAINS
       ! For each unique atomic number, Z, let Z_flags(Z) = 1
       ALLOCATE(Z_flags(100))
       Z_flags(:) = 0
-      DO i_species=1,n_species
+      DO i_species = 1, n_species
         Z_temp = species_list(i_species)%atomic_no
         IF (Z_temp > 0 .AND. Z_temp < 101) THEN
           Z_flags(Z_temp) = 1;
