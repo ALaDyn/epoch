@@ -242,6 +242,23 @@ CONTAINS
           ELSE
             IF (bc_allspecies(idx) /= bc) bc_allspecies(idx) = c_bc_mixed
           END IF
+          IF (bc_species(idx) == c_bc_return) THEN
+            any_return = .TRUE.
+            IF (idx .GT. 2) THEN
+              !Return boundaries only allowed on x
+              !Set to thermal as closest option
+              bc_species(idx) = c_bc_thermal
+              IF (rank == 0) THEN
+                DO iu = 1, nio_units ! Print to stdout and to file
+                  io = io_units(iu)
+                  WRITE(io,*)
+                  WRITE(io,*) '*** WARNING ***'
+                  WRITE(io,*) 'Return boundaries can only be specified ', &
+                      ' for x_min or x_max. Continuing using Thermal '
+                END DO
+              END IF
+            END IF
+          END IF
         END DO
       END DO
     ELSE

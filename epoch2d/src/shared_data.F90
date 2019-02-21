@@ -438,6 +438,16 @@ MODULE shared_data
     REAL(num), DIMENSION(:,:), POINTER :: ext_temp_x_min, ext_temp_x_max
     REAL(num), DIMENSION(:,:), POINTER :: ext_temp_y_min, ext_temp_y_max
 
+    ! Return boundaries. Only track drift in x
+    REAL(num), DIMENSION(:), ALLOCATABLE :: ext_drift_x_min, ext_drift_x_max
+    REAL(num), DIMENSION(:), ALLOCATABLE :: ext_dens_x_min, ext_dens_x_max
+    REAL(num), DIMENSION(:), ALLOCATABLE :: net_px_min, net_px_max
+    REAL(num), DIMENSION(:), ALLOCATABLE :: ext_plasma_freq_max
+    REAL(num), DIMENSION(:), ALLOCATABLE :: ext_plasma_freq_min
+
+
+    TYPE(injector_block), POINTER :: injector_x_min, injector_x_max
+
     ! Species_ionisation
     LOGICAL :: electron
     LOGICAL :: ionise
@@ -768,6 +778,7 @@ MODULE shared_data
   LOGICAL :: use_particle_count_update = .FALSE.
   LOGICAL :: use_accurate_n_zeros = .FALSE.
   LOGICAL :: use_injectors = .FALSE.
+  LOGICAL :: any_return = .FALSE.
   LOGICAL :: use_more_setup_memory = .FALSE.
 
   REAL(num) :: dt, t_end, time, dt_multiplier, dt_laser, dt_plasma_frequency
@@ -909,6 +920,8 @@ MODULE shared_data
     TYPE(primitive_stack) :: density_function
     TYPE(primitive_stack) :: temperature_function(3)
     TYPE(primitive_stack) :: drift_function(3)
+
+    REAL(num), DIMENSION(:), ALLOCATABLE :: drift_perp
 
     REAL(num) :: t_start, t_end
     LOGICAL :: has_t_end

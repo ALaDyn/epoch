@@ -402,9 +402,25 @@ CONTAINS
 
       IF (species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_thermal) THEN
         ALLOCATE(species_list(ispecies)%ext_temp_x_min(1-ng:ny+ng,1:3))
+      ELSE IF (species_list(ispecies)%bc_particle(c_bd_x_min) == &
+          c_bc_return) THEN
+        ALLOCATE(species_list(ispecies)%ext_temp_x_min(1-ng:ny+ng,1:3))
+        ALLOCATE(species_list(ispecies)%ext_drift_x_min(1-ng:ny+ng))
+        ALLOCATE(species_list(ispecies)%ext_dens_x_min(1-ng:ny+ng))
+        ALLOCATE(species_list(ispecies)%ext_plasma_freq_min(1-ng:ny+ng))
       END IF
       IF (species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_thermal) THEN
         ALLOCATE(species_list(ispecies)%ext_temp_x_max(1-ng:ny+ng,1:3))
+      ELSE IF (species_list(ispecies)%bc_particle(c_bd_x_max) == &
+          c_bc_return) THEN
+        ALLOCATE(species_list(ispecies)%ext_temp_x_max(1-ng:ny+ng,1:3))
+        ALLOCATE(species_list(ispecies)%ext_drift_x_max(1-ng:ny+ng))
+        ALLOCATE(species_list(ispecies)%ext_dens_x_max(1-ng:ny+ng))
+        ALLOCATE(species_list(ispecies)%ext_plasma_freq_max(1-ng:ny+ng))
+      END IF
+      IF (any_return) THEN
+        ALLOCATE(species_list(ispecies)%net_px_min(1-ng:ny+ng))
+        ALLOCATE(species_list(ispecies)%net_px_max(1-ng:ny+ng))
       END IF
       IF (species_list(ispecies)%bc_particle(c_bd_y_min) == c_bc_thermal) THEN
         ALLOCATE(species_list(ispecies)%ext_temp_y_min(1-ng:nx+ng,1:3))
