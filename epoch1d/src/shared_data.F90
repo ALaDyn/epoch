@@ -443,7 +443,6 @@ MODULE shared_data
     REAL(num) :: net_px_min, net_px_max
     REAL(num) :: ext_plasma_freq_min, ext_plasma_freq_max
 
-    !TODO something better here
     TYPE(injector_block), POINTER :: injector_x_min, injector_x_max
 
     ! Species_ionisation
@@ -755,6 +754,7 @@ MODULE shared_data
   LOGICAL :: use_particle_count_update = .FALSE.
   LOGICAL :: use_accurate_n_zeros = .FALSE.
   LOGICAL :: use_injectors = .FALSE.
+  LOGICAL :: any_return = .FALSE.
   LOGICAL :: use_more_setup_memory = .FALSE.
 
   REAL(num) :: dt, t_end, time, dt_multiplier, dt_laser, dt_plasma_frequency

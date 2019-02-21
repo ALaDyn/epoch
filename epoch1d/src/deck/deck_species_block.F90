@@ -242,6 +242,11 @@ CONTAINS
           ELSE
             IF (bc_allspecies(idx) /= bc) bc_allspecies(idx) = c_bc_mixed
           END IF
+
+          IF (bc_species(idx) == c_bc_return) THEN
+            any_return = .TRUE.
+          END IF
+
         END DO
       END DO
     ELSE

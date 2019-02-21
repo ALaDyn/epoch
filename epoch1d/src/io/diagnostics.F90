@@ -952,7 +952,6 @@ CONTAINS
         values(2) = curr_species%ext_drift_x_max
         values(3) = curr_species%ext_dens_x_max
       ENDIF
-  PRINT*, rank, values
       IF (.NOT. runs_this_rank) values = HUGE(0.0_num)
       IF (rank == 0) THEN
         CALL MPI_Reduce(MPI_IN_PLACE, values, 3, mpireal, MPI_MIN, &
@@ -961,7 +960,6 @@ CONTAINS
         CALL MPI_Reduce(values, values, 3, mpireal, MPI_MIN, &
           0, MPI_COMM_WORLD, ierr)
       END IF
-  PRINT*, rank, values
       CALL sdf_write_srl(sdf_handle, TRIM(block_name), TRIM(block_name), &
           3, values, 0)
       DEALLOCATE(values)

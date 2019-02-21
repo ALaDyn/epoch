@@ -1086,14 +1086,12 @@ CONTAINS
   SUBROUTINE update_return_bcs
 
     INTEGER :: ispecies, return_species
-    REAL(KIND=num) :: net_jx_min, net_wt_x_min, net_jx_max, net_wt_x_max
+    REAL(KIND=num) :: net_jx_min, net_jx_max
     REAL(KIND=num) :: cell_vol, alpha
 
     return_species = -1
     net_jx_min = 0.0_num
-    net_wt_x_min = 0.0_num
     net_jx_max = 0.0_num
-    net_wt_x_max = 0.0_num
     cell_vol = dx
 
     !Here we don't care if return current is on both ends or not
