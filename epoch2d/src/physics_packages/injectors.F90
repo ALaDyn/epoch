@@ -426,7 +426,7 @@ CONTAINS
 
     TYPE(injector_block), POINTER :: injector
     REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
-    REAL(num) :: gamma_mass, v_inject, vol
+    REAL(num) :: gamma_mass, v_inject, abs_bdy_space
     REAL(num) :: v_inject_s
     INTEGER :: dir_index, ii, nel
     REAL(num), DIMENSION(3) :: temperature, drift
@@ -434,23 +434,23 @@ CONTAINS
 
     IF (injector%boundary == c_bd_x_min) THEN
       parameters%pack_ix = 1
-      vol = dx
+      abs_bdy_space = dx
       dir_index = 1
       nel = ny
     ELSE IF (injector%boundary == c_bd_x_max) THEN
       parameters%pack_ix = nx
-      vol = dx
+      abs_bdy_space = dx
       dir_index = 1
       nel = ny
     ELSE IF (injector%boundary == c_bd_y_min) THEN
       parameters%pack_iy = 1
       dir_index = 2
-      vol = dy
+      abs_bdy_space = dy
       nel = nx
     ELSE IF (injector%boundary == c_bd_y_max) THEN
       parameters%pack_iy = ny
       dir_index = 2
-      vol = dy
+      abs_bdy_space = dy
       nel = nx
     END IF
 
@@ -470,7 +470,7 @@ CONTAINS
       v_inject_s = p_inject_drift / gamma_mass
       v_inject = ABS(v_inject_s)
 
-      injector%dt_inject(ii) = vol &
+      injector%dt_inject(ii) = abs_bdy_space &
           / MAX(injector%npart_per_cell * v_inject, c_tiny)
 
     END DO
