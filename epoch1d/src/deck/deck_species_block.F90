@@ -82,7 +82,7 @@ CONTAINS
 
   SUBROUTINE species_deck_finalise
 
-    INTEGER :: i, j, idx, io, iu, nlevels, nrelease
+    INTEGER :: i, j, idx, io, iu, nlevels, nrelease, nreturn, return_sp
     CHARACTER(LEN=8) :: string
     INTEGER :: errcode, bc
     TYPE(primitive_stack) :: stack
@@ -191,7 +191,9 @@ CONTAINS
       DEALLOCATE(ionise_to_species)
       DEALLOCATE(species_names)
 
-      ! Sanity check on periodic boundaries
+      ! Sanity check on boundaries
+      nreturn = 0
+      return_sp = 0
       DO i = 1, n_species
         ! First, set the per-species boundary condition to the same value
         ! as bc_particle if it hasn't been set yet
@@ -242,12 +244,41 @@ CONTAINS
           ELSE
             IF (bc_allspecies(idx) /= bc) bc_allspecies(idx) = c_bc_mixed
           END IF
-
-          IF (bc_species(idx) == c_bc_return) THEN
-            any_return = .TRUE.
-          END IF
-
         END DO
+        !Sanity check return boundaries
+        DO idx = 1, 2*c_ndims
+          IF (bc_species(idx) == c_bc_return) THEN
+           IF (idx == c_bd_x_min) THEN
+              nreturn = nreturn + 1
+              any_return = .TRUE.
+              IF (return_sp == 0) return_sp = i
+            ELSE IF (idx == c_bd_x_max) THEN
+              any_return = .TRUE.
+              IF (return_sp == 0) return_sp = i
+              IF (bc_species(c_bd_x_min) .NE. c_bc_return) &
+                  nreturn = nreturn + 1
+            END IF
+          END IF
+        END DO
+        !Disable return bnds on all but first species
+        !Again, continuation injectors would supersede thermal fallback
+        IF (nreturn > 1 .AND. i .NE. return_sp) THEN
+          IF (species_list(i)%bc_particle(c_bd_x_min) == c_bc_return) &
+              species_list(i)%bc_particle(c_bd_x_min) = c_bc_thermal
+          IF (species_list(i)%bc_particle(c_bd_x_max) == c_bc_return) &
+              species_list(i)%bc_particle(c_bd_x_max) = c_bc_thermal
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*)
+              WRITE(io,*) '*** WARNING ***'
+              WRITE(io,*) 'Too many return boundary species!', &
+                  ' Disabling for ',&
+                  'species ', TRIM(species_list(i)%name), ' Code will ', &
+                  'continue to run with thermal boundaries on this species'
+            END DO
+          END IF
+        END IF
       END DO
     ELSE
       DEALLOCATE(species_charge_set)

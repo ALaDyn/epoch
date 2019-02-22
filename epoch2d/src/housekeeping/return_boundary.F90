@@ -6,7 +6,7 @@ MODULE return_boundary
   IMPLICIT NONE
 
   PUBLIC :: setup_return_boundaries, create_return_injector, &
-      update_return_injector
+      update_return_injector, finish_setup_return_boundaries
 
 CONTAINS
 
@@ -90,19 +90,19 @@ CONTAINS
   END SUBROUTINE
 
   !Fix up the ppc now we've loaded the particles
-  SUBROUTINE finish_return_boundaries
+  SUBROUTINE finish_setup_return_boundaries
 
     TYPE(injector_block), POINTER :: working_injector
     INTEGER :: i
 
     DO i = 1, n_species
-      IF (species_list(i)%bc_particle(1) == c_bc_return) THEN
+      IF (species_list(i)%bc_particle(c_bd_x_min) == c_bc_return) THEN
         working_injector => species_list(i)%injector_x_min
         working_injector%npart_per_cell = &
             FLOOR(species_list(i)%npart_per_cell)
         CALL update_return_injector(working_injector)
       END IF
-      IF (species_list(i)%bc_particle(2) == c_bc_return) THEN
+      IF (species_list(i)%bc_particle(c_bd_x_max) == c_bc_return) THEN
         working_injector => species_list(i)%injector_x_max
         working_injector%npart_per_cell = &
             FLOOR(species_list(i)%npart_per_cell)

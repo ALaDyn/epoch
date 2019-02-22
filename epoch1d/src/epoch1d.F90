@@ -125,7 +125,7 @@ PROGRAM pic
     time = 0.0_num
   END IF
 
-  CALL finish_return_boundaries
+  CALL finish_setup_return_boundaries
   CALL custom_particle_load
   CALL manual_load
   CALL initialise_window ! window.f90
