@@ -36,8 +36,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: ispecies
     INTEGER, DIMENSION(c_ndims*2), INTENT(IN) :: bcs
     TYPE(injector_block), POINTER :: working_injector
-    INTEGER :: i, j
-    TYPE(parameter_pack) :: parameters
+    INTEGER :: i
 
     DO i = 1, 2
       IF (bcs(i) /= c_bc_return) CYCLE
