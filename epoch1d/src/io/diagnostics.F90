@@ -934,7 +934,7 @@ CONTAINS
     return_species = -1
     DO ispecies = 1, n_species
       DO i = 1, c_ndims
-        IF(species_list(ispecies)%bc_particle(i) == c_bc_return) THEN
+        IF (species_list(ispecies)%bc_particle(i) == c_bc_return) THEN
           return_species = ispecies
         END IF
       END DO
@@ -947,7 +947,7 @@ CONTAINS
         values(1) = curr_species%net_px_min
         values(2) = curr_species%ext_drift_x_min
         values(3) = curr_species%ext_dens_x_min
-      ELSE IF(boundary == c_bd_x_max) THEN
+      ELSE IF (boundary == c_bd_x_max) THEN
         values(1) = curr_species%net_px_max
         values(2) = curr_species%ext_drift_x_max
         values(3) = curr_species%ext_dens_x_max

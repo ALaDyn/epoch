@@ -261,7 +261,7 @@ CONTAINS
           END IF
         END DO
         !Disable return bnds on all but first species
-        !Again, continuation injectors would supersede thermal fallback
+        !Continuation injectors would supersede thermal fallback
         IF (nreturn > 1 .AND. i .NE. return_sp) THEN
           IF (species_list(i)%bc_particle(c_bd_x_min) == c_bc_return) &
               species_list(i)%bc_particle(c_bd_x_min) = c_bc_thermal

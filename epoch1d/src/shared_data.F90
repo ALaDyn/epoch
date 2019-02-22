@@ -886,8 +886,7 @@ MODULE shared_data
     TYPE(primitive_stack) :: density_function
     TYPE(primitive_stack) :: temperature_function(3)
     TYPE(primitive_stack) :: drift_function(3)
-    REAL(num), DIMENSION(3) :: temperature, drift
-    REAL(num) :: density
+    REAL(num) :: drift_perp
     REAL(num) :: t_start, t_end
     LOGICAL :: has_t_end
     REAL(num) :: depth, dt_inject

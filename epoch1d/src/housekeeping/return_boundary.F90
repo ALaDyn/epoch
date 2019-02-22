@@ -39,31 +39,38 @@ CONTAINS
     INTEGER :: i, j
     TYPE(parameter_pack) :: parameters
 
-    DO i = 1, c_ndims*2
+    DO i = 1, 2
       IF (bcs(i) /= c_bc_return) CYCLE
       use_injectors = .TRUE.
       need_random_state = .TRUE.
       ALLOCATE(working_injector)
       CALL init_injector(i,  working_injector)
+
+      CALL copy_stack(species_list(ispecies)%drift_function(1), &
+          working_injector%drift_function(1))
+      CALL copy_stack(species_list(ispecies)%drift_function(2), &
+          working_injector%drift_function(2))
+      CALL copy_stack(species_list(ispecies)%drift_function(3), &
+          working_injector%drift_function(3))
+      CALL copy_stack(species_list(ispecies)%density_function, &
+          working_injector%density_function)
+      CALL copy_stack(species_list(ispecies)%temperature_function(1), &
+          working_injector%temperature_function(1))
+      CALL copy_stack(species_list(ispecies)%temperature_function(2), &
+          working_injector%temperature_function(2))
+      CALL copy_stack(species_list(ispecies)%temperature_function(3), &
+          working_injector%temperature_function(3))
+
       working_injector%species = ispecies
-      !TODO makes sense to pass species here, rather than n_species
       working_injector%npart_per_cell = 1 !Tenporary, fixed after load
+
       IF (i == 1) THEN
         species_list(ispecies)%injector_x_min => working_injector
-        parameters%pack_ix = 1
+        working_injector%drift_perp = species_list(ispecies)%ext_drift_x_min
       ELSE IF (i == 2) THEN
         species_list(ispecies)%injector_x_max => working_injector
-        parameters%pack_ix = nx
+        working_injector%drift_perp = species_list(ispecies)%ext_drift_x_max
       ENDIF
-
-      DO j = 1, 3
-        working_injector%temperature(j) = evaluate_with_parameters( &
-            species_list(ispecies)%temperature_function(j), parameters, errcode)
-        working_injector%drift(j) = evaluate_with_parameters( &
-            species_list(ispecies)%drift_function(j), parameters, errcode)
-      END DO
-      working_injector%density = evaluate_with_parameters( &
-          species_list(ispecies)%density_function, parameters, errcode)
 
       CALL attach_injector(working_injector)
 
@@ -104,11 +111,9 @@ CONTAINS
     species => species_list(injector%species)
 
     IF (injector%boundary == c_bd_x_min) THEN
-      injector%temperature = species%ext_temp_x_min
-      injector%drift(1) = species%ext_drift_x_min
+      injector%drift_perp = species%ext_drift_x_min
     ELSE IF (injector%boundary == c_bd_x_max) THEN
-      injector%temperature = species%ext_temp_x_max
-      injector%drift(1) = species%ext_drift_x_max
+      injector%drift_perp = species%ext_drift_x_max
     END IF
     CALL update_dt_inject(injector)
 

@@ -1088,6 +1088,7 @@ CONTAINS
     INTEGER :: ispecies, return_species
     REAL(KIND=num) :: net_jx_min, net_jx_max
     REAL(KIND=num) :: cell_vol, alpha
+    LOGICAL, DIMENSION(2) :: bnds
 
     return_species = -1
     net_jx_min = 0.0_num
@@ -1098,9 +1099,9 @@ CONTAINS
     !Is easier to just calculate both cases
     DO ispecies = 1, n_species
 
-      IF(species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_return .OR. &
-          species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_return) THEN
+      IF (ANY(species_list(ispecies)%bc_particle(1:2) == c_bc_return)) THEN
         return_species = ispecies
+        bnds = (species_list(ispecies)%bc_particle(1:2) == c_bc_return)
         CYCLE
       END IF
       net_jx_min = net_jx_min + &
@@ -1111,7 +1112,7 @@ CONTAINS
           / species_list(ispecies)%mass
     END DO
 
-    IF(return_species == -1) RETURN
+    IF (return_species == -1) RETURN
     !Summed over weights - to get density divide by volume
     net_jx_min = net_jx_min / cell_vol
     net_jx_max = net_jx_max / cell_vol
@@ -1121,34 +1122,37 @@ CONTAINS
     !setup time
     !Exponential average using calculated equillibration time
     !using p(t+dt) = a p(t) + b p_c
-    alpha = 2.0_num / (1.0_num / &
-        (species_list(return_species)%ext_plasma_freq_min * dt/2.0_num/pi) &
-        + 1.0_num )
+    IF (bnds(1)) THEN
+      alpha = 2.0_num / (1.0_num / &
+          (species_list(return_species)%ext_plasma_freq_min * dt/2.0_num/pi) &
+          + 1.0_num )
 
-    !jx on bnd can be zero if region is evacuated
-    IF(ABS(net_jx_min) > c_tiny .AND. &
-        species_list(return_species)%ext_dens_x_min > c_tiny) THEN
-      species_list(return_species)%ext_drift_x_min = &
-          (1.0_num - alpha) * species_list(return_species)%ext_drift_x_min - &
-          alpha * net_jx_min * species_list(return_species)%mass / &
-          species_list(return_species)%charge / &
-          species_list(return_species)%ext_dens_x_min
+      !jx on bnd can be zero if region is evacuated
+      IF (ABS(net_jx_min) > c_tiny .AND. &
+          species_list(return_species)%ext_dens_x_min > c_tiny) THEN
+        species_list(return_species)%ext_drift_x_min = &
+            (1.0_num - alpha) * species_list(return_species)%ext_drift_x_min - &
+            alpha * net_jx_min * species_list(return_species)%mass / &
+            species_list(return_species)%charge / &
+            species_list(return_species)%ext_dens_x_min
+        CALL update_return_injector(species_list(return_species)%injector_x_min)
+      END IF
     END IF
-    alpha = 2.0_num / (1.0_num / &
-    (species_list(return_species)%ext_plasma_freq_max * dt/2.0_num/pi) &
-    + 1.0_num )
+    IF (bnds(2)) THEN
+      alpha = 2.0_num / (1.0_num / &
+          (species_list(return_species)%ext_plasma_freq_max * dt/2.0_num/pi) &
+          + 1.0_num )
 
-    IF(ABS(net_jx_max) > c_tiny .AND. &
-         species_list(return_species)%ext_dens_x_max > c_tiny) THEN
-      species_list(return_species)%ext_drift_x_max = &
-          (1.0_num - alpha) * species_list(return_species)%ext_drift_x_max - &
-          alpha * net_jx_max * species_list(return_species)%mass / &
-          species_list(return_species)%charge / &
-          species_list(return_species)%ext_dens_x_max
+      IF (ABS(net_jx_max) > c_tiny .AND. &
+           species_list(return_species)%ext_dens_x_max > c_tiny) THEN
+        species_list(return_species)%ext_drift_x_max = &
+            (1.0_num - alpha) * species_list(return_species)%ext_drift_x_max - &
+            alpha * net_jx_max * species_list(return_species)%mass / &
+            species_list(return_species)%charge / &
+            species_list(return_species)%ext_dens_x_max
+        CALL update_return_injector(species_list(return_species)%injector_x_max)
+      END IF
     END IF
-
-    CALL update_return_injector(species_list(return_species)%injector_x_min)
-    CALL update_return_injector(species_list(return_species)%injector_x_max)
 
 
   END SUBROUTINE update_return_bcs

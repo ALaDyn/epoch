@@ -322,6 +322,8 @@ CONTAINS
       NULLIFY(species_list(ispecies)%ext_temp_x_min)
       NULLIFY(species_list(ispecies)%ext_temp_x_max)
       NULLIFY(species_list(ispecies)%secondary_list)
+      NULLIFY(species_list(ispecies)%injector_x_min)
+      NULLIFY(species_list(ispecies)%injector_x_max)
       species_list(ispecies)%bc_particle = c_bc_null
     END DO
 
@@ -1721,12 +1723,12 @@ CONTAINS
       return_species = -1
       DO ispecies = 1, n_species
         DO i = 1, ndims
-          IF(species_list(ispecies)%bc_particle(i) == c_bc_return) THEN
+          IF (species_list(ispecies)%bc_particle(i) == c_bc_return) THEN
             return_species = ispecies
           END IF
         END DO
       END DO
-      IF(return_species == -1) RETURN
+      IF (return_species == -1) RETURN
 
       ALLOCATE(values(dims(1)))
       CALL sdf_read_srl(sdf_handle, values)
@@ -1739,7 +1741,7 @@ CONTAINS
         curr_species%net_px_min = values(1)
         curr_species%ext_drift_x_min = values(2)
         curr_species%ext_dens_x_min = values(3)
-      ELSE IF(boundary == c_bd_x_max) THEN
+      ELSE IF (boundary == c_bd_x_max) THEN
         curr_species%net_px_max = values(1)
         curr_species%ext_drift_x_max = values(2)
         curr_species%ext_dens_x_max = values(3)
