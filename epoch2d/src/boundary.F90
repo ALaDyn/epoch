@@ -1909,7 +1909,7 @@ CONTAINS
     !Here we don't care if return current is on both ends or not
     !Is easier to just calculate both cases
     DO ispecies = 1, n_species
-      IF(ANY(species_list(ispecies)%bc_particle(1:2) == c_bc_return)) THEN
+      IF (ANY(species_list(ispecies)%bc_particle(1:2) == c_bc_return)) THEN
         return_species = ispecies
         bnds = (species_list(ispecies)%bc_particle(1:2) == c_bc_return)
         CYCLE
@@ -1923,7 +1923,7 @@ CONTAINS
           / species_list(ispecies)%mass
     END DO
 
-    IF(return_species == -1) RETURN
+    IF (return_species == -1) RETURN
     !Summed over weights - to get density divide by volume
     net_jx_min = net_jx_min / cell_vol
     net_jx_max = net_jx_max / cell_vol

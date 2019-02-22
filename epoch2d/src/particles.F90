@@ -520,7 +520,7 @@ CONTAINS
               species_list(ispecies)%net_px_min(cell_y1) = &
                   species_list(ispecies)%net_px_min(cell_y1) &
                   + current%part_p(1) * current%weight
-            ELSE IF(cell_x1 == nx) THEN
+            ELSE IF (cell_x1 == nx) THEN
               species_list(ispecies)%net_px_max(cell_y1) = &
                   species_list(ispecies)%net_px_max(cell_y1) &
                   + current%part_p(1) * current%weight
@@ -575,7 +575,7 @@ CONTAINS
       CALL current_bcs(species=ispecies)
     END DO
 
-    IF(any_return) CALL update_return_bcs
+    IF (any_return) CALL update_return_bcs
     CALL particle_bcs
 
   END SUBROUTINE push_particles

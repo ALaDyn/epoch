@@ -5,6 +5,8 @@ MODULE return_boundary
 
   IMPLICIT NONE
 
+  PRIVATE
+
   PUBLIC :: setup_return_boundaries, create_return_injector, &
       update_return_injector, finish_setup_return_boundaries
 
@@ -47,12 +49,6 @@ CONTAINS
       ALLOCATE(working_injector%drift_perp(1-ng:ny+ng))
       CALL copy_stack(species_list(ispecies)%drift_function(1), &
           working_injector%drift_function(1))
-      IF (i == c_bd_x_min) THEN
-        parameters%pack_ix = 1
-      ELSE IF (i == c_bd_x_max) THEN
-        parameters%pack_ix = nx
-      END IF
-
       CALL copy_stack(species_list(ispecies)%drift_function(2), &
           working_injector%drift_function(2))
       CALL copy_stack(species_list(ispecies)%drift_function(3), &
@@ -67,24 +63,17 @@ CONTAINS
           working_injector%temperature_function(3))
 
       working_injector%species = ispecies
-      !TODO makes sense to pass species here, rather than n_species
       working_injector%npart_per_cell = 1 !Tenporary, fixed after load
+
       IF (i == 1) THEN
         species_list(ispecies)%injector_x_min => working_injector
         working_injector%drift_perp = species_list(ispecies)%ext_drift_x_min
- !       parameters%pack_ix = 1
       ELSE IF (i == 2) THEN
         species_list(ispecies)%injector_x_max => working_injector
         working_injector%drift_perp = species_list(ispecies)%ext_drift_x_max
-  !      parameters%pack_ix = nx
       ENDIF
-!      DO j = 1-ng, ny+ng
- !       parameters%pack_iy = j
- !       err = c_err_none
- !       working_injector%drift_perp(j) = evaluate_with_parameters( &
- !           species_list(ispecies)%drift_function(1), parameters, err)
- !     END DO
-     CALL attach_injector(working_injector)
+
+      CALL attach_injector(working_injector)
     END DO
 
   END SUBROUTINE

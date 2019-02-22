@@ -296,7 +296,7 @@ CONTAINS
             END DO
           END IF
         END IF
-     END DO
+      END DO
     ELSE
       DEALLOCATE(species_charge_set)
       DEALLOCATE(species_blocks)

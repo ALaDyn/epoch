@@ -337,7 +337,7 @@ CONTAINS
 
         DO idir = 1, 3
           IF (flux_fn) THEN
-            IF(ABS(drift(idir)) > c_tiny) THEN
+            IF (ABS(drift(idir)) > c_tiny) THEN
               new%part_p(idir) = drifting_flux_momentum_from_temperature(mass, &
                   temperature(idir), drift(idir)) * dir_mult(idir)
             ELSE

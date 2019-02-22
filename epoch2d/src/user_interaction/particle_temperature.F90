@@ -369,7 +369,7 @@ CONTAINS
   ! These satisfy a Rayleigh distribution, formed by combining two
   ! normally-distributed (~N(0,sigma)) random variables as follows:
   ! Z = SQRT(X**2 + Y**2)
-  !Does not work with non-zero drift
+  ! This DOES NOT work if there is a drift
   FUNCTION flux_momentum_from_temperature(mass, temperature, drift)
 
     REAL(num), INTENT(IN) :: mass, temperature, drift
