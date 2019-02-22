@@ -428,7 +428,8 @@ CONTAINS
     REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
     REAL(num) :: gamma_mass, v_inject, abs_bdy_space
     REAL(num) :: v_inject_s
-    INTEGER :: dir_index, ii, nel
+    INTEGER :: dir_index, ii
+    INTEGER, DIMENSION(c_ndims-1) :: perp_dir_index, nel
     REAL(num), DIMENSION(3) :: temperature, drift
     TYPE(parameter_pack) :: parameters
 
@@ -436,28 +437,35 @@ CONTAINS
       parameters%pack_ix = 1
       abs_bdy_space = dx
       dir_index = 1
-      nel = ny
+      perp_dir_index = (/2/)
+      nel = (/ny/)
     ELSE IF (injector%boundary == c_bd_x_max) THEN
       parameters%pack_ix = nx
       abs_bdy_space = dx
       dir_index = 1
-      nel = ny
+      perp_dir_index = (/2/)
+      nel = (/ny/)
     ELSE IF (injector%boundary == c_bd_y_min) THEN
       parameters%pack_iy = 1
       dir_index = 2
+      perp_dir_index = (/1/)
       abs_bdy_space = dy
-      nel = nx
+      nel = (/nx/)
     ELSE IF (injector%boundary == c_bd_y_max) THEN
       parameters%pack_iy = ny
       dir_index = 2
+      perp_dir_index = (/1/)
       abs_bdy_space = dy
-      nel = nx
+      nel = (/nx/)
     END IF
 
     mass = species_list(injector%species)%mass
     typical_mc2 = (mass * c)**2
+    parameters%use_grid_position = .TRUE.
 
-    DO ii = 1, nel
+    DO ii = 1, nel(1)
+
+      CALL assign_pack_value(parameters, perp_dir_index(1), ii)
 
       CALL populate_injector_properties(injector, parameters, density_grid, &
           temperature, drift)
