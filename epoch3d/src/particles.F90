@@ -203,6 +203,12 @@ CONTAINS
       part_mc2 = c * part_mc
 #endif
 #endif
+
+      IF (any_return) THEN
+        species_list(ispecies)%net_px_min = 0.0_num
+        species_list(ispecies)%net_px_max = 0.0_num
+      END IF
+
       !DEC$ VECTOR ALWAYS
       DO ipart = 1, species_list(ispecies)%attached_list%count
         next => current%next
@@ -554,6 +560,22 @@ CONTAINS
               END DO
             END DO
           END DO
+
+          !Calculate net momentum of species on x bnds
+          !Tracers deposit no current so aren't included in return calculations
+          !Using shape functions would require full boundary handling
+          IF (any_return) THEN
+            IF (cell_x1 == 1) THEN
+              species_list(ispecies)%net_px_min(cell_y1, cell_z1) = &
+                  species_list(ispecies)%net_px_min(cell_y1, cell_z1) &
+                  + current%part_p(1) * current%weight
+            ELSE IF (cell_x1 == nx) THEN
+              species_list(ispecies)%net_px_max(cell_y1, cell_z1) = &
+                  species_list(ispecies)%net_px_max(cell_y1, cell_z1) &
+                  + current%part_p(1) * current%weight
+            END IF
+          END IF
+
 #ifndef NO_TRACER_PARTICLES
         END IF
 #endif
@@ -601,6 +623,8 @@ CONTAINS
       END DO
       CALL current_bcs(species=ispecies)
     END DO
+
+    IF (any_return) CALL update_return_bcs
 
     CALL particle_bcs
 

@@ -403,6 +403,8 @@ CONTAINS
       NULLIFY(species_list(ispecies)%ext_temp_y_max)
       NULLIFY(species_list(ispecies)%ext_temp_z_min)
       NULLIFY(species_list(ispecies)%ext_temp_z_max)
+      NULLIFY(species_list(ispecies)%injector_x_min)
+      NULLIFY(species_list(ispecies)%injector_x_max)
       NULLIFY(species_list(ispecies)%secondary_list)
       species_list(ispecies)%bc_particle = c_bc_null
     END DO

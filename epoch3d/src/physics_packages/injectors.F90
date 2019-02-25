@@ -140,6 +140,7 @@ CONTAINS
         IF (current%drift_function(i)%init) &
             CALL deallocate_stack(current%drift_function(i))
       END DO
+      IF (ALLOCATED(current%drift_perp)) DEALLOCATE(current%drift_perp)
       DEALLOCATE(current)
       current => next
     END DO
@@ -393,8 +394,13 @@ CONTAINS
 
           DO idir = 1, 3
             IF (flux_fn) THEN
-              new%part_p(idir) = flux_momentum_from_temperature(mass, &
-                  temperature(idir), drift(idir)) * dir_mult(idir)
+              IF (ABS(drift(idir)) > c_tiny) THEN
+                new%part_p(idir) = drifting_flux_momentum_from_temperature(&
+                    mass, temperature(idir), drift(idir)) * dir_mult(idir)
+              ELSE
+                new%part_p(idir) = flux_momentum_from_temperature(mass, &
+                    temperature(idir), drift(idir)) * dir_mult(idir)
+              END IF
             ELSE
               new%part_p(idir) = momentum_from_temperature(mass, &
                   temperature(idir), drift(idir))
@@ -449,6 +455,11 @@ CONTAINS
       END IF
     END DO
 
+    IF (ALLOCATED(injector%drift_perp)) THEN
+      !TODO use shape function? Account properly for which edge
+      drift(1) = injector%drift_perp(parameters%pack_iy, parameters%pack_iz)
+    END IF
+
     IF (errcode /= c_err_none) CALL abort_code(errcode)
 
   END SUBROUTINE populate_injector_properties
@@ -470,5 +481,85 @@ CONTAINS
     END IF
 
   END SUBROUTINE assign_pack_value
+
+
+
+  SUBROUTINE update_dt_inject(injector)
+
+    TYPE(injector_block), POINTER :: injector
+    REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
+    REAL(num) :: gamma_mass, v_inject, abs_bdy_space
+    REAL(num) :: v_inject_s
+    INTEGER :: dir_index, ii, jj
+    INTEGER, DIMENSION(c_ndims-1) :: perp_dir_index, nel
+    REAL(num), DIMENSION(3) :: temperature, drift
+    TYPE(parameter_pack) :: parameters
+
+    IF (injector%boundary == c_bd_x_min) THEN
+      parameters%pack_ix = 1
+      abs_bdy_space = dx
+      dir_index = 1
+      nel = (/ny, nz/)
+      perp_dir_index = (/2, 3/)
+    ELSE IF (injector%boundary == c_bd_x_max) THEN
+      parameters%pack_ix = nx
+      abs_bdy_space = dx
+      dir_index = 1
+      nel = (/ny, nz/)
+      perp_dir_index = (/2, 3/)
+    ELSE IF (injector%boundary == c_bd_y_min) THEN
+      parameters%pack_iy = 1
+      dir_index = 2
+      abs_bdy_space = dy
+      nel = (/nx, nz/)
+      perp_dir_index = (/1, 3/)
+    ELSE IF (injector%boundary == c_bd_y_max) THEN
+      parameters%pack_iy = ny
+      dir_index = 2
+      abs_bdy_space = dy
+      nel = (/nx, nz/)
+      perp_dir_index = (/1, 3/)
+    ELSE IF (injector%boundary == c_bd_z_min) THEN
+      parameters%pack_iy = 1
+      dir_index = 3
+      abs_bdy_space = dy
+      nel = (/nx, ny/)
+      perp_dir_index = (/1, 2/)
+    ELSE IF (injector%boundary == c_bd_z_max) THEN
+      parameters%pack_iy = ny
+      dir_index = 3
+      abs_bdy_space = dy
+      nel = (/nx, ny/)
+      perp_dir_index = (/1, 2/)
+    END IF
+
+    mass = species_list(injector%species)%mass
+    typical_mc2 = (mass * c)**2
+
+    DO ii = 1, nel(1)
+      DO jj = 1, nel(2)
+
+        CALL assign_pack_value(parameters, perp_dir_index(1), ii)
+        CALL assign_pack_value(parameters, perp_dir_index(2), jj)
+
+        CALL populate_injector_properties(injector, parameters, density_grid, &
+            temperature, drift)
+
+        ! Assume agressive maximum thermal momentum, all components
+        ! like hottest component
+        p_therm = SQRT(mass * kb * MAXVAL(temperature))
+        p_inject_drift = drift(dir_index)
+        gamma_mass = SQRT((p_therm + p_inject_drift)**2 + typical_mc2) / c
+        v_inject_s = p_inject_drift / gamma_mass
+        v_inject = ABS(v_inject_s)
+
+        injector%dt_inject(ii,jj) = abs_bdy_space &
+            / MAX(injector%npart_per_cell * v_inject, c_tiny)
+      END DO
+    END DO
+
+  END SUBROUTINE update_dt_inject
+
+
 
 END MODULE injectors

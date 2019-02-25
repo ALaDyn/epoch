@@ -858,6 +858,14 @@ CONTAINS
       ALLOCATE(injector_current%depth(1-ng:ny_new+ng, 1-ng:nz_new+ng))
       injector_current%depth = temp_slice
 
+      IF (ALLOCATED(injector_current%drift_perp)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%drift_perp, &
+            temp_slice)
+        DEALLOCATE(injector_current%drift_perp)
+        ALLOCATE(injector_current%drift_perp(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        injector_current%drift_perp = temp_slice
+      END IF
+
       injector_current => injector_current%next
     END DO
 
@@ -874,6 +882,14 @@ CONTAINS
       DEALLOCATE(injector_current%depth)
       ALLOCATE(injector_current%depth(1-ng:ny_new+ng, 1-ng:nz_new+ng))
       injector_current%depth = temp_slice
+
+      IF (ALLOCATED(injector_current%drift_perp)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%drift_perp, &
+            temp_slice)
+        DEALLOCATE(injector_current%drift_perp)
+        ALLOCATE(injector_current%drift_perp(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        injector_current%drift_perp = temp_slice
+      END IF
 
       injector_current => injector_current%next
     END DO
@@ -1223,7 +1239,8 @@ CONTAINS
     ! Slice in X-direction with an additional index
 
     DO ispecies = 1, n_species
-      IF (species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_thermal) THEN
+      IF (species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_thermal .OR. &
+          species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_return) THEN
         IF (.NOT.ALLOCATED(temp)) &
             ALLOCATE(temp(1-ng:ny_new+ng, 1-ng:nz_new+ng, 3))
 
@@ -1241,7 +1258,8 @@ CONTAINS
         species_list(ispecies)%ext_temp_x_min = temp
       END IF
 
-      IF (species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_thermal) THEN
+      IF (species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_thermal .OR. &
+          species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_return) THEN
         IF (.NOT.ALLOCATED(temp)) &
             ALLOCATE(temp(1-ng:ny_new+ng, 1-ng:nz_new+ng, 3))
 
@@ -1257,6 +1275,85 @@ CONTAINS
             %ext_temp_x_max(1-ng:ny_new+ng, 1-ng:nz_new+ng, 3))
 
         species_list(ispecies)%ext_temp_x_max = temp
+      END IF
+
+      IF (species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_return) THEN
+        IF (.NOT.ALLOCATED(temp_slice)) &
+            ALLOCATE(temp_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        max_boundary = .FALSE.
+
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%ext_drift_x_min, temp_slice)
+        DEALLOCATE(species_list(ispecies)%ext_drift_x_min)
+        ALLOCATE(species_list(ispecies)&
+            %ext_drift_x_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%ext_drift_x_min = temp_slice
+
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%ext_dens_x_min, temp_slice)
+        DEALLOCATE(species_list(ispecies)%ext_dens_x_min)
+        ALLOCATE(species_list(ispecies)%&
+            ext_dens_x_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%ext_dens_x_min = temp_slice
+
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%ext_plasma_freq_min, temp_slice)
+        DEALLOCATE(species_list(ispecies)%ext_plasma_freq_min)
+        ALLOCATE(species_list(ispecies)%&
+            ext_plasma_freq_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%ext_plasma_freq_min = temp_slice
+
+        DEALLOCATE(temp_slice)
+      END IF
+      IF (any_return) THEN
+        IF (.NOT.ALLOCATED(temp_slice)) &
+            ALLOCATE(temp_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        max_boundary = .FALSE.
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%net_px_min, temp_slice)
+        DEALLOCATE(species_list(ispecies)%net_px_min)
+        ALLOCATE(species_list(ispecies)%&
+            net_px_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%net_px_min = temp_slice
+
+        max_boundary = .TRUE.
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%net_px_max, temp_slice)
+        DEALLOCATE(species_list(ispecies)%net_px_max)
+        ALLOCATE(species_list(ispecies)%&
+          net_px_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%net_px_max = temp_slice
+
+        DEALLOCATE(temp_slice)
+      END IF
+
+      IF (species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_return) THEN
+        IF (.NOT.ALLOCATED(temp_slice)) &
+            ALLOCATE(temp_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+
+        max_boundary = .TRUE.
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%ext_drift_x_max, temp_slice)
+        DEALLOCATE(species_list(ispecies)%ext_drift_x_max)
+        ALLOCATE(species_list(ispecies)%&
+            ext_drift_x_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%ext_drift_x_max = temp_slice
+
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%ext_dens_x_max, temp_slice)
+        DEALLOCATE(species_list(ispecies)%ext_dens_x_max)
+        ALLOCATE(species_list(ispecies)%&
+            ext_dens_x_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%ext_dens_x_max = temp_slice
+
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%ext_plasma_freq_max, temp_slice)
+        DEALLOCATE(species_list(ispecies)%ext_plasma_freq_max)
+        ALLOCATE(species_list(ispecies)%&
+            ext_plasma_freq_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        species_list(ispecies)%ext_plasma_freq_max = temp_slice
+
+        DEALLOCATE(temp_slice)
       END IF
     END DO
 
