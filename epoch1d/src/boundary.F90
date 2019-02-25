@@ -1086,9 +1086,10 @@ CONTAINS
   SUBROUTINE update_return_bcs
 
     INTEGER :: ispecies, return_species
-    REAL(KIND=num) :: net_jx_min, net_jx_max
-    REAL(KIND=num) :: cell_vol, alpha
+    REAL(KIND=num) :: net_jx_min, net_jx_max, alpha, om_pe_fac
+    REAL(KIND=num) :: cell_vol
     LOGICAL, DIMENSION(2) :: bnds
+    REAL(KIND=num), PARAMETER :: plasma_const=2.0*pi*SQRT(epsilon0/q0/q0)
 
     return_species = -1
     net_jx_min = 0.0_num
@@ -1122,10 +1123,11 @@ CONTAINS
     !setup time
     !Exponential average using calculated equillibration time
     !using p(t+dt) = a p(t) + b p_c
+    om_pe_fac = plasma_const/dt * SQRT(species_list(return_species)%mass)
+
     IF (bnds(1)) THEN
-      alpha = 2.0_num / (1.0_num / &
-          (species_list(return_species)%ext_plasma_freq_min * dt/2.0_num/pi) &
-          + 1.0_num )
+      alpha = 2.0_num / (om_pe_fac &
+          /SQRT(species_list(return_species)%ext_dens_x_min) + 1.0_num)
 
       !jx on bnd can be zero if region is evacuated
       IF (ABS(net_jx_min) > c_tiny .AND. &
@@ -1139,9 +1141,8 @@ CONTAINS
       END IF
     END IF
     IF (bnds(2)) THEN
-      alpha = 2.0_num / (1.0_num / &
-          (species_list(return_species)%ext_plasma_freq_max * dt/2.0_num/pi) &
-          + 1.0_num )
+      alpha = 2.0_num / (om_pe_fac &
+          /SQRT(species_list(return_species)%ext_dens_x_max) + 1.0_num)
 
       IF (ABS(net_jx_max) > c_tiny .AND. &
            species_list(return_species)%ext_dens_x_max > c_tiny) THEN

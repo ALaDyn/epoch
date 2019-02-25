@@ -2785,8 +2785,9 @@ CONTAINS
 
     INTEGER :: ispecies, return_species
     REAL(KIND=num), DIMENSION(:,:), ALLOCATABLE :: net_jx_min, net_jx_max, alpha
-    REAL(KIND=num) :: cell_vol
+    REAL(KIND=num) :: cell_vol, om_pe_fac
     LOGICAL, DIMENSION(2) :: bnds
+    REAL(KIND=num), PARAMETER :: plasma_const=2.0*pi*SQRT(epsilon0/q0/q0)
 
     return_species = -1
     ALLOCATE(net_jx_min(1-ng:ny+ng,1-ng:nz+ng), &
@@ -2818,6 +2819,7 @@ CONTAINS
     net_jx_min = net_jx_min / cell_vol
     net_jx_max = net_jx_max / cell_vol
 
+    om_pe_fac = plasma_const/dt * SQRT(species_list(return_species)%mass)
 
     !Progress towards exact cancellation on inverse plasma
     !frequency (of inflowing species), calculated at initial
@@ -2825,9 +2827,8 @@ CONTAINS
     !Exponential average using calculated equillibration time
     !using p(t+dt) = a p(t) + b p_c
     IF (bnds(1)) THEN
-      alpha = 2.0_num / (1.0_num / &
-          (species_list(return_species)%ext_plasma_freq_min * dt/2.0_num/pi) &
-          + 1.0_num )
+      alpha = 2.0_num / (om_pe_fac &
+          /SQRT(species_list(return_species)%ext_dens_x_min) + 1.0_num)
 
       !jx on bnd can be zero if region is evacuated
       WHERE(ABS(net_jx_min) > c_tiny .AND. &
@@ -2841,9 +2842,8 @@ CONTAINS
     END IF
 
     IF (bnds(2)) THEN
-      alpha = 2.0_num / (1.0_num / &
-      (species_list(return_species)%ext_plasma_freq_max * dt/2.0_num/pi) &
-      + 1.0_num )
+      alpha = 2.0_num / (om_pe_fac &
+          /SQRT(species_list(return_species)%ext_dens_x_max) + 1.0_num)
 
       WHERE(ABS(net_jx_max) > c_tiny .AND. &
            species_list(return_species)%ext_dens_x_max > c_tiny) &

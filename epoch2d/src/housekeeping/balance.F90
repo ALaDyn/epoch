@@ -1072,12 +1072,6 @@ CONTAINS
         ALLOCATE(species_list(ispecies)%ext_dens_x_min(1-ng:ny_new+ng))
         species_list(ispecies)%ext_dens_x_min = temp_slice
 
-        CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%ext_plasma_freq_min, temp_slice)
-        DEALLOCATE(species_list(ispecies)%ext_plasma_freq_min)
-        ALLOCATE(species_list(ispecies)%ext_plasma_freq_min(1-ng:ny_new+ng))
-        species_list(ispecies)%ext_plasma_freq_min = temp_slice
-
         DEALLOCATE(temp_slice)
       END IF
       IF (any_return) THEN
@@ -1114,12 +1108,6 @@ CONTAINS
         DEALLOCATE(species_list(ispecies)%ext_dens_x_max)
         ALLOCATE(species_list(ispecies)%ext_dens_x_max(1-ng:ny_new+ng))
         species_list(ispecies)%ext_dens_x_max = temp_slice
-
-        CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%ext_plasma_freq_max, temp_slice)
-        DEALLOCATE(species_list(ispecies)%ext_plasma_freq_max)
-        ALLOCATE(species_list(ispecies)%ext_plasma_freq_max(1-ng:ny_new+ng))
-        species_list(ispecies)%ext_plasma_freq_max = temp_slice
 
         DEALLOCATE(temp_slice)
       END IF

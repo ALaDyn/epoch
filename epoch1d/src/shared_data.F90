@@ -441,7 +441,6 @@ MODULE shared_data
     REAL(num) :: ext_drift_x_min, ext_drift_x_max
     REAL(num) :: ext_dens_x_min, ext_dens_x_max
     REAL(num) :: net_px_min, net_px_max
-    REAL(num) :: ext_plasma_freq_min, ext_plasma_freq_max
 
     TYPE(injector_block), POINTER :: injector_x_min, injector_x_max
 

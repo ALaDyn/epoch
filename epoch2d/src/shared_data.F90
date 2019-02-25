@@ -442,9 +442,6 @@ MODULE shared_data
     REAL(num), DIMENSION(:), ALLOCATABLE :: ext_drift_x_min, ext_drift_x_max
     REAL(num), DIMENSION(:), ALLOCATABLE :: ext_dens_x_min, ext_dens_x_max
     REAL(num), DIMENSION(:), ALLOCATABLE :: net_px_min, net_px_max
-    REAL(num), DIMENSION(:), ALLOCATABLE :: ext_plasma_freq_max
-    REAL(num), DIMENSION(:), ALLOCATABLE :: ext_plasma_freq_min
-
 
     TYPE(injector_block), POINTER :: injector_x_min, injector_x_max
 
