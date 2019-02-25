@@ -192,8 +192,6 @@ CONTAINS
       DEALLOCATE(species_names)
 
       ! Sanity check on boundaries
-      nreturn = 0
-      return_sp = 0
       DO i = 1, n_species
         ! First, set the per-species boundary condition to the same value
         ! as bc_particle if it hasn't been set yet
@@ -245,8 +243,32 @@ CONTAINS
             IF (bc_allspecies(idx) /= bc) bc_allspecies(idx) = c_bc_mixed
           END IF
         END DO
+      END DO
+    ELSE
+      DEALLOCATE(species_charge_set)
+      DEALLOCATE(species_blocks)
+
+      ! Sanity check
+      DO i = 1, n_species
+        IF (species_list(i)%species_type == c_species_id_photon) CYCLE
+        IF (species_list(i)%mass > c_tiny) CYCLE
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) '*** ERROR ***'
+            WRITE(io,*) 'The species named "' // TRIM(species_list(i)%name) &
+                // '" must have a positive mass.'
+          END DO
+        END IF
+        CALL abort_code(c_err_bad_value)
+      END DO
+
+      nreturn = 0
+      return_sp = 0
+      DO i = 1, n_species
         !Sanity check return boundaries
         error = .FALSE.
+        bc_species = species_list(i)%bc_particle
         DO idx = 1, 2*c_ndims
           IF (bc_species(idx) == c_bc_return) THEN
            IF (idx == c_bd_x_min) THEN
@@ -274,9 +296,30 @@ CONTAINS
             WRITE(io,*) '*** WARNING ***'
             WRITE(io,*) 'Return boundaries can only be specified ', &
                 ' for x_min or x_max. Continuing using Thermal for ',&
-                'species', TRIM(species_list(i)%name)
+                'species ', TRIM(species_list(i)%name)
           END DO
         END IF
+        IF (return_sp == i) THEN
+          error = .FALSE.
+
+          IF (ABS(species_list(i)%charge) < c_tiny) error = .TRUE.
+#ifndef NO_TRACER_PARTICLES
+          error = (error .OR. species_list(i)%tracer)
+#endif
+          IF (error) THEN
+            IF (rank == 0) THEN
+              DO iu = 1, nio_units ! Print to stdout and to file
+                io = io_units(iu)
+                WRITE(io,*)
+                WRITE(io,*) '*** ERROR ***'
+                WRITE(io,*) 'Return boundary species must have non-zero', &
+                    ' charge and may not be a tracer species!'
+              END DO
+            END IF
+            CALL abort_code(c_err_bad_value)
+          END IF
+        END IF
+
         !Disable return bnds on all but first species
         !Again, continuation injectors would supersede thermal fallback
         IF (nreturn > 1 .AND. i .NE. return_sp) THEN
@@ -296,24 +339,6 @@ CONTAINS
             END DO
           END IF
         END IF
-      END DO
-    ELSE
-      DEALLOCATE(species_charge_set)
-      DEALLOCATE(species_blocks)
-
-      ! Sanity check
-      DO i = 1, n_species
-        IF (species_list(i)%species_type == c_species_id_photon) CYCLE
-        IF (species_list(i)%mass > c_tiny) CYCLE
-        IF (rank == 0) THEN
-          DO iu = 1, nio_units ! Print to stdout and to file
-            io = io_units(iu)
-            WRITE(io,*) '*** ERROR ***'
-            WRITE(io,*) 'The species named "' // TRIM(species_list(i)%name) &
-                // '" must have a positive mass.'
-          END DO
-        END IF
-        CALL abort_code(c_err_bad_value)
       END DO
 
       IF (track_ejected_particles) THEN
@@ -374,6 +399,7 @@ CONTAINS
       charge(n_species) = species_charge
       mass(n_species) = species_mass
       bc_particle_array(:, n_species) = species_bc_particle
+      IF (ANY(bc_particle_array == c_bc_return)) any_return = .TRUE.
       IF (n_secondary_species_in_block > 0) THEN
         ! Create an empty species for each ionisation energy listed in species
         ! block
