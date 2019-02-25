@@ -1712,9 +1712,9 @@ CONTAINS
         THEN
       CALL sdf_read_array_info(sdf_handle, dims)
 
-      !3 sets of 2 values in 1-D
-      !In 2-d there are 3 sets of 2 strips etc
-      IF (ndims /= 1 .OR. dims(1) /= 3) THEN
+      !1 value per injector 1-D
+      !In 2-d there is one strip covering the x_min/max bnd etc
+      IF (ndims /= 1 .OR. dims(1) /= 1) THEN
         PRINT*, '*** WARNING ***'
         PRINT*, 'Number of values does not match number required.'
         PRINT*, 'Return boundaries may not operate correctly'
@@ -1728,6 +1728,7 @@ CONTAINS
           END IF
         END DO
       END DO
+
       IF (return_species == -1) RETURN
 
       ALLOCATE(values(dims(1)))
@@ -1738,15 +1739,10 @@ CONTAINS
       !Actually only the first two NEED storing
       !But is not fun to extract the others from deck
       IF (boundary == c_bd_x_min) THEN
-        curr_species%net_px_min = values(1)
-        curr_species%ext_drift_x_min = values(2)
-        curr_species%ext_dens_x_min = values(3)
+        curr_species%ext_drift_x_min = values(1)
       ELSE IF (boundary == c_bd_x_max) THEN
-        curr_species%net_px_max = values(1)
-        curr_species%ext_drift_x_max = values(2)
-        curr_species%ext_dens_x_max = values(3)
+        curr_species%ext_drift_x_max = values(1)
       ENDIF
-
       DEALLOCATE(values)
     END IF
 

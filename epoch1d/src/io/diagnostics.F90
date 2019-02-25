@@ -926,11 +926,12 @@ CONTAINS
     INTEGER, INTENT(IN) :: boundary
     LOGICAL, INTENT(IN) :: runs_this_rank
 
-    REAL(num), DIMENSION(:), ALLOCATABLE :: values
+    REAL(num), DIMENSION(1):: val !An array to maintain sync w. higher dims
 
     TYPE(particle_species), POINTER :: curr_species
     INTEGER :: i, ispecies, return_species, ierr
 
+    IF (.NOT. any_return) RETURN
     return_species = -1
     DO ispecies = 1, n_species
       DO i = 1, c_ndims
@@ -941,28 +942,22 @@ CONTAINS
     END DO
 
     IF (return_species /= -1) THEN
-      ALLOCATE(values(3))
       curr_species => species_list(return_species)
       IF (boundary == c_bd_x_min) THEN
-        values(1) = curr_species%net_px_min
-        values(2) = curr_species%ext_drift_x_min
-        values(3) = curr_species%ext_dens_x_min
+        val = curr_species%ext_drift_x_min
       ELSE IF (boundary == c_bd_x_max) THEN
-        values(1) = curr_species%net_px_max
-        values(2) = curr_species%ext_drift_x_max
-        values(3) = curr_species%ext_dens_x_max
+        val = curr_species%ext_drift_x_max
       ENDIF
-      IF (.NOT. runs_this_rank) values = HUGE(0.0_num)
+      IF (.NOT. runs_this_rank) val = HUGE(0.0_num)
       IF (rank == 0) THEN
-        CALL MPI_Reduce(MPI_IN_PLACE, values, 3, mpireal, MPI_MIN, &
+        CALL MPI_Reduce(MPI_IN_PLACE, val, 1, mpireal, MPI_MIN, &
           0, MPI_COMM_WORLD, ierr)
       ELSE
-        CALL MPI_Reduce(values, values, 3, mpireal, MPI_MIN, &
+        CALL MPI_Reduce(val, val, 1, mpireal, MPI_MIN, &
           0, MPI_COMM_WORLD, ierr)
       END IF
       CALL sdf_write_srl(sdf_handle, TRIM(block_name), TRIM(block_name), &
-          3, values, 0)
-      DEALLOCATE(values)
+          1, val, 0)
     END IF
 
   END SUBROUTINE write_return_injectors
