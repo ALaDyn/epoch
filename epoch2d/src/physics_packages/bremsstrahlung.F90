@@ -422,16 +422,17 @@ CONTAINS
   ! epoch2d.F90
   SUBROUTINE bremsstrahlung_update_optical_depth
 
-    INTEGER :: ispecies, iZ, Z_temp
+    INTEGER :: ispecies, iZ, Z_temp, iArray, jArray
     TYPE(particle), POINTER :: current
     REAL(num), ALLOCATABLE :: grid_num_density_electron_temp(:,:)
     REAL(num), ALLOCATABLE :: grid_num_density_electron(:,:)
     REAL(num), ALLOCATABLE :: grid_temperature_electron_temp(:,:)
     REAL(num), ALLOCATABLE :: grid_temperature_electron(:,:)
+    REAL(num), ALLOCATABLE :: grid_root_temp_over_num(:,:)
     REAL(num) :: grid_num_density_ion(1-ng:nx+ng, 1-ng:ny+ng)
     REAL(num) :: part_ux, part_uy, part_uz, gamma_rel
     REAL(num) :: part_x, part_y, part_E, part_ni, part_v
-    REAL(num) :: part_ne, electron_temperature, plasma_factor
+    REAL(num) :: part_root_Te_over_ne, plasma_factor
 
     ! Calculate electron number density and temperature, summed over all
     ! electron species
@@ -441,6 +442,7 @@ CONTAINS
       ALLOCATE(grid_num_density_electron(1-ng:nx+ng, 1-ng:ny+ng))
       ALLOCATE(grid_temperature_electron_temp(1-ng:nx+ng, 1-ng:ny+ng))
       ALLOCATE(grid_temperature_electron(1-ng:nx+ng, 1-ng:ny+ng))
+      ALLOCATE(grid_root_temp_over_num(1-ng:nx+ng, 1-ng:ny+ng))
       grid_num_density_electron = 0.0_num
       grid_temperature_electron = 0.0_num
 
@@ -459,8 +461,24 @@ CONTAINS
       grid_temperature_electron = grid_temperature_electron / &
           grid_num_density_electron
 
+      DO jArray = 1-ng, ny+ng
+        DO iArray = 1-ng, nx+ng
+          IF (grid_num_density_electron(iArray, jArray) < 1.0e-10_num) THEN
+            grid_root_temp_over_num(iArray,jArray) = 0.0_num
+          ELSE IF (grid_temperature_electron(iArray, jArray) < 1.0e-10_num) THEN
+            grid_root_temp_over_num(iArray,jArray) = 0.0_num
+          ELSE
+            grid_root_temp_over_num(iArray, jArray) = &
+                SQRT(grid_temperature_electron(iArray, jArray) / &
+                grid_num_density_electron(iArray, jArray))
+          END IF
+        END DO
+      END DO
+
       DEALLOCATE(grid_num_density_electron_temp)
       DEALLOCATE(grid_temperature_electron_temp)
+      DEALLOCATE(grid_num_density_electron)
+      DEALLOCATE(grid_temperature_electron)
 
     ELSE
 
@@ -519,14 +537,12 @@ CONTAINS
             IF (use_plasma_screening) THEN
 
               !Obtain extra parameters needed for plasma screening model
-              CALL grid_centred_var_at_particle(part_x, part_y, part_ne, iZ, &
-                  grid_num_density_electron)
               CALL grid_centred_var_at_particle(part_x, part_y, &
-                  electron_temperature, iZ, grid_temperature_electron)
+                  part_root_Te_over_ne, iZ, grid_root_temp_over_num)
 
               plasma_factor = get_plasma_factor( &
                   NINT(species_list(iZ)%charge/q0), Z_temp, &
-                  electron_temperature, part_ne)
+                  part_root_Te_over_ne)
 
             END IF
 
@@ -551,8 +567,7 @@ CONTAINS
     END DO
 
     IF (use_plasma_screening) THEN
-      DEALLOCATE(grid_num_density_electron)
-      DEALLOCATE(grid_temperature_electron)
+      DEALLOCATE(grid_root_temp_over_num)
     END IF
 
   END SUBROUTINE bremsstrahlung_update_optical_depth
@@ -586,30 +601,23 @@ CONTAINS
   ! Calculate the enhancement of the cross section due to plasma screening
   ! Z: Charge of ion species
   ! A: Atomic number of ion species
-  ! Te: Temperature of background electron species at the electron
-  ! part_ne: Number density of background electron species at the electron
-  FUNCTION get_plasma_factor(Z, A, Te, part_ne)
+  ! part_root_Te_over_ne: Number density of background electron species at the
+  !                       electron divided by the temperature of this species,
+  !                       evaluated at the electron position.
+  FUNCTION get_plasma_factor(Z, A, part_root_Te_over_ne)
 
     INTEGER, INTENT(in) :: A, Z
-    REAL(num), INTENT(in) :: Te, part_ne
+    REAL(num), INTENT(in) :: part_root_Te_over_ne
     REAL(num) :: A_third, term1, term2
     REAL(num) :: get_plasma_factor
 
-    ! Code will break if Te or ne are zero. Assume atomic screening in this case
-    IF (part_ne < 1.0e-10_num .OR. Te < 1.0e-10_num) THEN
+    A_third = A**(1.0_num/3.0_num)
+    term1 = LOG(plasma_screen_const_1/A_third)
+    term2 = LOG(plasma_screen_const_2 * part_root_Te_over_ne * A_third)
+    get_plasma_factor = 1.0_num + &
+       ((REAL(Z,num)/REAL(A,num))**2 * term2 / term1)
+    get_plasma_factor = MAX(1.0_num, get_plasma_factor)
 
-      get_plasma_factor = 1.0_num
-
-    ELSE
-
-      A_third = A**(1.0_num/3.0_num)
-      term1 = LOG(plasma_screen_const_1/A_third)
-      term2 = LOG(plasma_screen_const_2 * SQRT(Te/part_ne) * A_third)
-      get_plasma_factor = 1.0_num + &
-         ((REAL(Z,num)/REAL(A,num))**2 * term2 / term1)
-      get_plasma_factor = MAX(1.0_num, get_plasma_factor)
-
-    END IF
 
   END FUNCTION get_plasma_factor
 
