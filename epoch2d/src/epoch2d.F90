@@ -51,6 +51,7 @@ PROGRAM pic
   USE calc_df
   USE injectors
   USE current_smooth
+  USE return_boundary
 #ifdef PHOTONS
   USE photons
 #endif

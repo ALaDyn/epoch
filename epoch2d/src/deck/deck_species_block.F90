@@ -274,7 +274,7 @@ CONTAINS
             WRITE(io,*) '*** WARNING ***'
             WRITE(io,*) 'Return boundaries can only be specified ', &
                 ' for x_min or x_max. Continuing using Thermal for ',&
-                'species', TRIM(species_list(i)%name)
+                'species ', TRIM(species_list(i)%name)
           END DO
         END IF
         !Disable return bnds on all but first species

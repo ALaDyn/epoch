@@ -482,7 +482,7 @@ dist_fn.o: dist_fn.F90 mpi_subtype_control.o particles.o $(SDFMOD)
 epoch2d.o: epoch2d.F90 balance.o calc_df.o collisions.o current_smooth.o \
   deck.o diagnostics.o fields.o finish.o helper.o ic_module.o injectors.o \
   ionise.o mpi_routines.o particle_migration.o particles.o photons.o setup.o \
-  split_particle.o welcome.o window.o
+  return_boundary.o split_particle.o welcome.o window.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
 evaluate.o: evaluate.F90 shunt.o stack.o
 evaluator_blocks.o: evaluator_blocks.F90 custom_parser.o stack.o strings.o
