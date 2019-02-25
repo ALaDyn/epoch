@@ -62,9 +62,8 @@ CONTAINS
     END IF
 
     ! Load the tables for the bremsstrahlung routines
-    IF (.NOT. use_plasma_screening) THEN
-      CALL setup_tables_bremsstrahlung
-    END IF
+    CALL setup_tables_bremsstrahlung
+
     IF (.NOT. ic_from_restart) THEN
       DO ispecies = 1, n_species
         CALL initialise_optical_depth(species_list(ispecies))
@@ -226,7 +225,7 @@ CONTAINS
         ! In the table, rows correspond to constant electron energy, and columns
         ! at different photon energies, k. Data taken from Geant4 scaled
         ! differential cross section libraries, and processed to include a cut
-        ! off k for each electron energy which ignores a fraction (1e-9) of the
+        ! off k for each electron energy. This ignores a fraction (1e-9) of the
         ! radiated energy produced by the lowest energy photons. This is for
         ! consistency with photons.F90.
         READ(lu,*) size_k, size_T
@@ -403,16 +402,14 @@ CONTAINS
 
     INTEGER :: i
 
-    IF (.NOT. use_plasma_screening) THEN
-      DO i = 1,size_brem_array
-        DEALLOCATE(brem_array(i)%k_table)
-        DEALLOCATE(brem_array(i)%cdf_table)
-        DEALLOCATE(brem_array(i)%cross_section)
-        DEALLOCATE(brem_array(i)%E_table)
-      END DO
+    DO i = 1,size_brem_array
+      DEALLOCATE(brem_array(i)%k_table)
+      DEALLOCATE(brem_array(i)%cdf_table)
+      DEALLOCATE(brem_array(i)%cross_section)
+      DEALLOCATE(brem_array(i)%E_table)
+    END DO
 
-      DEALLOCATE(brem_array)
-    END IF
+    DEALLOCATE(brem_array)
 
   END SUBROUTINE deallocate_tables_bremsstrahlung
 
@@ -434,7 +431,7 @@ CONTAINS
     REAL(num) :: grid_num_density_ion(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng)
     REAL(num) :: part_ux, part_uy, part_uz, gamma_rel
     REAL(num) :: part_x, part_y, part_z, part_E, part_ni, part_v
-    REAL(num) :: part_ne, electron_temperature
+    REAL(num) :: part_ne, electron_temperature, plasma_factor
 
     ! Calculate electron number density and temperature, summed over all
     ! electron species
@@ -466,6 +463,13 @@ CONTAINS
 
       DEALLOCATE(grid_num_density_electron_temp)
       DEALLOCATE(grid_temperature_electron_temp)
+
+    ELSE
+
+      ! This will neglect thermal contributions to the bremsstrahlung cross
+      ! section
+      plasma_factor = 1.0_num
+
     END IF
 
     ! Calculate the number density of each ion species
@@ -523,19 +527,16 @@ CONTAINS
               CALL grid_centred_var_at_particle(part_x, part_y, part_z, &
                   electron_temperature, iZ, grid_temperature_electron)
 
-              current%optical_depth_bremsstrahlung = &
-                  current%optical_depth_bremsstrahlung &
-                  - delta_optical_depth_plasma( &
+              plasma_factor = get_plasma_factor( &
                   NINT(species_list(iZ)%charge/q0), Z_temp, &
-                  electron_temperature, part_ne, part_v, part_ni)
-
-            ELSE
-
-              current%optical_depth_bremsstrahlung = &
-                  current%optical_depth_bremsstrahlung &
-                  - delta_optical_depth_atomic(Z_temp, part_E, part_v, part_ni)
+                  electron_temperature, part_ne)
 
             END IF
+
+            current%optical_depth_bremsstrahlung = &
+                current%optical_depth_bremsstrahlung &
+                - delta_optical_depth(Z_temp, part_E, part_v, part_ni, &
+                plasma_factor)
 
             ! If optical depth dropped below zero generate photon and reset
             ! optical depth
@@ -564,68 +565,56 @@ CONTAINS
   ! Calculate the change in optical depth during this timestep, given by:
   ! (ion number density) * (emission cross section) * (distance traversed)
   ! Here, cross sections are determined from Geant4 look-up tables
-  FUNCTION delta_optical_depth_atomic(Z, part_E, part_v, part_ni)
+  FUNCTION delta_optical_depth(Z, part_E, part_v, part_ni, plasma_factor)
 
     INTEGER, INTENT(in) :: Z
-    REAL(num), INTENT(in) :: part_E, part_v, part_ni
+    REAL(num), INTENT(in) :: part_E, part_v, part_ni, plasma_factor
     INTEGER :: brem_index
     REAL(num) :: cross_sec_val
-    REAL(num) :: delta_optical_depth_atomic
+    REAL(num) :: delta_optical_depth
 
     brem_index = Z_to_index(Z)
 
     cross_sec_val = find_value_from_table_1d(part_E, &
         brem_array(brem_index)%size_T, brem_array(brem_index)%E_table, &
-        brem_array(brem_index)%cross_section)
+        brem_array(brem_index)%cross_section) * plasma_factor
 
-    delta_optical_depth_atomic = part_ni * cross_sec_val * part_v * dt &
+    delta_optical_depth = part_ni * cross_sec_val * part_v * dt &
         / photon_weight
 
-  END FUNCTION delta_optical_depth_atomic
+  END FUNCTION delta_optical_depth
 
 
 
-  ! Calculate the change in optical depth during this timestep, given by:
-  ! (ion number density) * (emission cross section) * (distance traversed)
-  ! Here, cross sections are deduced from the plasma screening model.
+  ! Calculate the enhancement of the cross section due to plasma screening
   ! Z: Charge of ion species
   ! A: Atomic number of ion species
   ! Te: Temperature of background electron species at the electron
   ! part_ne: Number density of background electron species at the electron
-  ! part_v: Speed of electron to have optical depth updated
-  ! part_ni: Number density of ion species at the electron
-  FUNCTION delta_optical_depth_plasma(Z, A, Te, part_ne, part_v, part_ni)
+  FUNCTION get_plasma_factor(Z, A, Te, part_ne)
 
     INTEGER, INTENT(in) :: A, Z
-    REAL(num), INTENT(in) :: Te, part_ne, part_v, part_ni
-    INTEGER :: brem_index
-    REAL(num) :: cross_sec_val, plasma_screen
-    REAL(num) :: delta_optical_depth_plasma
+    REAL(num), INTENT(in) :: Te, part_ne
+    REAL(num) :: A_third, term1, term2
+    REAL(num) :: get_plasma_factor
 
     ! Code will break if Te or ne are zero. Assume atomic screening in this case
-    IF (part_ne < 1.0e-50_num .OR. Te < 1.0e-10_num) THEN
-      plasma_screen = 0.0_num
+    IF (part_ne < 1.0e-10_num .OR. Te < 1.0e-10_num) THEN
+
+      get_plasma_factor = 1.0_num
+
     ELSE
-      plasma_screen = &
-        LOG(plasma_screen_const_3 * SQRT(Te/part_ne) * A**(1.0_num/3.0_num))
+
+      A_third = A**(1.0_num/3.0_num)
+      term1 = LOG(plasma_screen_const_1/A_third)
+      term2 = LOG(plasma_screen_const_2 * SQRT(Te/part_ne) * A_third)
+      get_plasma_factor = 1.0_num + &
+         ((REAL(Z,num)/REAL(A,num))**2 * term2 / term1)
+      get_plasma_factor = MAX(1.0_num, get_plasma_factor)
+
     END IF
 
-    ! Obtain emission cross section
-    IF (Z > 0) THEN
-      cross_sec_val = plasma_screen_const_1 * Z**2 * (A**2 / Z**2 * &
-          LOG(plasma_screen_const_2 * A**(-1.0_num/3.0_num)) + plasma_screen)
-    ELSE
-      cross_sec_val = plasma_screen_const_1 * A**2 * &
-          LOG(plasma_screen_const_2 * A**(-1.0_num/3.0_num))
-    END IF
-    delta_optical_depth_plasma = part_ni * cross_sec_val * part_v * dt &
-        / photon_weight
-
-    IF (delta_optical_depth_plasma < 0.0_num) THEN
-      delta_optical_depth_plasma = 0.0_num
-    END IF
-
-  END FUNCTION delta_optical_depth_plasma
+  END FUNCTION get_plasma_factor
 
 
 
@@ -663,15 +652,11 @@ CONTAINS
 
     ! Determine photon energy
     rand_temp = random()
-    IF (use_plasma_screening) THEN
-      photon_energy = 10.0_num**(9.0_num*(random()-1.0_num))*part_E
-    ELSE
-      brem_index = Z_to_index(Z)
-      photon_energy = find_value_from_table_alt(part_E, rand_temp, &
-          brem_array(brem_index)%size_T, brem_array(brem_index)%size_k, &
-          brem_array(brem_index)%E_table, brem_array(brem_index)%k_table, &
-          brem_array(brem_index)%cdf_table)
-    END IF
+    brem_index = Z_to_index(Z)
+    photon_energy = find_value_from_table_alt(part_E, rand_temp, &
+        brem_array(brem_index)%size_T, brem_array(brem_index)%size_k, &
+        brem_array(brem_index)%E_table, brem_array(brem_index)%k_table, &
+        brem_array(brem_index)%cdf_table)
 
     ! Calculate electron recoil
     IF (use_bremsstrahlung_recoil) THEN

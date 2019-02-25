@@ -27,40 +27,36 @@ end:control
 
 
 begin:bremsstrahlung
- 
+
   use_bremsstrahlung = T # Turn on or off bremsstrahlung radiation
- 
+
   start_time = 0 # Time after which QED effects should start.
- 
+
   produce_photons = T # Should the code actually produce and track photons.
                       # If F then the code calculates the recoil due to emitting
                       # photons, but the photon is not tracked. qed must be on
                       # to Ever produce photons
-      
+
   photon_energy_min = 1 * kev  # Minimum energy for a tracked photon. Photons
                                # emitted with lower energy still cause electron
                                # recoil but are not tracked
-        
+
   photon_weight = 1.0 # Lowers the macroparticle weight of produced photons to
-                      # allow sampling of more photons. Must be  set in the 
-                      # range  0.0 < photon_weight <= 1.0  
-      
+                      # allow sampling of more photons. Must be  set in the
+                      # range  0.0 < photon_weight <= 1.0
+
   photon_dynamics = F # Quite often you're more interested in where photons are
                       # generated than where they propagate to. This option
                       # stops the core code from moving the photons.
                       # This is also much faster.
-         
+
   use_bremsstrahlung_recoil = T # Do we recoil electrons after emission of a
                                 # photon?
-              
-  use_atomic_screening = T # From experimental data, suitable for atomic   
-                           # targets.
 
-  use_plasma_screening = F # From theory, suitable for ionised targets. If both 
-                           # atomic and plasma screening are turned off, an
-                           # unscreened model will be used, suitable for fully 
-                           # ionised targets with no electrons around (default).
-           
+  use_plasma_screening = F # From theory, calculates cross section enhancement
+                           # due to reduced screening of the nuclear charge for
+                           # ionised atoms.
+
 end:bremsstrahlung
 
 
@@ -84,15 +80,15 @@ begin:species
   dump = T
 
 
-  # Put 10^5 electrons in the first cell in x, between y=0 and y=(1 cell width) 
-  # (needs even ny), and z=0 and z=(1 cell width) (needs even nz)   
+  # Put 10^5 electrons in the first cell in x, between y=0 and y=(1 cell width)
+  # (needs even ny), and z=0 and z=(1 cell width) (needs even nz)
   rho = 1.0e5 * nx * ny * nz / ((x_max - x_min)*(y_max - y_min)*(z_max - z_min))
   rho = if (x lt x_max/nx, density(Electron_Beam), 0)
   rho = if (y gt 0, density(Electron_Beam), 0)
-  rho = if (y lt 1 * (y_max - y_min) / ny, density(Electron_Beam), 0 ) 
+  rho = if (y lt 1 * (y_max - y_min) / ny, density(Electron_Beam), 0 )
   rho = if (z gt 0, density(Electron_Beam), 0)
-  rho = if (z lt 1 * (z_max - z_min) / nz, density(Electron_Beam), 0 ) 
-  
+  rho = if (z lt 1 * (z_max - z_min) / nz, density(Electron_Beam), 0 )
+
   minrho = 1
   temp = 0
   drift_x = 5.341e-20  # kgm/s (5.341e-20 = 100 MeV/c)
@@ -103,11 +99,11 @@ end:species
 
 
 begin:species
-  
+
   # Target information
   name = Aluminium
   atomic_number = 13
-  mass = 49218        # Units of electron mass 
+  mass = 49218        # Units of electron mass
   rho = 6.022e28      # m^{-3}
 
   # name = Gold
@@ -128,13 +124,13 @@ end:species
 
 begin:species
 
-  # Species for bremsstrahlung photons 
-  name = Photon  
+  # Species for bremsstrahlung photons
+  name = Photon
   npart = 0
-  dump = T 
- 
+  dump = T
+
  identify:brem_photon
- 
+
 end:species
 
 

@@ -34,7 +34,7 @@ CONTAINS
     IF (deck_state == c_ds_first) THEN
       bremsstrahlung_table_location = 'src/physics_packages/TABLES/br'
       use_bremsstrahlung_recoil = .TRUE.
-    ENDIF
+    END IF
 #endif
 
 END SUBROUTINE bremsstrahlung_deck_initialise
@@ -57,10 +57,10 @@ END SUBROUTINE bremsstrahlung_deck_initialise
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'Unable to find bremsstrahlung tables in the ', &
               'directory "' // TRIM(bremsstrahlung_table_location) // '"'
-        ENDDO
+        END DO
         CALL abort_code(c_err_io_error)
-      ENDIF
-    ENDIF
+      END IF
+    END IF
 
     IF (use_bremsstrahlung) need_random_state = .TRUE.
 #else
@@ -73,10 +73,10 @@ END SUBROUTINE bremsstrahlung_deck_initialise
               ' "bremsstrahlung" block.'
           WRITE(io,*) 'Please recompile with the -DBREMSSTRAHLUNG', &
               'preprocessor flag.'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       CALL abort_code(c_err_pp_options_missing)
-    ENDIF
+    END IF
 #endif
 
 END SUBROUTINE bremsstrahlung_deck_finalise
@@ -108,61 +108,55 @@ END SUBROUTINE bremsstrahlung_deck_finalise
         .OR. str_cmp(element, 'bremsstrahlung')) THEN
       use_bremsstrahlung = as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
 #ifdef BREMSSTRAHLUNG
     IF (str_cmp(element, 'bremsstrahlung_start_time') &
         .OR. str_cmp(element, 'start_time')) THEN
       bremsstrahlung_start_time = as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'produce_bremsstrahlung_photons') &
         .OR. str_cmp(element, 'produce_photons')) THEN
       produce_bremsstrahlung_photons = as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'use_bremsstrahlung_recoil') &
         .OR. str_cmp(element, 'use_radiation_reaction')) THEN
       use_bremsstrahlung_recoil = as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'photon_energy_min') &
         .OR. str_cmp(element, 'min_photon_energy') &
         .OR. str_cmp(element, 'photon_energy_min_bremsstrahlung')) THEN
       photon_energy_min_bremsstrahlung = as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'photon_weight') &
         .OR. str_cmp(element, 'photon_weight_multiplier')) THEN
       photon_weight = as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'bremsstrahlung_table_location')) THEN
       bremsstrahlung_table_location = TRIM(ADJUSTL(value))
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'photon_dynamics') &
         .OR. str_cmp(element, 'bremsstrahlung_photon_dynamics')) THEN
       bremsstrahlung_photon_dynamics = as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
-
-    IF (str_cmp(element, 'use_atomic_screening') &
-        .OR. str_cmp(element, 'use_screening')) THEN
-      use_atomic_screening = as_logical_print(value, element, errcode)
-      RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'use_plasma_screening')) THEN
       use_plasma_screening = as_logical_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     errcode = c_err_unknown_element
 #endif
@@ -192,10 +186,10 @@ END FUNCTION bremsstrahlung_block_handle_element
               to zero. To prevent bremsstrahlung photons from being emitted, &
               set use_bremsstrahlung = F.'
           WRITE(io,*) 'Code will terminate.'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       errcode = c_err_bad_value + c_err_terminate
-    ENDIF
+    END IF
 
     IF (photon_weight > 1.0_num) THEN
       photon_weight = 1.0_num
@@ -206,23 +200,9 @@ END FUNCTION bremsstrahlung_block_handle_element
           WRITE(io,*) '*** WARNING ***'
           WRITE(io,*) 'You cannot set photon_weight > 1.0. This variable &
               been truncated to 1.0.'
-        ENDDO
-      ENDIF
-    ENDIF
-
-    IF (use_atomic_screening .AND. use_plasma_screening) THEN
-      IF (rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*)
-          WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'You cannot set both use_atomic_screening = T and &
-              use_plasma_screening = T'
-          WRITE(io,*) 'Code will terminate.'
-        ENDDO
-      ENDIF
-      errcode = c_err_bad_value + c_err_terminate
-    ENDIF
+        END DO
+      END IF
+    END IF
 #endif
 
 END FUNCTION bremsstrahlung_block_check

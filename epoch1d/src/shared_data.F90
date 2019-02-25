@@ -183,10 +183,8 @@ MODULE constants
   ! Constants used for bremsstrahlung with plasma screening
 #ifdef BREMSSTRAHLUNG
   REAL(num), PARAMETER :: e_radius = 1.0_num/4_num/pi/epsilon0*q0**2/m0/c**2
-  REAL(num), PARAMETER :: plasma_screen_const_1 = 16.0_num / 3.0_num * alpha * &
-      e_radius**2 * LOG(1.0e9_num)
-  REAL(num), PARAMETER :: plasma_screen_const_2 = 1.4_num / alpha
-  REAL(num), PARAMETER :: plasma_screen_const_3 = SQRT(epsilon0 * kb / q0**2 ) &
+  REAL(num), PARAMETER :: plasma_screen_const_1 = 1.4_num / alpha
+  REAL(num), PARAMETER :: plasma_screen_const_2 = SQRT(epsilon0 * kb / q0**2 ) &
       * m0 * c * alpha / 1.4_num / h_bar
 #endif
 
@@ -1083,7 +1081,7 @@ MODULE shared_data
   REAL(num) :: photon_energy_min_bremsstrahlung = EPSILON(1.0_NUM)
   REAL(num) :: bremsstrahlung_start_time = 0.0_num
   REAL(num) :: photon_weight = 1.0_num
-  LOGICAL :: use_bremsstrahlung_recoil = .TRUE., use_atomic_screening = .FALSE.
+  LOGICAL :: use_bremsstrahlung_recoil = .TRUE.
   LOGICAL :: produce_bremsstrahlung_photons = .FALSE.
   LOGICAL :: bremsstrahlung_photon_dynamics = .FALSE.
   LOGICAL :: use_plasma_screening = .FALSE.
