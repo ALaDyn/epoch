@@ -207,10 +207,10 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)PARTICLE_ID4
 
 # Include QED routines
-DEFINES += $(D)PHOTONS
+#DEFINES += $(D)PHOTONS
 
 # Include bremsstrahlung routines
-DEFINES += $(D)BREMSSTRAHLUNG
+#DEFINES += $(D)BREMSSTRAHLUNG
 
 # Use the Trident process for pair production
 #DEFINES += $(D)TRIDENT_PHOTONS

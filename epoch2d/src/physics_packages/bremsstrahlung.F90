@@ -461,12 +461,13 @@ CONTAINS
       grid_temperature_electron = grid_temperature_electron / &
           grid_num_density_electron
 
+      ! Create a grid of sqrt(Te/ne) values
       DO jArray = 1-ng, ny+ng
         DO iArray = 1-ng, nx+ng
           IF (grid_num_density_electron(iArray, jArray) < 1.0e-10_num) THEN
-            grid_root_temp_over_num(iArray,jArray) = 0.0_num
+            grid_root_temp_over_num(iArray, jArray) = 0.0_num
           ELSE IF (grid_temperature_electron(iArray, jArray) < 1.0e-10_num) THEN
-            grid_root_temp_over_num(iArray,jArray) = 0.0_num
+            grid_root_temp_over_num(iArray, jArray) = 0.0_num
           ELSE
             grid_root_temp_over_num(iArray, jArray) = &
                 SQRT(grid_temperature_electron(iArray, jArray) / &
@@ -617,7 +618,6 @@ CONTAINS
     get_plasma_factor = 1.0_num + &
        ((REAL(Z,num)/REAL(A,num))**2 * term2 / term1)
     get_plasma_factor = MAX(1.0_num, get_plasma_factor)
-
 
   END FUNCTION get_plasma_factor
 

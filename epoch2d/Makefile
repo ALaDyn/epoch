@@ -210,7 +210,7 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)PHOTONS
 
 # Include bremsstrahlung routines
-DEFINES += $(D)BREMSSTRAHLUNG
+#DEFINES += $(D)BREMSSTRAHLUNG
 
 # Use the Trident process for pair production
 #DEFINES += $(D)TRIDENT_PHOTONS
