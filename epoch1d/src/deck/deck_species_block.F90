@@ -34,20 +34,20 @@ MODULE deck_species_block
 
   INTEGER :: species_id, current_block
   INTEGER(KIND=MPI_OFFSET_KIND) :: offset = 0
-  CHARACTER(LEN=string_length), DIMENSION(:), POINTER :: species_names
-  INTEGER, DIMENSION(:), POINTER :: species_blocks
+  CHARACTER(LEN=string_length), DIMENSION(:), ALLOCATABLE :: species_names
+  INTEGER, DIMENSION(:), ALLOCATABLE :: species_blocks
   LOGICAL :: got_name
   INTEGER :: check_block = c_err_none
   LOGICAL, DIMENSION(:), ALLOCATABLE :: species_charge_set
   INTEGER :: n_secondary_species_in_block
   CHARACTER(LEN=string_length) :: release_species_list
-  CHARACTER(LEN=string_length), DIMENSION(:), POINTER :: release_species
-  REAL(num), DIMENSION(:), POINTER :: species_ionisation_energies
-  REAL(num), DIMENSION(:), POINTER :: ionisation_energies
-  REAL(num), DIMENSION(:), POINTER :: mass, charge
-  INTEGER, DIMENSION(:), POINTER :: principle, angular, part_count
-  INTEGER, DIMENSION(:), POINTER :: ionise_to_species, dumpmask_array
-  INTEGER, DIMENSION(:,:), POINTER :: bc_particle_array
+  CHARACTER(LEN=string_length), DIMENSION(:), ALLOCATABLE :: release_species
+  REAL(num), DIMENSION(:), ALLOCATABLE :: species_ionisation_energies
+  REAL(num), DIMENSION(:), ALLOCATABLE :: ionisation_energies
+  REAL(num), DIMENSION(:), ALLOCATABLE :: mass, charge
+  INTEGER, DIMENSION(:), ALLOCATABLE :: principle, angular, part_count
+  INTEGER, DIMENSION(:), ALLOCATABLE :: ionise_to_species, dumpmask_array
+  INTEGER, DIMENSION(:,:), ALLOCATABLE :: bc_particle_array
   REAL(num) :: species_mass, species_charge
   INTEGER :: species_dumpmask
   INTEGER, DIMENSION(2*c_ndims) :: species_bc_particle
@@ -156,7 +156,7 @@ CONTAINS
             j = species_list(j)%ionise_to_species
           END DO
         ! If there's a list of release species use it
-        ELSEIF (nlevels == nrelease) THEN
+        ELSE IF (nlevels == nrelease) THEN
           nlevels = 1
           j = i
           DO WHILE(species_list(j)%ionise)
@@ -231,7 +231,7 @@ CONTAINS
         DO idx = 1, 2*c_ndims
           bc = bc_species(idx)
 
-          IF (bc == c_bc_reflect .OR. bc == c_bc_thermal) THEN
+          IF (bc == c_bc_reflect) THEN
             bc = c_bc_reflect
           ELSE IF (bc /= c_bc_periodic) THEN
             bc = c_bc_open
@@ -346,9 +346,12 @@ CONTAINS
     INTEGER :: errcode
     TYPE(primitive_stack) :: stack
     REAL(num) :: dmin, mult
+    REAL(num), TARGET :: dummy(1)
+    REAL(num), POINTER :: array(:)
     CHARACTER(LEN=string_length) :: filename, mult_string
     LOGICAL :: got_file, dump
     INTEGER :: i, j, io, iu, n
+    TYPE(initial_condition_block), POINTER :: ic
 
     errcode = c_err_none
     IF (value == blank .OR. element == blank) RETURN
@@ -369,7 +372,6 @@ CONTAINS
     IF (str_cmp(element, 'ionisation_energies') &
         .OR. str_cmp(element, 'ionization_energies')) THEN
       IF (deck_state == c_ds_first) THEN
-        NULLIFY(species_ionisation_energies)
         CALL initialise_stack(stack)
         CALL tokenize(value, stack, errcode)
         CALL evaluate_and_return_all(stack, &
@@ -418,7 +420,42 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'bc_y_min')) THEN
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_y_max')) THEN
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_z_min')) THEN
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_z_max')) THEN
+      RETURN
+    END IF
+
     IF (deck_state == c_ds_first) RETURN
+
+    ! This sets up whether or not to use the MJ sampler for a species.
+    ! It could go in the first deck pass, but that requires more temporary
+    ! variables and seems unnecessary
+    IF (str_cmp(element, 'use_maxwell_juettner') &
+        .OR. str_cmp(element, 'use_maxwell_juttner')) THEN
+      IF (as_logical_print(value, element, errcode)) THEN
+        species_list(species_id)%ic_df_type = c_ic_df_relativistic_thermal
+      ELSE
+        species_list(species_id)%ic_df_type = c_ic_df_thermal
+      END IF
+      RETURN
+    ENDIF
+
+    IF (str_cmp(element, 'fractional_tail_cutoff')) THEN
+      species_list(species_id)%fractional_tail_cutoff = &
+          as_real_print(value, element, errcode)
+      RETURN
+    ENDIF
 
     ! *************************************************************
     ! This section identifies a species. Generic
@@ -532,6 +569,22 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'bc_y_min')) THEN
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_y_max')) THEN
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_z_min')) THEN
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'bc_z_max')) THEN
+      RETURN
+    END IF
+
     ! *************************************************************
     ! This section sets properties for tracer particles
     ! *************************************************************
@@ -596,13 +649,15 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'promote_density')) THEN
+    IF (str_cmp(element, 'promote_density') &
+        .OR. str_cmp(element, 'promote_number_density')) THEN
       species_list(species_id)%migrate%promotion_density = &
           as_real_print(value, element, errcode)
       RETURN
     END IF
 
-    IF (str_cmp(element, 'demote_density')) THEN
+    IF (str_cmp(element, 'demote_density') &
+        .OR. str_cmp(element, 'demote_number_density')) THEN
       species_list(species_id)%migrate%demotion_density = &
           as_real_print(value, element, errcode)
       RETURN
@@ -615,20 +670,23 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'density_min') .OR. str_cmp(element, 'minrho')) THEN
+    IF (str_cmp(element, 'density_min') .OR. str_cmp(element, 'minrho') &
+        .OR. str_cmp(element, 'number_density_min')) THEN
       dmin = as_real_print(value, element, errcode)
       IF (dmin <= 0.0_num) dmin = EPSILON(1.0_num)
       species_list(species_id)%initial_conditions%density_min = dmin
       RETURN
     END IF
 
-    IF (str_cmp(element, 'density_max') .OR. str_cmp(element, 'maxrho')) THEN
+    IF (str_cmp(element, 'density_max') .OR. str_cmp(element, 'maxrho') &
+        .OR. str_cmp(element, 'number_density_max')) THEN
       species_list(species_id)%initial_conditions%density_max = &
           as_real_print(value, element, errcode)
       RETURN
     END IF
 
-    IF (str_cmp(element, 'density_back')) THEN
+    IF (str_cmp(element, 'density_back') &
+        .OR. str_cmp(element, 'number_density_back')) THEN
       species_list(species_id)%initial_conditions%density_back = &
           as_real_print(value, element, errcode)
       RETURN
@@ -639,6 +697,7 @@ CONTAINS
     mult = 1.0_num
 
     IF (str_cmp(element, 'density') .OR. str_cmp(element, 'rho') &
+        .OR. str_cmp(element, 'number_density') &
         .OR. str_cmp(element, 'mass_density')) THEN
 
       IF (str_cmp(element, 'mass_density')) THEN
@@ -646,33 +705,98 @@ CONTAINS
         mult_string = '/ species_list(species_id)%mass'
       END IF
 
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%density)) THEN
+          ALLOCATE(ic%density(1-ng:nx+ng))
+        END IF
+        array => ic%density
+      ELSE
+        array => dummy
+      END IF
+
       CALL fill_array(species_list(species_id)%density_function, &
-          species_list(species_id)%initial_conditions%density, &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       RETURN
     END IF
 
     IF (str_cmp(element, 'drift_x')) THEN
       n = 1
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%drift)) THEN
+          ALLOCATE(ic%drift(1-ng:nx+ng,3))
+        END IF
+        array => ic%drift(:,n)
+      ELSE
+        array => dummy
+      END IF
+
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          species_list(species_id)%initial_conditions%drift(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       RETURN
     END IF
 
     IF (str_cmp(element, 'drift_y')) THEN
       n = 2
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%drift)) THEN
+          ALLOCATE(ic%drift(1-ng:nx+ng,3))
+        END IF
+        array => ic%drift(:,n)
+      ELSE
+        array => dummy
+      END IF
+
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          species_list(species_id)%initial_conditions%drift(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       RETURN
     END IF
 
     IF (str_cmp(element, 'drift_z')) THEN
       n = 3
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%drift)) THEN
+          ALLOCATE(ic%drift(1-ng:nx+ng,3))
+        END IF
+        array => ic%drift(:,n)
+      ELSE
+        array => dummy
+      END IF
+
       CALL fill_array(species_list(species_id)%drift_function(n), &
-          species_list(species_id)%initial_conditions%drift(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'dist_fn')) THEN
+      species_list(species_id)%ic_df_type = c_ic_df_arbitrary
+      CALL initialise_stack(species_list(species_id)%dist_fn)
+      CALL tokenize(value, species_list(species_id)%dist_fn, errcode)
+      species_list(species_id)%dist_fn%should_simplify = .FALSE.
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'dist_fn_px_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(1))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(1))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(1), errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'dist_fn_py_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(2))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(2))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(2), errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'dist_fn_pz_range')) THEN
+      CALL deallocate_stack(species_list(species_id)%dist_fn_range(3))
+      CALL initialise_stack(species_list(species_id)%dist_fn_range(3))
+      CALL tokenize(value, species_list(species_id)%dist_fn_range(3), errcode)
       RETURN
     END IF
 
@@ -700,18 +824,27 @@ CONTAINS
         .OR. str_cmp(element, 'temp_ev')) THEN
       IF (str_cmp(element, 'temp_ev')) mult = ev / kb
 
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%temp)) THEN
+          ALLOCATE(ic%temp(1-ng:nx+ng,3))
+        END IF
+      ELSE
+        array => dummy
+      END IF
+
       n = 1
+      IF (got_file) array => ic%temp(:,n)
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          species_list(species_id)%initial_conditions%temp(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       n = 2
+      IF (got_file) array => ic%temp(:,n)
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          species_list(species_id)%initial_conditions%temp(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       n = 3
+      IF (got_file) array => ic%temp(:,n)
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          species_list(species_id)%initial_conditions%temp(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
 
       debug_mode = .FALSE.
       RETURN
@@ -762,9 +895,18 @@ CONTAINS
       IF (str_cmp(element, 'temp_x_ev')) mult = ev / kb
 
       n = 1
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%temp)) THEN
+          ALLOCATE(ic%temp(1-ng:nx+ng,3))
+        END IF
+        array => ic%temp(:,n)
+      ELSE
+        array => dummy
+      END IF
+
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          species_list(species_id)%initial_conditions%temp(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       RETURN
     END IF
 
@@ -773,9 +915,18 @@ CONTAINS
       IF (str_cmp(element, 'temp_y_ev')) mult = ev / kb
 
       n = 2
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%temp)) THEN
+          ALLOCATE(ic%temp(1-ng:nx+ng,3))
+        END IF
+        array => ic%temp(:,n)
+      ELSE
+        array => dummy
+      END IF
+
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          species_list(species_id)%initial_conditions%temp(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       RETURN
     END IF
 
@@ -784,9 +935,18 @@ CONTAINS
       IF (str_cmp(element, 'temp_z_ev')) mult = ev / kb
 
       n = 3
+      ic => species_list(species_id)%initial_conditions
+      IF (got_file) THEN
+        IF (.NOT. ALLOCATED(ic%temp)) THEN
+          ALLOCATE(ic%temp(1-ng:nx+ng,3))
+        END IF
+        array => ic%temp(:,n)
+      ELSE
+        array => dummy
+      END IF
+
       CALL fill_array(species_list(species_id)%temperature_function(n), &
-          species_list(species_id)%initial_conditions%temp(:,n), &
-          mult, mult_string, element, value, filename, got_file)
+          array, mult, mult_string, element, value, filename, got_file)
       RETURN
     END IF
 
@@ -998,8 +1158,8 @@ CONTAINS
     LOGICAL, INTENT(IN) :: got_file
     TYPE(stack_element) :: iblock
     TYPE(primitive_stack) :: stack
-    INTEGER :: io, iu, ix
-    TYPE(parameter_pack) :: parameters
+    INTEGER :: io, iu
+    REAL(num) :: tmp
 
     CALL initialise_stack(stack)
     IF (got_file) THEN
@@ -1028,7 +1188,7 @@ CONTAINS
           CALL tokenize(mult_string, stack, errcode)
 
       ! Sanity check
-      array(1) = evaluate(stack, errcode)
+      tmp = evaluate(stack, errcode)
       IF (errcode /= c_err_none) THEN
         IF (rank == 0) THEN
           DO iu = 1, nio_units ! Print to stdout and to file
@@ -1039,11 +1199,6 @@ CONTAINS
         END IF
         CALL abort_code(errcode)
       END IF
-
-      DO ix = 1-ng, nx+ng
-        parameters%pack_ix = ix
-        array(ix) = evaluate_with_parameters(stack, parameters, errcode)
-      END DO
     END IF
 
     CALL deallocate_stack(output)

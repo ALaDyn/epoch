@@ -27,7 +27,10 @@ MODULE setup
   USE window
   USE timer
   USE helper
+  USE balance
+  USE mpi_routines
   USE sdf
+  USE antennae
 
   IMPLICIT NONE
 
@@ -36,7 +39,7 @@ MODULE setup
   PUBLIC :: after_control, minimal_init, restart_data
   PUBLIC :: open_files, close_files, flush_stat_file
   PUBLIC :: setup_species, after_deck_last, set_dt
-  PUBLIC :: read_cpu_split, after_load
+  PUBLIC :: read_cpu_split, after_load, pre_load_balance
 
   TYPE(particle), POINTER, SAVE :: iterator_list
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
@@ -104,6 +107,10 @@ CONTAINS
     restart_dump_every = -1
     nsteps = -1
     t_end = HUGE(1.0_num)
+    n_zeros = 4
+    laser_inject_local = 0.0_num
+    laser_absorb_local = 0.0_num
+    old_elapsed_time = 0.0_num
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
     particles_max_id = 0
     n_cpu_bits = 0
@@ -115,7 +122,6 @@ CONTAINS
     NULLIFY(laser_y_min)
 
     NULLIFY(dist_fns)
-    NULLIFY(io_block_list)
 
     run_date = get_unix_time()
 
@@ -183,15 +189,44 @@ CONTAINS
 #ifdef PARTICLE_ID4
       n_cpu_bits = MAX(n_cpu_bits, 8)
 #else
-      n_cpu_bits = MAX(n_cpu_bits, 12)
+      n_cpu_bits = MAX(n_cpu_bits, 16)
 #endif
     END IF
     highest_id = 1
     cpu_id = rank
-    cpu_id = ISHFT(cpu_id, n_id_bits - 1_i8 - n_cpu_bits)
+    cpu_id = reverse_bits(cpu_id)
 #endif
 
   END SUBROUTINE setup_ids
+
+
+
+  !> Function to reverse the bits in a number and then shift down by
+  !> one bit to guarantee empty sign bit
+
+#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
+  FUNCTION reverse_bits(inval) RESULT(revval)
+
+    INTEGER(idkind), INTENT(IN) :: inval
+#ifdef PARTICLE_ID
+    INTEGER, PARAMETER :: nbits = 8 * 8 !8 bits per byte
+#else
+    INTEGER, PARAMETER :: nbits = 8 * 4 !8 bits per byte
+#endif
+    INTEGER(idkind) :: revval, tval, sval
+    INTEGER :: ibit
+
+    tval = 1_idkind
+    sval = ISHFT(1_idkind, INT(nbits, idkind) - 2_idkind)
+    revval = 0_idkind
+    DO ibit = 1, INT(nbits) - 1
+      IF (IAND(inval, tval) /= 0_idkind) revval = IOR(revval, sval)
+      tval = ISHFT(tval, 1_idkind)
+      sval = ISHFT(sval, -1_idkind)
+    END DO
+
+  END FUNCTION reverse_bits
+#endif
 
 
 
@@ -289,6 +324,11 @@ CONTAINS
     CALL setup_split_particles
     CALL setup_field_boundaries
 
+    cpml_x_min = .FALSE.
+    cpml_x_max = .FALSE.
+    cpml_y_min = .FALSE.
+    cpml_y_max = .FALSE.
+
     IF (cpml_boundaries) THEN
       CALL allocate_cpml_fields
       CALL set_cpml_helpers(nx, nx_global_min, nx_global_max, &
@@ -332,6 +372,10 @@ CONTAINS
 
     IF (.NOT. any_average) RETURN
 
+    averaged_var_dims = 1
+    averaged_var_dims(c_dump_ekflux) = 6
+    averaged_var_dims(c_dump_poynt_flux) = 3
+
     DO io = 1, n_io_blocks
       IF (io_block_list(io)%any_average) THEN
         dt_min_average = t_end
@@ -360,6 +404,7 @@ CONTAINS
             nspec_local = nspec_local + n_species
 
         IF (nspec_local <= 0) CYCLE
+        nspec_local = nspec_local * averaged_var_dims(io)
 
         avg => io_block_list(ib)%averaged_data(io)
         IF (avg%dump_single) THEN
@@ -373,9 +418,9 @@ CONTAINS
         avg%species_sum = 0
         avg%n_species = 0
         IF (IAND(mask, c_io_no_sum) == 0) &
-            avg%species_sum = 1
+            avg%species_sum = averaged_var_dims(io)
         IF (IAND(mask, c_io_species) /= 0) &
-            avg%n_species = n_species
+            avg%n_species = n_species * averaged_var_dims(io)
         avg%real_time = 0.0_num
         avg%started = .FALSE.
       END IF
@@ -410,11 +455,6 @@ CONTAINS
       species_list(ispecies)%immobile = .FALSE.
       NULLIFY(species_list(ispecies)%next)
       NULLIFY(species_list(ispecies)%prev)
-      NULLIFY(species_list(ispecies)%ext_temp_x_min)
-      NULLIFY(species_list(ispecies)%ext_temp_x_max)
-      NULLIFY(species_list(ispecies)%ext_temp_y_min)
-      NULLIFY(species_list(ispecies)%ext_temp_y_max)
-      NULLIFY(species_list(ispecies)%secondary_list)
       species_list(ispecies)%bc_particle = c_bc_null
     END DO
 
@@ -426,7 +466,12 @@ CONTAINS
         CALL set_stack_zero  (species_list(ispecies)%temperature_function(n))
         CALL initialise_stack(species_list(ispecies)%drift_function(n))
         CALL set_stack_zero  (species_list(ispecies)%drift_function(n))
+        CALL initialise_stack(species_list(ispecies)%dist_fn_range(n))
+        CALL set_stack_zero  (species_list(ispecies)%dist_fn_range(n), &
+            n_zeros=2)
       END DO
+      species_list(ispecies)%fractional_tail_cutoff = 0.0001_num
+      species_list(ispecies)%ic_df_type = c_ic_df_thermal
       species_list(ispecies)%electron = .FALSE.
       species_list(ispecies)%ionise = .FALSE.
       species_list(ispecies)%ionise_to_species = -1
@@ -445,7 +490,7 @@ CONTAINS
       species_list(ispecies)%migrate%demotion_energy_factor = 1.0_num
       species_list(ispecies)%migrate%promotion_density = HUGE(1.0_num)
       species_list(ispecies)%migrate%demotion_density = 0.0_num
-      species_list(ispecies)%fill_ghosts = .FALSE.
+      species_list(ispecies)%fill_ghosts = .TRUE.
 #ifndef NO_TRACER_PARTICLES
       species_list(ispecies)%tracer = .FALSE.
 #endif
@@ -623,6 +668,7 @@ CONTAINS
 
     INTEGER :: ispecies, ix, iy
     REAL(num) :: min_dt, omega2, omega, k_max, fac1, fac2, clipped_dens
+    TYPE(initial_condition_block), POINTER :: ic
 
     IF (ic_from_restart) RETURN
 
@@ -633,16 +679,19 @@ CONTAINS
     ! Note that this doesn't get strongly relativistic plasmas right
     DO ispecies = 1, n_species
       IF (species_list(ispecies)%species_type /= c_species_id_photon) THEN
+        CALL setup_ic_density(ispecies)
+        CALL setup_ic_temp(ispecies)
+
+        ic => species_list(ispecies)%initial_conditions
+
         fac1 = q0**2 / species_list(ispecies)%mass / epsilon0
         fac2 = 3.0_num * k_max**2 * kb / species_list(ispecies)%mass
-        IF (species_list(ispecies)%initial_conditions%density_max > 0) THEN
+        IF (ic%density_max > 0) THEN
           DO iy = 1, ny
           DO ix = 1, nx
-            clipped_dens = MIN(&
-                species_list(ispecies)%initial_conditions%density(ix,iy), &
-                species_list(ispecies)%initial_conditions%density_max)
-            omega2 = fac1 * clipped_dens + fac2 * MAXVAL(&
-                species_list(ispecies)%initial_conditions%temp(ix,iy,:))
+            clipped_dens = MIN(species_density(ix,iy), ic%density_max)
+            omega2 = fac1 * clipped_dens &
+                + fac2 * MAXVAL(species_temp(ix,iy,:))
             IF (omega2 <= c_tiny) CYCLE
             omega = SQRT(omega2)
             IF (2.0_num * pi / omega < min_dt) min_dt = 2.0_num * pi / omega
@@ -651,10 +700,8 @@ CONTAINS
         ELSE
           DO iy = 1, ny
           DO ix = 1, nx
-            omega2 = fac1 &
-                * species_list(ispecies)%initial_conditions%density(ix,iy) &
-                + fac2 * MAXVAL(&
-                species_list(ispecies)%initial_conditions%temp(ix,iy,:))
+            omega2 = fac1 * species_density(ix,iy) &
+                + fac2 * MAXVAL(species_temp(ix,iy,:))
             IF (omega2 <= c_tiny) CYCLE
             omega = SQRT(omega2)
             IF (2.0_num * pi / omega < min_dt) min_dt = 2.0_num * pi / omega
@@ -874,13 +921,14 @@ CONTAINS
     INTEGER(i8), ALLOCATABLE :: nparts(:), npart_locals(:), npart_proc(:)
     INTEGER, DIMENSION(4) :: dims
     INTEGER, ALLOCATABLE :: random_states_per_proc(:)
+    INTEGER, ALLOCATABLE :: random_states_per_proc_old(:)
     REAL(num), DIMENSION(2*c_ndims) :: extents
     LOGICAL :: restart_flag, got_full
     LOGICAL, ALLOCATABLE :: species_found(:)
     TYPE(sdf_file_handle) :: sdf_handle
     TYPE(particle_species), POINTER :: species
-    INTEGER, POINTER :: species_subtypes(:)
-    INTEGER, POINTER :: species_subtypes_i4(:), species_subtypes_i8(:)
+    INTEGER, ALLOCATABLE :: species_subtypes(:)
+    INTEGER, ALLOCATABLE :: species_subtypes_i4(:), species_subtypes_i8(:)
     REAL(num) :: window_offset, offset_x_min, full_x_min, offset_x_max
 
     got_full = .FALSE.
@@ -949,14 +997,14 @@ CONTAINS
         io_block_list(i)%nstep_prev = 0
       END IF
       io_block_list(i)%walltime_prev = time
-      IF (ASSOCIATED(io_block_list(i)%dump_at_nsteps)) THEN
+      IF (ALLOCATED(io_block_list(i)%dump_at_nsteps)) THEN
         DO is = 1, SIZE(io_block_list(i)%dump_at_nsteps)
           IF (step >= io_block_list(i)%dump_at_nsteps(is)) THEN
             io_block_list(i)%dump_at_nsteps(is) = HUGE(1)
           END IF
         END DO
       END IF
-      IF (ASSOCIATED(io_block_list(i)%dump_at_times)) THEN
+      IF (ALLOCATED(io_block_list(i)%dump_at_times)) THEN
         DO is = 1, SIZE(io_block_list(i)%dump_at_times)
           IF (time >= io_block_list(i)%dump_at_times(is)) THEN
             io_block_list(i)%dump_at_times(is) = HUGE(1.0_num)
@@ -1011,8 +1059,17 @@ CONTAINS
         CYCLE
       END IF
 
-      CALL sdf_read_point_mesh_info(sdf_handle, npart, geometry, species_id)
-      CALL find_species_by_id_or_blockid(species_id, block_id, ispecies)
+      ispecies = 0
+      IF (blocktype == c_blocktype_point_mesh) THEN
+        CALL sdf_read_point_mesh_info(sdf_handle, npart, geometry, species_id)
+        CALL find_species_by_id_or_blockid(species_id, block_id, ispecies)
+      ELSE IF (blocktype == c_blocktype_cpu_split) THEN
+        IF (block_id(1:3) == 'cpu') THEN
+          species_id = block_id(5:LEN(block_id))
+          CALL find_species_by_id_or_blockid(species_id, block_id, ispecies)
+        END IF
+      END IF
+
       IF (ispecies == 0) THEN
         IF (rank == 0) THEN
           IF (.NOT. str_cmp(species_id(1:6), 'subset')) THEN
@@ -1087,10 +1144,38 @@ CONTAINS
       CASE(c_blocktype_array)
         IF (use_exact_restart .AND. need_random_state &
             .AND. str_cmp(block_id, 'random_states')) THEN
-          ALLOCATE(random_states_per_proc(4*nproc))
-          CALL sdf_read_srl(sdf_handle, random_states_per_proc)
-          CALL set_random_state(random_states_per_proc(4*rank+1:4*(rank+1)))
-          DEALLOCATE(random_states_per_proc)
+          CALL sdf_read_array_info(sdf_handle, dims)
+          IF (datatype == c_datatype_integer4 .AND. dims(1) == 4*nproc) THEN
+            ! Older form of random_states output
+            ! Missing the box_muller_cache entry
+            ALLOCATE(random_states_per_proc(4*nproc))
+            CALL sdf_read_srl(sdf_handle, random_states_per_proc)
+            CALL set_random_state(random_states_per_proc(4*rank+1:4*(rank+1)))
+            DEALLOCATE(random_states_per_proc)
+          ELSE IF (rank == 0) THEN
+            PRINT*, '*** WARNING ***'
+            PRINT*, 'Unrecognised format for random_states block in ', &
+                    'the restart file. Ignoring.'
+          END IF
+        ELSE IF (use_exact_restart .AND. need_random_state &
+            .AND. str_cmp(block_id, 'random_states_full')) THEN
+          CALL sdf_read_array_info(sdf_handle, dims)
+          IF (datatype == c_datatype_integer4 .AND. dims(1) == 5*nproc) THEN
+            ALLOCATE(random_states_per_proc(4*nproc))
+            ALLOCATE(random_states_per_proc_old(5*nproc))
+            CALL sdf_read_srl(sdf_handle, random_states_per_proc_old)
+            DO i = 0, nproc - 1
+              random_states_per_proc(4*i+1:4*(i+1)) = &
+                  random_states_per_proc_old(5*i+1:5*(i+1)-1)
+            END DO
+            DEALLOCATE(random_states_per_proc_old)
+            CALL set_random_state(random_states_per_proc(4*rank+1:4*(rank+1)))
+            DEALLOCATE(random_states_per_proc)
+          ELSE IF (rank == 0) THEN
+            PRINT*, '*** WARNING ***'
+            PRINT*, 'Unrecognised format for random_states_full block in ', &
+                    'the restart file. Ignoring.'
+          END IF
         ELSE IF (str_cmp(block_id, 'file_numbers')) THEN
           CALL sdf_read_array_info(sdf_handle, dims)
           IF (ndims /= 1 .OR. dims(1) /= SIZE(file_numbers)) THEN
@@ -1111,6 +1196,8 @@ CONTAINS
             block_id, ndims, 'laser_y_min_phase', 'y_min')
         CALL read_laser_phases(sdf_handle, n_laser_y_max, laser_y_max, &
             block_id, ndims, 'laser_y_max_phase', 'y_max')
+
+        CALL read_antenna_phases(sdf_handle, block_id, ndims)
 
         CALL read_id_starts(sdf_handle, block_id)
 
@@ -1299,9 +1386,13 @@ CONTAINS
 
         IF (npart /= species%count) THEN
           IF (rank == 0) THEN
+            CALL integer_as_string(species%count, str1)
+            CALL integer_as_string(npart, str2)
             PRINT*, '*** ERROR ***'
-            PRINT*, 'Malformed restart dump. Number of particle variables', &
-                ' does not match grid.'
+            PRINT*, 'Malformed restart dump.'
+            PRINT*, 'Particle grid for species "', TRIM(species%name), &
+                '" has ', TRIM(str1), ' particles'
+            PRINT*, 'but "', TRIM(block_id), '" has ', TRIM(str2)
           END IF
           CALL abort_code(c_err_io_error)
           STOP
@@ -1343,6 +1434,9 @@ CONTAINS
             PRINT*, 'To use, please recompile with the -DPARTICLE_ID option.'
           END IF
 #endif
+        ELSE IF (block_id(1:18) == 'persistent_subset/') THEN
+          CALL sdf_read_point_variable(sdf_handle, npart_local, &
+              species_subtypes_i8(ispecies), it_persistent_subset)
 
         ELSE IF (block_id(1:7) == 'weight/') THEN
 #ifndef PER_SPECIES_WEIGHT
@@ -1417,7 +1511,7 @@ CONTAINS
 
     ! Reset dump_at_walltimes
     DO i = 1, n_io_blocks
-      IF (ASSOCIATED(io_block_list(i)%dump_at_walltimes)) THEN
+      IF (ALLOCATED(io_block_list(i)%dump_at_walltimes)) THEN
         DO is = 1, SIZE(io_block_list(i)%dump_at_walltimes)
           IF (old_elapsed_time >= io_block_list(i)%dump_at_walltimes(is)) THEN
             io_block_list(i)%dump_at_walltimes(is) = HUGE(1.0_num)
@@ -1437,11 +1531,30 @@ CONTAINS
       CALL create_moved_window(offset_x_min, window_offset)
     END IF
 
-    CALL set_thermal_bcs
+    CALL set_thermal_bcs_all
+    CALL setup_persistent_subsets
 
     IF (rank == 0) PRINT*, 'Load from restart dump OK'
 
   END SUBROUTINE restart_data
+
+
+
+  SUBROUTINE setup_persistent_subsets
+
+    INTEGER :: isub
+    TYPE(subset), POINTER :: sub
+
+    DO isub = 1, SIZE(subset_list)
+      sub => subset_list(isub)
+      IF (sub%persistent) THEN
+        IF (time < sub%persist_start_time &
+            .AND. step < sub%persist_start_step) CYCLE
+        sub%locked = .TRUE.
+      END IF
+    END DO
+
+  END SUBROUTINE setup_persistent_subsets
 
 
 
@@ -1476,6 +1589,37 @@ CONTAINS
     END IF
 
   END SUBROUTINE read_laser_phases
+
+
+
+  SUBROUTINE read_antenna_phases(sdf_handle, block_id_in, ndims)
+
+    TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_in
+    INTEGER, INTENT(IN) :: ndims
+    REAL(num), DIMENSION(:), ALLOCATABLE :: antenna_phases
+    INTEGER, DIMENSION(4) :: dims
+    INTEGER :: iant
+
+    IF (str_cmp(block_id_in, 'antenna_phases')) THEN
+      CALL sdf_read_array_info(sdf_handle, dims)
+
+      IF (ndims /= 1 .OR. dims(1) /= SIZE(antenna_list)) THEN
+        PRINT*, '*** WARNING ***'
+        PRINT*, 'Number of antenna phases does not match number of antennae.'
+        PRINT*, 'Antennae will be populated in order, but correct operation ', &
+            'is not guaranteed'
+      END IF
+
+      ALLOCATE(antenna_phases(dims(1)))
+      CALL sdf_read_srl(sdf_handle, antenna_phases)
+      DO iant = 1, SIZE(antenna_list)
+        antenna_list(iant)%contents%phase_history = antenna_phases(iant)
+      END DO
+      DEALLOCATE(antenna_phases)
+    END IF
+
+  END SUBROUTINE read_antenna_phases
 
 
 
@@ -1737,6 +1881,28 @@ CONTAINS
 
 
 
+  FUNCTION it_persistent_subset(array, npart_this_it, start, param)
+
+    USE constants
+    USE particle_id_hash_mod
+    INTEGER(i8) :: it_persistent_subset
+    INTEGER(i8), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      CALL id_registry%add_with_map(iterator_list, array(ipart))
+      iterator_list => iterator_list%next
+    END DO
+
+    it_persistent_subset = 0
+
+  END FUNCTION it_persistent_subset
+
+
+
 #ifdef PHOTONS
   FUNCTION it_optical_depth(array, npart_this_it, start, param)
 
@@ -1836,5 +2002,41 @@ CONTAINS
     window_shift(1) = window_offset
 
   END SUBROUTINE
+
+
+
+  SUBROUTINE pre_load_balance
+
+    INTEGER :: npx, npy, ierr
+    INTEGER :: old_comm, old_coords(c_ndims)
+
+    IF (.NOT.use_pre_balance .OR. nproc == 1) RETURN
+
+    npx = nprocx
+    npy = nprocy
+    pre_loading = .TRUE.
+
+    CALL auto_load
+
+    IF (use_optimal_layout) THEN
+      CALL get_optimal_layout
+
+      IF (npx == nprocx .AND. npy == nprocy) THEN
+        pre_loading = .FALSE.
+        RETURN
+      END IF
+
+      old_coords(:) = coordinates(:)
+      CALL MPI_COMM_DUP(comm, old_comm, ierr)
+      CALL setup_communicator
+      CALL pre_balance_workload(old_comm, old_coords)
+      CALL MPI_COMM_FREE(old_comm, ierr)
+    ELSE
+      CALL pre_balance_workload
+    END IF
+
+    pre_loading = .FALSE.
+
+  END SUBROUTINE pre_load_balance
 
 END MODULE setup

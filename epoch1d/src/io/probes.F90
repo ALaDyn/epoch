@@ -48,7 +48,7 @@ CONTAINS
     NULLIFY(probe%next)
     ALLOCATE(probe%use_species(n_species))
     probe%use_species = .FALSE.
-    CALL create_empty_partlist(probe%sampled_particles)
+    CALL create_empty_partlist(probe%sampled_particles, holds_copies=.TRUE.)
 
   END SUBROUTINE init_probe
 
@@ -94,7 +94,7 @@ CONTAINS
       DO WHILE(ASSOCIATED(next))
         current_probe => next
         next => current_probe%next
-        IF (ASSOCIATED(current_probe%use_species)) &
+        IF (ALLOCATED(current_probe%use_species)) &
             DEALLOCATE(current_probe%use_species)
         CALL destroy_partlist(current_probe%sampled_particles)
         DEALLOCATE(current_probe)

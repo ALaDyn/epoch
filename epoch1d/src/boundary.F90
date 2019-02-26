@@ -21,6 +21,7 @@ MODULE boundary
   USE laser
   USE mpi_subtype_control
   USE utilities
+  USE particle_id_hash_mod
 
   IMPLICIT NONE
 
@@ -37,6 +38,7 @@ CONTAINS
     ! For some types of boundary, fields and particles are treated in
     ! different ways, deal with that here
 
+    add_laser(:) = .FALSE.
     any_open = .FALSE.
     cpml_boundaries = .FALSE.
     DO i = 1, 2*c_ndims
@@ -144,7 +146,7 @@ CONTAINS
     CALL MPI_SENDRECV(field(1), ng, basetype, proc_x_min, &
         tag, temp, ng, basetype, proc_x_max, tag, comm, status, errcode)
 
-    IF (proc_x_max /= MPI_PROC_NULL) THEN
+    IF (.NOT. x_max_boundary .OR. bc_field(c_bd_x_max) == c_bc_periodic) THEN
       n = 1
       DO i = nx_local+1, nx_local+ng
         field(i) = temp(n)
@@ -155,7 +157,7 @@ CONTAINS
     CALL MPI_SENDRECV(field(nx_local+1-ng), ng, basetype, proc_x_max, &
         tag, temp, ng, basetype, proc_x_min, tag, comm, status, errcode)
 
-    IF (proc_x_min /= MPI_PROC_NULL) THEN
+    IF (.NOT. x_min_boundary .OR. bc_field(c_bd_x_min) == c_bc_periodic) THEN
       n = 1
       DO i = 1-ng, 0
         field(i) = temp(n)
@@ -184,7 +186,7 @@ CONTAINS
     CALL MPI_SENDRECV(field(1), ng, basetype, proc_x_min, &
         tag, temp, ng, basetype, proc_x_max, tag, comm, status, errcode)
 
-    IF (proc_x_max /= MPI_PROC_NULL) THEN
+    IF (.NOT. x_max_boundary .OR. bc_field(c_bd_x_max) == c_bc_periodic) THEN
       n = 1
       DO i = nx_local+1, nx_local+ng
         field(i) = temp(n)
@@ -195,7 +197,7 @@ CONTAINS
     CALL MPI_SENDRECV(field(nx_local+1-ng), ng, basetype, proc_x_max, &
         tag, temp, ng, basetype, proc_x_min, tag, comm, status, errcode)
 
-    IF (proc_x_min /= MPI_PROC_NULL) THEN
+    IF (.NOT. x_min_boundary .OR. bc_field(c_bd_x_min) == c_bc_periodic) THEN
       n = 1
       DO i = 1-ng, 0
         field(i) = temp(n)
@@ -309,7 +311,7 @@ CONTAINS
 
     n = n + 1
     bc = bc_species(n)
-    IF (x_min_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_thermal)) THEN
+    IF (x_min_boundary .AND. bc == c_bc_reflect) THEN
       IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng-1
@@ -326,7 +328,7 @@ CONTAINS
 
     n = n + 1
     bc = bc_species(n)
-    IF (x_max_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_thermal)) THEN
+    IF (x_max_boundary .AND. bc == c_bc_reflect) THEN
       IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng
@@ -579,15 +581,15 @@ CONTAINS
     INTEGER(i8) :: ixp
     INTEGER, DIMENSION(2*c_ndims) :: bc_species
     LOGICAL :: out_of_bounds
-    INTEGER :: bc, ispecies, i, ix
+    INTEGER :: sgn, bc, ispecies, i, ix
     REAL(num) :: temp(3)
     REAL(num) :: part_pos, boundary_shift
     REAL(num) :: x_min_outer, x_max_outer
 
-    boundary_shift = 1.0_num + 0.5_num * png
+    boundary_shift = dx * REAL((1 + png) / 2, num)
 
-    x_min_outer = x_min - dx * boundary_shift
-    x_max_outer = x_max + dx * boundary_shift
+    x_min_outer = x_min - boundary_shift
+    x_max_outer = x_max + boundary_shift
 
     DO ispecies = 1, n_species
       cur => species_list(ispecies)%attached_list%head
@@ -606,6 +608,7 @@ CONTAINS
         out_of_bounds = .FALSE.
 
         part_pos = cur%part_pos
+        sgn = -1
         IF (bc_field(c_bd_x_min) == c_bc_cpml_laser &
             .OR. bc_field(c_bd_x_min) == c_bc_cpml_outflow) THEN
           IF (x_min_boundary) THEN
@@ -616,12 +619,12 @@ CONTAINS
             END IF
           ELSE
             ! Particle has left this processor
-            IF (part_pos < x_min_local) xbd = -1
+            IF (part_pos < x_min_local) xbd = sgn
           END IF
         ELSE
           ! Particle has left this processor
           IF (part_pos < x_min_local) THEN
-            xbd = -1
+            xbd = sgn
             ! Particle has left the system
             IF (x_min_boundary) THEN
               xbd = 0
@@ -630,8 +633,8 @@ CONTAINS
                 cur%part_pos = 2.0_num * x_min - part_pos
                 cur%part_p(1) = -cur%part_p(1)
               ELSE IF (bc == c_bc_periodic) THEN
-                xbd = -1
-                cur%part_pos = part_pos + length_x
+                xbd = sgn
+                cur%part_pos = part_pos - sgn * length_x
               END IF
             END IF
             IF (part_pos < x_min_outer) THEN
@@ -640,12 +643,14 @@ CONTAINS
                   temp(i) = species_list(ispecies)%ext_temp_x_min(i)
                 END DO
 
+                CALL id_registry%delete_all(cur)
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
                 cur%id = generate_id()
 #endif
+
                 ! x-direction
                 i = 1
-                cur%part_p(i) = flux_momentum_from_temperature(&
+                cur%part_p(i) = -sgn * flux_momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
                 ! y-direction
@@ -658,7 +663,7 @@ CONTAINS
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
-                cur%part_pos = 2.0_num * x_min - part_pos
+                cur%part_pos = 2.0_num * x_min_outer - part_pos
 
               ELSE
                 ! Default to open boundary conditions - remove particle
@@ -668,6 +673,7 @@ CONTAINS
           END IF
         END IF
 
+        sgn = 1
         IF (bc_field(c_bd_x_max) == c_bc_cpml_laser &
             .OR. bc_field(c_bd_x_max) == c_bc_cpml_outflow) THEN
           IF (x_max_boundary) THEN
@@ -678,12 +684,12 @@ CONTAINS
             END IF
           ELSE
             ! Particle has left this processor
-            IF (part_pos >= x_max_local) xbd = 1
+            IF (part_pos >= x_max_local) xbd = sgn
           END IF
         ELSE
           ! Particle has left this processor
           IF (part_pos >= x_max_local) THEN
-            xbd = 1
+            xbd = sgn
             ! Particle has left the system
             IF (x_max_boundary) THEN
               xbd = 0
@@ -692,8 +698,8 @@ CONTAINS
                 cur%part_pos = 2.0_num * x_max - part_pos
                 cur%part_p(1) = -cur%part_p(1)
               ELSE IF (bc == c_bc_periodic) THEN
-                xbd = 1
-                cur%part_pos = part_pos - length_x
+                xbd = sgn
+                cur%part_pos = part_pos - sgn * length_x
               END IF
             END IF
             IF (part_pos >= x_max_outer) THEN
@@ -702,12 +708,14 @@ CONTAINS
                   temp(i) = species_list(ispecies)%ext_temp_x_max(i)
                 END DO
 
+                CALL id_registry%delete_all(cur)
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
                 cur%id = generate_id()
 #endif
+
                 ! x-direction
                 i = 1
-                cur%part_p(i) = -flux_momentum_from_temperature(&
+                cur%part_p(i) = -sgn * flux_momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
                 ! y-direction
@@ -720,7 +728,7 @@ CONTAINS
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
-                cur%part_pos = 2.0_num * x_max - part_pos
+                cur%part_pos = 2.0_num * x_max_outer - part_pos
 
               ELSE
                 ! Default to open boundary conditions - remove particle
@@ -738,7 +746,7 @@ CONTAINS
             CALL add_particle_to_partlist(&
                 ejected_list(ispecies)%attached_list, cur)
           ELSE
-            DEALLOCATE(cur)
+            CALL destroy_particle(cur)
           END IF
         ELSE IF (ABS(xbd) > 0) THEN
           ! Particle has left processor, send it to its neighbour

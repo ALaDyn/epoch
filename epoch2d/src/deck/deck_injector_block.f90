@@ -18,7 +18,6 @@ MODULE deck_injector_block
 
   USE strings_advanced
   USE shunt
-  USE evaluator
   USE injectors
   USE utilities
 
@@ -37,6 +36,11 @@ MODULE deck_injector_block
 CONTAINS
 
   SUBROUTINE injector_deck_initialise
+
+    NULLIFY(injector_x_min)
+    NULLIFY(injector_x_max)
+    NULLIFY(injector_y_min)
+    NULLIFY(injector_y_max)
 
   END SUBROUTINE injector_deck_initialise
 
@@ -131,12 +135,14 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'density_min')) THEN
+    IF (str_cmp(element, 'density_min') .OR. str_cmp(element, 'minrho') &
+        .OR. str_cmp(element, 'number_density_min')) THEN
       working_injector%density_min = as_real_print(value, element, errcode)
       RETURN
     END IF
 
-    IF (str_cmp(element, 'density')) THEN
+    IF (str_cmp(element, 'density') &
+        .OR. str_cmp(element, 'number_density')) THEN
       CALL initialise_stack(working_injector%density_function)
       CALL tokenize(value, working_injector%density_function, errcode)
       RETURN

@@ -18,8 +18,6 @@ MODULE finish
   USE shared_data
   USE diagnostics
   USE setup
-  USE shunt
-  USE partlist
   USE deck
   USE window
   USE laser
@@ -28,6 +26,7 @@ MODULE finish
   USE ionise
   USE injectors
   USE probes
+  USE antennae
 
   IMPLICIT NONE
 
@@ -51,6 +50,16 @@ CONTAINS
   SUBROUTINE deallocate_memory
 
     INTEGER :: i, n, stat
+    TYPE(subset), POINTER :: sub
+    CLASS(particle_id_hash), POINTER :: current_hash
+
+    DO i = 1, n_subsets
+      sub => subset_list(i)
+      CALL MPI_TYPE_FREE(sub%subtype, errcode)
+      CALL MPI_TYPE_FREE(sub%subarray, errcode)
+      CALL MPI_TYPE_FREE(sub%subtype_r4, errcode)
+      CALL MPI_TYPE_FREE(sub%subarray_r4, errcode)
+    END DO
 
     DEALLOCATE(x, xb, x_global, xb_global, xb_offset_global)
     DEALLOCATE(y, yb, y_global, yb_global, yb_offset_global)
@@ -76,6 +85,7 @@ CONTAINS
       DO n = 1, 3
         CALL deallocate_stack(species_list(i)%temperature_function(n))
         CALL deallocate_stack(species_list(i)%drift_function(n))
+        CALL deallocate_stack(species_list(i)%dist_fn_range(n))
       END DO
       CALL destroy_partlist(species_list(i)%attached_list)
       DEALLOCATE(species_list(i)%ext_temp_x_min, STAT=stat)
@@ -89,9 +99,9 @@ CONTAINS
     DEALLOCATE(species_list, STAT=stat)
 
     DO i = 1, n_io_blocks
-      IF (ASSOCIATED(io_block_list(i)%dump_at_times)) &
+      IF (ALLOCATED(io_block_list(i)%dump_at_times)) &
           DEALLOCATE(io_block_list(i)%dump_at_times, STAT=stat)
-      IF (ASSOCIATED(io_block_list(i)%dump_at_nsteps)) &
+      IF (ALLOCATED(io_block_list(i)%dump_at_nsteps)) &
           DEALLOCATE(io_block_list(i)%dump_at_nsteps, STAT=stat)
     END DO
     DEALLOCATE(io_block_list, STAT=stat)
@@ -102,8 +112,19 @@ CONTAINS
     DO i = 1, n_subsets
       DEALLOCATE(subset_list(i)%dumpmask, STAT=stat)
       DEALLOCATE(subset_list(i)%use_species, STAT=stat)
+      IF (subset_list(i)%persistent) THEN
+        current_hash => id_registry%get_hash(subset_list(i)%name)
+        DEALLOCATE(current_hash)
+      END IF
+      IF (.NOT. subset_list(i)%time_varying) CYCLE
+      DO n = 1, c_subset_max
+        IF (subset_list(i)%use_restriction_function(n)) THEN
+          CALL deallocate_stack(subset_list(i)%restriction_function(n))
+        END IF
+      END DO
     END DO
     DEALLOCATE(subset_list, STAT=stat)
+    CALL id_registry%reset
 
     DO i = 1, n_deck_constants
       CALL deallocate_stack(deck_constant_list(i)%execution_stream)
@@ -120,6 +141,7 @@ CONTAINS
     CALL deallocate_partlists
     CALL deallocate_eval_stack
     CALL deallocate_injectors
+    CALL deallocate_antennae
 
     CALL MPI_COMM_FREE(comm, errcode)
 

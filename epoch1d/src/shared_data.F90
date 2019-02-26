@@ -1,7 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2014-2015 Stephan Kuschel <stephan.kuschel@gmail.com>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2018 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -20,252 +17,17 @@
 ! All global variables defined here (cf F77 COMMON block).
 ! ****************************************************************
 
-MODULE constants
+MODULE shared_data
 
-  USE sdf, ONLY : c_stagger_edge_x, c_stagger_edge_y, c_stagger_edge_z, &
-      c_stagger_face_x, c_stagger_face_y, c_stagger_face_z, &
-      c_stagger_cell_centre, c_stagger_vertex, c_id_length
-
-  IMPLICIT NONE
-
-  INTEGER, PARAMETER :: num = KIND(1.d0)
-  INTEGER, PARAMETER :: dbl = KIND(1.d0)
-  INTEGER, PARAMETER :: r4  = SELECTED_REAL_KIND(r=30)
-  INTEGER, PARAMETER :: i4  = SELECTED_INT_KIND(9)  ! 4-byte 2^31 ~ 10^9
-  INTEGER, PARAMETER :: i8  = SELECTED_INT_KIND(18) ! 8-byte 2^63 ~ 10^18
-  REAL(num), PARAMETER :: c_tiny = TINY(1.0_num)
-  REAL(num), PARAMETER :: c_largest_number = HUGE(1.0_num)
-  REAL(num), PARAMETER :: c_maxexponent = MAXEXPONENT(1.0_num)
-  REAL(num), PARAMETER :: c_log2 = 0.69314718055994530941723212145817657_num
-  REAL(num), PARAMETER :: c_largest_exp = c_maxexponent * c_log2
-  REAL(num), PARAMETER :: &
-      c_smallest_exp = (MINEXPONENT(1.0_num) - 1.0_num) * c_log2
-
-  INTEGER, PARAMETER :: c_ndims = 1
-
-  ! File unit for deck parser diagnostic output
-  INTEGER, PARAMETER :: stdout = 6
-  INTEGER, PARAMETER :: du = 40
-  INTEGER, PARAMETER :: lu = 41
-  INTEGER, PARAMETER :: duc = 42
-#ifdef NO_IO
-  INTEGER, PARAMETER :: io_units(1) = (/ stdout /)
-#else
-  INTEGER, PARAMETER :: io_units(2) = (/ stdout,du /)
-#endif
-  INTEGER, PARAMETER :: nio_units = SIZE(io_units)
-
-  ! Boundary type codes
-  INTEGER, PARAMETER :: c_bc_null = -1
-  INTEGER, PARAMETER :: c_bc_periodic = 1
-  INTEGER, PARAMETER :: c_bc_other = 2
-  INTEGER, PARAMETER :: c_bc_simple_laser = 3
-  INTEGER, PARAMETER :: c_bc_simple_outflow = 4
-  INTEGER, PARAMETER :: c_bc_open = 5
-  INTEGER, PARAMETER :: c_bc_dump = 6
-  INTEGER, PARAMETER :: c_bc_zero_gradient = 7
-  INTEGER, PARAMETER :: c_bc_clamp = 8
-  INTEGER, PARAMETER :: c_bc_reflect = 9
-  INTEGER, PARAMETER :: c_bc_conduct = 10
-  INTEGER, PARAMETER :: c_bc_thermal = 11
-  INTEGER, PARAMETER :: c_bc_cpml_laser = 12
-  INTEGER, PARAMETER :: c_bc_cpml_outflow = 13
-  INTEGER, PARAMETER :: c_bc_mixed = 14
-
-  ! Boundary location codes
-  INTEGER, PARAMETER :: c_bd_x_min = 1
-  INTEGER, PARAMETER :: c_bd_x_max = 2
-  INTEGER, PARAMETER :: c_bd_y_min = 3
-  INTEGER, PARAMETER :: c_bd_y_max = 4
-  INTEGER, PARAMETER :: c_bd_z_min = 5
-  INTEGER, PARAMETER :: c_bd_z_max = 6
-
-  ! Frequency function type codes
-  INTEGER, PARAMETER :: c_of_omega = 1
-  INTEGER, PARAMETER :: c_of_freq = 2
-  INTEGER, PARAMETER :: c_of_lambda = 3
-
-  ! Error codes
-  INTEGER, PARAMETER :: c_err_none = 0
-  INTEGER, PARAMETER :: c_err_unknown_block = 2**0
-  INTEGER, PARAMETER :: c_err_unknown_element = 2**1
-  INTEGER, PARAMETER :: c_err_preset_element = 2**2
-  INTEGER, PARAMETER :: c_err_preset_element_use_later = 2**3
-  INTEGER, PARAMETER :: c_err_bad_value = 2**4
-  INTEGER, PARAMETER :: c_err_missing_elements = 2**5
-  INTEGER, PARAMETER :: c_err_terminate = 2**6
-  INTEGER, PARAMETER :: c_err_required_element_not_set = 2**7
-  INTEGER, PARAMETER :: c_err_pp_options_missing = 2**8
-  INTEGER, PARAMETER :: c_err_bad_array_length = 2**9
-  INTEGER, PARAMETER :: c_err_other = 2**10
-  INTEGER, PARAMETER :: c_err_warn_bad_value = 2**11
-  INTEGER, PARAMETER :: c_err_generic_warning = 2**12
-  INTEGER, PARAMETER :: c_err_generic_error = 2**13
-  INTEGER, PARAMETER :: c_err_pp_options_wrong = 2**14
-  INTEGER, PARAMETER :: c_err_io_error = 2**15
-  INTEGER, PARAMETER :: c_err_bad_setup = 2**16
-  INTEGER, PARAMETER :: c_err_window = 2**17
-
-  INTEGER, PARAMETER :: c_ds_first = 1
-  INTEGER, PARAMETER :: c_ds_last = 2
-
-  ! IO codes
-  INTEGER, PARAMETER :: c_io_none = 0
-  INTEGER, PARAMETER :: c_io_always = 2**0
-  INTEGER, PARAMETER :: c_io_full = 2**1
-  INTEGER, PARAMETER :: c_io_restartable = 2**2
-  INTEGER, PARAMETER :: c_io_species = 2**3
-  INTEGER, PARAMETER :: c_io_no_sum = 2**4
-  INTEGER, PARAMETER :: c_io_averaged = 2**5
-  INTEGER, PARAMETER :: c_io_snapshot = 2**6
-  INTEGER, PARAMETER :: c_io_field = 2**7
-  INTEGER, PARAMETER :: c_io_dump_single = 2**8
-  INTEGER, PARAMETER :: c_io_average_single = 2**9
-  INTEGER, PARAMETER :: c_io_never = 2**10
-
-  ! Maxwell Solvers
-  INTEGER, PARAMETER :: c_maxwell_solver_custom = -1
-  INTEGER, PARAMETER :: c_maxwell_solver_yee = 0
-  INTEGER, PARAMETER :: c_maxwell_solver_lehe = 1
-  INTEGER, PARAMETER :: c_maxwell_solver_lehe_x = 2
-  INTEGER, PARAMETER :: c_maxwell_solver_lehe_y = 3
-  INTEGER, PARAMETER :: c_maxwell_solver_lehe_z = 4
-  INTEGER, PARAMETER :: c_maxwell_solver_cowan = 5
-  INTEGER, PARAMETER :: c_maxwell_solver_pukhov = 6
-
-  ! domain codes
-  INTEGER, PARAMETER :: c_do_full = 0
-  INTEGER, PARAMETER :: c_do_decomposed = 1
-
-  ! Taken from http://physics.nist.gov/cuu/Constants (05/07/2012)
-  REAL(num), PARAMETER :: pi = 3.141592653589793238462643383279503_num
-  REAL(num), PARAMETER :: q0 = 1.602176565e-19_num ! C (+/- 3.5e-27)
-  REAL(num), PARAMETER :: m0 = 9.10938291e-31_num ! kg (+/- 4e-38)
-  REAL(num), PARAMETER :: c  = 2.99792458e8_num   ! m/s^2 (exact)
-  REAL(num), PARAMETER :: kb = 1.3806488e-23_num  ! J/K (+/- 1.3e-29)
-  REAL(num), PARAMETER :: mu0 = 4.e-7_num * pi ! N/A^2 (exact)
-  ! epsilon0 = 1.0_num / mu0 / c**2 ! F/m (exact)
-  REAL(num), PARAMETER :: epsilon0 = 8.854187817620389850536563031710750e-12_num
-  REAL(num), PARAMETER :: h_planck = 6.62606957e-34_num ! J s (+/- 2.9e-41)
-  REAL(num), PARAMETER :: ev = q0 ! J
-  ! Derived physical parameters used in ionisation
-  ! h_bar = h_planck / 2.0_num / pi
-  REAL(num), PARAMETER :: h_bar = 1.054571725336289397963133257349698e-34_num
-  ! Bohr radius
-  ! a0 = 4.0_num * pi * epsilon0 * (h_bar / q0)**2.0_num / m0
-  REAL(num), PARAMETER :: a0 = 5.291772101121111395947216558438464e-11_num
-  ! Hartree energy = 2 * Rydberg energy
-  ! hartree = (h_bar / a0)**2.0_num / m0
-  REAL(num), PARAMETER :: hartree = 4.359744350823120007758594450644308e-18_num
-  ! Fine structure constant, alpha = h_bar / a0 / m0 / c
-  REAL(num), PARAMETER :: alpha = 7.2973525755230202568508027295271584628e-3_num
-  ! atomic_time = h_bar / hartree
-  REAL(num), PARAMETER :: &
-      atomic_time = 2.418884320905619591809404261549867e-17_num
-  ! atomic_electric_field = hartree / q0 / a0
-  REAL(num), PARAMETER :: &
-      atomic_electric_field = 5.142206538736485312185213306837419e11_num
-  ! m0 * c
-  REAL(num), PARAMETER :: mc0 = 2.73092429345209278e-22_num
-
-  ! Constants used in pair production
-#ifdef PHOTONS
-  ! b_s = mc0**2 / (h_bar * q0)
-  REAL(num), PARAMETER :: b_s = 4.414005028109566589829741352306303e9_num
-  ! e_s = b_s * c
-  REAL(num), PARAMETER :: e_s = 1.323285417001326061279735961512150e18_num
-  ! alpha_f = q0**2 / (2.0_num * epsilon0 * h_planck * c)
-  REAL(num), PARAMETER :: alpha_f = 7.297352575523020256850802729527158e-3_num
-  ! tau_c = h_bar / (m0 * c**2)
-  REAL(num), PARAMETER :: tau_c = 1.288088667367242662108649212042082e-21_num
-#endif
-
-  ! define special particle IDs
-  INTEGER, PARAMETER :: c_species_id_generic = 0
-  INTEGER, PARAMETER :: c_species_id_photon = 1
-  INTEGER, PARAMETER :: c_species_id_electron = 2
-  INTEGER, PARAMETER :: c_species_id_positron = 3
-  INTEGER, PARAMETER :: c_species_id_proton = 4
-
-  ! direction parameters
-  INTEGER, PARAMETER :: c_dir_x = 1
-  INTEGER, PARAMETER :: c_dir_y = 2
-  INTEGER, PARAMETER :: c_dir_z = 3
-  INTEGER, PARAMETER :: c_dir_px = c_ndims + 1
-  INTEGER, PARAMETER :: c_dir_py = c_ndims + 2
-  INTEGER, PARAMETER :: c_dir_pz = c_ndims + 3
-  INTEGER, PARAMETER :: c_dir_en = c_ndims + 4
-  INTEGER, PARAMETER :: c_dir_gamma_m1 = c_ndims + 5
-  INTEGER, PARAMETER :: c_dir_xy_angle = c_ndims + 6
-  INTEGER, PARAMETER :: c_dir_yz_angle = c_ndims + 7
-  INTEGER, PARAMETER :: c_dir_zx_angle = c_ndims + 8
-  INTEGER, PARAMETER :: c_dir_mod_p = c_ndims + 9
-
-  ! constants defining the maximum number of dimensions and directions
-  ! in a distribution function
-  INTEGER, PARAMETER :: c_df_maxdirs = c_dir_mod_p
-  INTEGER, PARAMETER :: c_df_maxdims = 3
-
-  ! define flags
-  INTEGER(i8), PARAMETER :: c_def_particle_debug = 2**0
-  INTEGER(i8), PARAMETER :: c_def_field_debug = 2**1
-  INTEGER(i8), PARAMETER :: c_def_particle_shape_bspline3 = 2**2
-  INTEGER(i8), PARAMETER :: c_def_split_part_after_push = 2**3
-  INTEGER(i8), PARAMETER :: c_def_per_particle_weight = 2**4
-  INTEGER(i8), PARAMETER :: c_def_particle_count_update = 2**5
-  INTEGER(i8), PARAMETER :: c_def_tracer_particles = 2**6
-  INTEGER(i8), PARAMETER :: c_def_particle_probes = 2**7
-  INTEGER(i8), PARAMETER :: c_def_per_particle_chargemass = 2**8
-  INTEGER(i8), PARAMETER :: c_def_particle_ionise = 2**9
-  INTEGER(i8), PARAMETER :: c_def_high_order_smoothing = 2**10
-  INTEGER(i8), PARAMETER :: c_def_particle_shape_tophat = 2**11
-  INTEGER(i8), PARAMETER :: c_def_parser_debug = 2**12
-  INTEGER(i8), PARAMETER :: c_def_particle_id4 = 2**13
-  INTEGER(i8), PARAMETER :: c_def_particle_id  = 2**14
-  INTEGER(i8), PARAMETER :: c_def_photons = 2**15
-  INTEGER(i8), PARAMETER :: c_def_trident_photons = 2**16
-  INTEGER(i8), PARAMETER :: c_def_prefetch = 2**17
-  INTEGER(i8), PARAMETER :: c_def_mpi_debug = 2**18
-  INTEGER(i8), PARAMETER :: c_def_parser_checking = 2**19
-  INTEGER(i8), PARAMETER :: c_def_deltaf_method = 2**20
-  INTEGER(i8), PARAMETER :: c_def_deltaf_debug = 2**21
-  INTEGER(i8), PARAMETER :: c_def_work_done_integrated = 2**22
-  INTEGER(i8), PARAMETER :: c_def_hc_push = 2**23
-  INTEGER(i8), PARAMETER :: c_def_use_isatty = 2**24
-
-  ! Stagger types
-  INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
-  INTEGER, PARAMETER :: c_stagger_ey = c_stagger_face_y
-  INTEGER, PARAMETER :: c_stagger_ez = c_stagger_face_z
-  INTEGER, PARAMETER :: c_stagger_bx = c_stagger_edge_x
-  INTEGER, PARAMETER :: c_stagger_by = c_stagger_edge_y
-  INTEGER, PARAMETER :: c_stagger_bz = c_stagger_edge_z
-  INTEGER, PARAMETER :: c_stagger_centre = c_stagger_cell_centre
-  INTEGER, PARAMETER :: c_stagger_max = c_stagger_vertex
-  INTEGER, PARAMETER :: c_stagger_jx = c_stagger_ex
-  INTEGER, PARAMETER :: c_stagger_jy = c_stagger_ey
-  INTEGER, PARAMETER :: c_stagger_jz = c_stagger_ez
-
-  ! Length of a standard string
-  INTEGER, PARAMETER :: string_length = 256
-
-  INTEGER, PARAMETER :: stat_unit = 20
-
-#ifdef PARTICLE_ID4
-    INTEGER, PARAMETER :: idkind = i4
-#else
-    INTEGER, PARAMETER :: idkind = i8
-#endif
-
-END MODULE constants
-
-
-
-MODULE shared_parser_data
-
+  USE mpi
   USE constants
+  USE sdf_job_info
 
   IMPLICIT NONE
+
+  !----------------------------------------------------------------------------
+  ! Parser data
+  !----------------------------------------------------------------------------
 
   INTEGER, PARAMETER :: c_char_numeric = 1
   INTEGER, PARAMETER :: c_char_alpha = 2
@@ -410,6 +172,10 @@ MODULE shared_parser_data
   INTEGER, PARAMETER :: c_const_maxwell_solver_pukhov = 106
   INTEGER, PARAMETER :: c_const_maxwell_solver_custom = 107
 
+  INTEGER, PARAMETER :: c_const_px = 108
+  INTEGER, PARAMETER :: c_const_py = 109
+  INTEGER, PARAMETER :: c_const_pz = 110
+
   ! Custom constants
   INTEGER, PARAMETER :: c_const_deck_lowbound = 4096
   INTEGER, PARAMETER :: c_const_custom_lowbound = 8192
@@ -473,6 +239,7 @@ MODULE shared_parser_data
     LOGICAL :: use_grid_position = .TRUE.
     INTEGER :: pack_ix = 1
     REAL(num) :: pack_pos = 0.0_num
+    REAL(num), DIMENSION(c_ndirs) :: pack_p = 0.0_num
   END TYPE parameter_pack
 
   TYPE stack_element
@@ -500,21 +267,10 @@ MODULE shared_parser_data
   INTEGER :: n_deck_constants = 0
   TYPE(deck_constant), DIMENSION(:), ALLOCATABLE :: deck_constant_list
 
-END MODULE shared_parser_data
-
-
-
-MODULE shared_data
-
-  USE mpi
-  USE shared_parser_data
-  USE sdf_job_info
-
-  IMPLICIT NONE
-
   !----------------------------------------------------------------------------
   ! string handling
   !----------------------------------------------------------------------------
+
   CHARACTER(LEN=string_length) :: blank
   TYPE string_type
     CHARACTER(string_length) :: value
@@ -602,7 +358,7 @@ MODULE shared_data
     INTEGER :: promote_to_species, demote_to_species
     REAL(num) :: promotion_energy_factor, demotion_energy_factor
     REAL(num) :: promotion_density, demotion_density
-    REAL(num), DIMENSION(:), POINTER :: fluid_energy, fluid_density
+    REAL(num), DIMENSION(:), ALLOCATABLE :: fluid_energy, fluid_density
   END TYPE particle_species_migration
 
   LOGICAL :: use_particle_migration = .FALSE.
@@ -618,14 +374,17 @@ MODULE shared_data
     ! Pointer is safe if the particles in it are all unambiguously linked
     LOGICAL :: safe
 
+    ! Does this partlist hold copies of particles rather than originals
+    LOGICAL :: holds_copies
+
     TYPE(particle_list), POINTER :: next, prev
   END TYPE particle_list
 
   ! Represents the initial conditions of a species
   TYPE initial_condition_block
-    REAL(num), DIMENSION(:), POINTER :: density
-    REAL(num), DIMENSION(:,:), POINTER :: temp
-    REAL(num), DIMENSION(:,:), POINTER :: drift
+    REAL(num), DIMENSION(:), ALLOCATABLE :: density
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: temp
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: drift
 
     REAL(num) :: density_min
     REAL(num) :: density_max
@@ -653,6 +412,13 @@ MODULE shared_data
     LOGICAL :: immobile
     LOGICAL :: fill_ghosts
 
+    ! Parameters for relativistic and arbitrary particle loader
+    INTEGER :: ic_df_type
+    REAL(num) :: fractional_tail_cutoff
+
+    TYPE(primitive_stack) :: dist_fn
+    TYPE(primitive_stack) :: dist_fn_range(3)
+
 #ifndef NO_TRACER_PARTICLES
     LOGICAL :: tracer
 #endif
@@ -665,7 +431,7 @@ MODULE shared_data
     LOGICAL :: split
     INTEGER(i8) :: npart_max
     ! Secondary list
-    TYPE(particle_list), DIMENSION(:), POINTER :: secondary_list
+    TYPE(particle_list), DIMENSION(:), ALLOCATABLE :: secondary_list
 
     ! Injection of particles
     REAL(num) :: npart_per_cell
@@ -673,7 +439,7 @@ MODULE shared_data
     TYPE(primitive_stack) :: drift_function(3)
 
     ! Thermal boundaries
-    REAL(num), DIMENSION(:), POINTER :: ext_temp_x_min, ext_temp_x_max
+    REAL(num), DIMENSION(:), ALLOCATABLE :: ext_temp_x_min, ext_temp_x_max
 
     ! Species_ionisation
     LOGICAL :: electron
@@ -698,6 +464,10 @@ MODULE shared_data
     ! Per-species boundary conditions
     INTEGER, DIMENSION(2*c_ndims) :: bc_particle
   END TYPE particle_species
+
+  REAL(num), ALLOCATABLE, TARGET :: global_species_density(:)
+  REAL(num), ALLOCATABLE, TARGET :: global_species_temp(:,:)
+  REAL(num), ALLOCATABLE, TARGET :: global_species_drift(:,:)
 
   !----------------------------------------------------------------------------
   ! file handling
@@ -762,16 +532,20 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_part_proc0        = 47
   INTEGER, PARAMETER :: c_dump_ppc               = 48
   INTEGER, PARAMETER :: c_dump_average_weight    = 49
+  INTEGER, PARAMETER :: c_dump_persistent_ids    = 50
+  INTEGER, PARAMETER :: c_dump_temperature_x     = 51
+  INTEGER, PARAMETER :: c_dump_temperature_y     = 52
+  INTEGER, PARAMETER :: c_dump_temperature_z     = 53
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 50
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 51
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 52
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 53
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 54
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 55
-  INTEGER, PARAMETER :: num_vars_to_dump         = 55
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 54
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 55
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 56
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 57
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 58
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 59
+  INTEGER, PARAMETER :: num_vars_to_dump         = 59
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 49
+  INTEGER, PARAMETER :: num_vars_to_dump         = 53
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -779,8 +553,8 @@ MODULE shared_data
   ! Time averaged IO
   !----------------------------------------------------------------------------
   TYPE averaged_data_block
-    REAL(num), DIMENSION(:,:), POINTER :: array
-    REAL(r4), DIMENSION(:,:), POINTER :: r4array
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: array
+    REAL(r4), DIMENSION(:,:), ALLOCATABLE :: r4array
     REAL(num) :: real_time
     INTEGER :: species_sum, n_species
     LOGICAL :: started, dump_single
@@ -794,9 +568,9 @@ MODULE shared_data
     REAL(num) :: time_start, time_stop
     REAL(num) :: walltime_interval, walltime_prev
     REAL(num) :: walltime_start, walltime_stop
-    REAL(num), POINTER :: dump_at_times(:)
-    REAL(num), POINTER :: dump_at_walltimes(:)
-    INTEGER, POINTER :: dump_at_nsteps(:)
+    REAL(num), ALLOCATABLE :: dump_at_times(:)
+    REAL(num), ALLOCATABLE :: dump_at_walltimes(:)
+    INTEGER, ALLOCATABLE :: dump_at_nsteps(:)
     INTEGER :: nstep_snapshot, nstep_prev, nstep_first, nstep_average
     INTEGER :: nstep_start, nstep_stop, dump_cycle, prefix_index
     INTEGER :: dump_cycle_first_index
@@ -808,10 +582,11 @@ MODULE shared_data
     TYPE(averaged_data_block), DIMENSION(num_vars_to_dump) :: averaged_data
   END TYPE io_block_type
 
-  TYPE(io_block_type), POINTER :: io_block_list(:)
+  TYPE(io_block_type), ALLOCATABLE, TARGET :: io_block_list(:)
   INTEGER :: n_io_blocks
   LOGICAL :: track_ejected_particles, new_style_io_block
   INTEGER, DIMENSION(num_vars_to_dump) :: averaged_var_block
+  INTEGER, DIMENSION(num_vars_to_dump) :: averaged_var_dims
   REAL(num) :: time_start, time_stop
   REAL(num) :: walltime_start, walltime_stop
   INTEGER :: nstep_start, nstep_stop
@@ -838,7 +613,7 @@ MODULE shared_data
     INTEGER, DIMENSION(c_df_maxdims) :: directions
     REAL(num), DIMENSION(2,c_df_maxdims) :: ranges
     INTEGER, DIMENSION(c_df_maxdims) :: resolution
-    LOGICAL, DIMENSION(:), POINTER :: use_species
+    LOGICAL, DIMENSION(:), ALLOCATABLE :: use_species
     REAL(num), DIMENSION(2,c_df_maxdirs) :: restrictions
     LOGICAL, DIMENSION(c_df_maxdirs) :: use_restrictions
 
@@ -850,40 +625,56 @@ MODULE shared_data
   END TYPE distribution_function_block
   TYPE(distribution_function_block), POINTER :: dist_fns
 
+  INTEGER, PARAMETER :: c_subset_random     = 1
+  INTEGER, PARAMETER :: c_subset_gamma_min  = 2
+  INTEGER, PARAMETER :: c_subset_gamma_max  = 3
+  INTEGER, PARAMETER :: c_subset_x_min      = 4
+  INTEGER, PARAMETER :: c_subset_x_max      = 5
+  INTEGER, PARAMETER :: c_subset_px_min     = 6
+  INTEGER, PARAMETER :: c_subset_px_max     = 7
+  INTEGER, PARAMETER :: c_subset_py_min     = 8
+  INTEGER, PARAMETER :: c_subset_py_max     = 9
+  INTEGER, PARAMETER :: c_subset_pz_min     = 10
+  INTEGER, PARAMETER :: c_subset_pz_max     = 11
+  INTEGER, PARAMETER :: c_subset_weight_min = 12
+  INTEGER, PARAMETER :: c_subset_weight_max = 13
+  INTEGER, PARAMETER :: c_subset_charge_min = 14
+  INTEGER, PARAMETER :: c_subset_charge_max = 15
+  INTEGER, PARAMETER :: c_subset_mass_min   = 16
+  INTEGER, PARAMETER :: c_subset_mass_max   = 17
+  INTEGER, PARAMETER :: c_subset_id_min     = 18
+  INTEGER, PARAMETER :: c_subset_id_max     = 19
+  INTEGER, PARAMETER :: c_subset_max        = 19
+
   ! Represents a data subset
   TYPE subset
     CHARACTER(LEN=string_length) :: name
 
     ! The dumpmask for the subset
     INTEGER :: mask
-    INTEGER, DIMENSION(:,:), POINTER :: dumpmask
-    LOGICAL, DIMENSION(:), POINTER :: use_species
-    LOGICAL :: use_gamma, use_gamma_min, use_gamma_max, use_random
-    LOGICAL :: use_x_min, use_x_max
-    LOGICAL :: use_px_min, use_px_max
-    LOGICAL :: use_py_min, use_py_max
-    LOGICAL :: use_pz_min, use_pz_max
-    LOGICAL :: use_weight_min, use_weight_max
-    LOGICAL :: use_charge_min, use_charge_max
-    LOGICAL :: use_mass_min, use_mass_max
-    LOGICAL :: use_id_min, use_id_max
+    INTEGER, DIMENSION(:,:), ALLOCATABLE :: dumpmask
+    LOGICAL, DIMENSION(:), ALLOCATABLE :: use_species
+    LOGICAL :: use_gamma
+    LOGICAL :: use_restriction(c_subset_max)
+    LOGICAL :: use_restriction_function(c_subset_max)
     LOGICAL :: space_restrictions
     LOGICAL :: skip, dump_field_grid
-    REAL(num) :: gamma_min, gamma_max, random_fraction
-    REAL(num) :: x_min, x_max
-    REAL(num) :: px_min, px_max, py_min, py_max, pz_min, pz_max
-    REAL(num) :: weight_min, weight_max
-    REAL(num) :: charge_min, charge_max
-    REAL(num) :: mass_min, mass_max
-    INTEGER(i8) :: id_min, id_max
+    LOGICAL :: time_varying
+    REAL(num) :: restriction(c_subset_max)
+    TYPE(primitive_stack) :: restriction_function(c_subset_max)
     INTEGER :: subtype, subarray, subtype_r4, subarray_r4
-    INTEGER, DIMENSION(c_ndims) :: skip_dir, n_local, n_global, n_start
+    INTEGER, DIMENSION(c_ndims) :: skip_dir, n_local, n_global, n_start, starts
+    ! Persistent subset
+    LOGICAL :: persistent, locked
+    REAL(num) :: persist_start_time
+    INTEGER :: persist_start_step
 
     ! Pointer to next subset
     TYPE(subset), POINTER :: next
   END TYPE subset
-  TYPE(subset), DIMENSION(:), POINTER :: subset_list
+  TYPE(subset), DIMENSION(:), ALLOCATABLE, TARGET :: subset_list
   INTEGER :: n_subsets
+  LOGICAL :: any_persistent_subset
 
 #ifndef NO_PARTICLE_PROBES
   TYPE particle_probe
@@ -894,7 +685,7 @@ MODULE shared_data
     REAL(num) :: ek_min, ek_max
     CHARACTER(LEN=string_length) :: name
 
-    LOGICAL, DIMENSION(:), POINTER :: use_species
+    LOGICAL, DIMENSION(:), ALLOCATABLE :: use_species
     TYPE(particle_list) :: sampled_particles
     TYPE(particle_probe), POINTER :: next
     INTEGER :: dumpmask
@@ -925,15 +716,22 @@ MODULE shared_data
   ! ng is the number of ghost cells allocated in the arrays
   ! fng is the number of ghost cells needed by the field solver
   ! jng is the number of ghost cells needed by the current arrays
+  ! sng is the number of ghost cells needed by the current smoother
   INTEGER, PARAMETER :: ng = png + 2
   INTEGER, PARAMETER :: jng =  MAX(ng,png)
+  INTEGER :: sng = 1
   INTEGER :: fng, nx
   INTEGER :: nx_global
   INTEGER(i8) :: npart_global, particles_max_id
   INTEGER :: nsteps, n_species = -1
   LOGICAL :: smooth_currents
+  INTEGER :: smooth_its = 1
+  INTEGER :: smooth_comp_its = 0
+  INTEGER, DIMENSION(:), ALLOCATABLE :: smooth_strides
   REAL(num), ALLOCATABLE, DIMENSION(:) :: ex, ey, ez, bx, by, bz, jx, jy, jz
   REAL(num), ALLOCATABLE, DIMENSION(:) :: wk_array
+  INTEGER, ALLOCATABLE, DIMENSION(:) :: npart_per_cell_array
+  LOGICAL :: pre_loading
 
   REAL(num) :: ex_x_min, ex_x_max
   REAL(num) :: ey_x_min, ey_x_max
@@ -944,9 +742,10 @@ MODULE shared_data
 
   REAL(num) :: initial_jx, initial_jy, initial_jz
 
-  TYPE(particle_species), DIMENSION(:), POINTER :: species_list
-  TYPE(particle_species), DIMENSION(:), POINTER :: ejected_list
-  TYPE(particle_species), DIMENSION(:), POINTER :: io_list, io_list_data
+  TYPE(particle_species), DIMENSION(:), ALLOCATABLE, TARGET :: species_list
+  TYPE(particle_species), DIMENSION(:), ALLOCATABLE, TARGET :: ejected_list
+  TYPE(particle_species), DIMENSION(:), ALLOCATABLE, TARGET :: io_list_data
+  TYPE(particle_species), DIMENSION(:), POINTER :: io_list
 
   REAL(num), ALLOCATABLE, DIMENSION(:) :: x, xb
 
@@ -963,6 +762,7 @@ MODULE shared_data
   LOGICAL :: use_particle_count_update = .FALSE.
   LOGICAL :: use_accurate_n_zeros = .FALSE.
   LOGICAL :: use_injectors = .FALSE.
+  LOGICAL :: use_more_setup_memory = .FALSE.
 
   REAL(num) :: dt, t_end, time, dt_multiplier, dt_laser, dt_plasma_frequency
   REAL(num) :: dt_from_restart
@@ -977,8 +777,6 @@ MODULE shared_data
   REAL(num) :: length_x, dx, x_grid_min, x_grid_max, x_min, x_max
   REAL(num) :: x_grid_min_local, x_grid_max_local, x_min_local, x_max_local
   REAL(num), DIMENSION(:), ALLOCATABLE :: x_grid_mins, x_grid_maxs
-
-  REAL(num) :: total_ohmic_heating = 0.0_num
 
   LOGICAL :: ic_from_restart = .FALSE.
   LOGICAL :: need_random_state
@@ -997,7 +795,7 @@ MODULE shared_data
     TYPE(particle), POINTER :: particle
   END TYPE particle_sort_element
 
-  TYPE(particle_sort_element), POINTER, DIMENSION(:) :: coll_sort_array
+  TYPE(particle_sort_element), ALLOCATABLE, DIMENSION(:) :: coll_sort_array
   INTEGER :: coll_sort_array_size = 0
 
   REAL(num), ALLOCATABLE, DIMENSION(:,:) :: coll_pairs
@@ -1065,6 +863,8 @@ MODULE shared_data
   ! domain and loadbalancing
   !----------------------------------------------------------------------------
   LOGICAL :: use_balance, balance_first
+  LOGICAL :: use_pre_balance
+  LOGICAL :: use_optimal_layout
   REAL(num) :: dlb_threshold
   INTEGER :: dlb_maximum_interval, dlb_force_interval
   INTEGER(i8), PARAMETER :: npart_per_it = 1000000
@@ -1194,6 +994,6 @@ MODULE shared_data
 #endif
   END TYPE custom_particle_loader
 
-  TYPE(custom_particle_loader), DIMENSION(:), POINTER :: custom_loaders_list
+  TYPE(custom_particle_loader), ALLOCATABLE, TARGET :: custom_loaders_list(:)
 
 END MODULE shared_data

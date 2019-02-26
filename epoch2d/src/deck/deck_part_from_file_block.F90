@@ -17,10 +17,7 @@
 MODULE deck_part_from_file_block
 
   USE strings_advanced
-  USE setup
-  USE simple_io
   USE utilities
-  USE partlist
   USE deck_species_block
 
   IMPLICIT NONE
@@ -37,8 +34,8 @@ MODULE deck_part_from_file_block
   INTEGER(KIND=8) :: current_offset
   INTEGER :: current_block_num
   INTEGER :: current_loader_id
-  INTEGER, DIMENSION(:), POINTER :: loader_block_ids
-  CHARACTER(LEN=string_length), DIMENSION(:), POINTER :: loader_species
+  INTEGER, DIMENSION(:), ALLOCATABLE :: loader_block_ids
+  CHARACTER(LEN=string_length), DIMENSION(:), ALLOCATABLE :: loader_species
 
 CONTAINS
 

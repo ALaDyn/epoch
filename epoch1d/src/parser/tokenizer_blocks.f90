@@ -80,7 +80,7 @@ CONTAINS
     INTEGER :: i
 
     as_species = c_prc_not_this_type
-    IF (.NOT. ASSOCIATED(species_list)) RETURN
+    IF (.NOT. ALLOCATED(species_list)) RETURN
 
     DO i = 1, n_species
       IF (str_cmp(name, species_list(i)%name)) THEN
@@ -100,7 +100,7 @@ CONTAINS
     INTEGER :: i
 
     as_subset = c_prc_not_this_type
-    IF (.NOT. ASSOCIATED(subset_list)) RETURN
+    IF (.NOT. ALLOCATED(subset_list)) RETURN
 
     DO i = 1, n_subsets
       IF (str_cmp(name, subset_list(i)%name)) THEN
@@ -187,6 +187,10 @@ CONTAINS
 
     IF (as_constant == c_const_x .AND. stagger(c_dir_x,tokenize_stagger)) &
         as_constant = c_const_xb
+
+    IF (str_cmp(name, 'px')) as_constant = c_const_px
+    IF (str_cmp(name, 'py')) as_constant = c_const_py
+    IF (str_cmp(name, 'pz')) as_constant = c_const_pz
 
     IF (str_cmp(name, 'yee')) as_constant = c_const_maxwell_solver_yee
     IF (str_cmp(name, 'cowan')) as_constant = c_const_maxwell_solver_cowan
@@ -322,8 +326,8 @@ CONTAINS
     IF (str_cmp(name, 'interpolate')) as_function = c_func_interpolate
     IF (str_cmp(name, 'if')) as_function = c_func_if
 
-    IF (str_cmp(name, 'density') .OR. str_cmp(name, 'rho')) &
-        as_function = c_func_rho
+    IF (str_cmp(name, 'density') .OR. str_cmp(name, 'rho') &
+        .OR. str_cmp(name, 'number_density')) as_function = c_func_rho
     IF (str_cmp(name, 'temp_x') .OR. str_cmp(name, 'temp_x_k')) &
         as_function = c_func_tempx
     IF (str_cmp(name, 'temp_y') .OR. str_cmp(name, 'temp_y_k')) &
