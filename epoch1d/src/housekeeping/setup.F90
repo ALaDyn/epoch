@@ -202,7 +202,6 @@ CONTAINS
     INTEGER :: i
 
     CALL setup_data_averaging
-    CALL setup_data_accumulate
     CALL setup_split_particles
     CALL setup_field_boundaries
 
