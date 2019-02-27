@@ -560,8 +560,8 @@ MODULE shared_data
   END TYPE accumulator_type
 
   TYPE accumulated_data_block
-    REAL(num), DIMENSION(:,:), POINTER :: array
-    REAL(r4), DIMENSION(:,:), POINTER :: r4array
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: array
+    REAL(r4), DIMENSION(:,:), ALLOCATABLE :: r4array
     LOGICAL :: dump_single, array_assoc
   END TYPE accumulated_data_block
 

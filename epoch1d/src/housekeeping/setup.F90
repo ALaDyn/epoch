@@ -314,7 +314,6 @@ CONTAINS
       accum => io_block_list(1)%accumulated_data(io)
       accum%dump_single = .FALSE.
       accum%array_assoc = .FALSE.
-      NULLIFY(accum%r4array, accum%array)
     END DO
 
     IF (.NOT. any_accumulate) RETURN
