@@ -305,6 +305,7 @@ CONTAINS
 
     counter => io_block_list(1)%accumulate_counter
     counter%current_step = 1
+    counter%dump_step = 0
     counter%last_accumulate_time = 0
     counter%last_accumulate_step = 0
     counter%reset = .FALSE.

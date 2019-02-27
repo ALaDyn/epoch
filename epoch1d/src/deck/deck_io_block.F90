@@ -1052,6 +1052,8 @@ CONTAINS
     io_block%walltime_prev = 0.0_num
     io_block%walltime_start = -1.0_num
     io_block%walltime_stop  = HUGE(1.0_num)
+    io_block%accumulate_counter%dt_acc = -1.0_num
+    io_block%accumulate_counter%nstep_acc = -1
     NULLIFY(io_block%dump_at_nsteps)
     NULLIFY(io_block%dump_at_times)
     NULLIFY(io_block%dump_at_walltimes)
