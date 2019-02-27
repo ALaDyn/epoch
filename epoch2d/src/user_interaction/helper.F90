@@ -352,7 +352,7 @@ CONTAINS
     npart_this_species = species%count
     IF (npart_this_species <= 0) THEN
      IF (use_store_default) THEN
-       CALL create_empty_partlist(species%attached_list, .TRUE.)
+       CALL create_empty_partlist(species%attached_list, use_store_in=.TRUE.)
      END IF
      RETURN
     END IF
@@ -511,7 +511,7 @@ CONTAINS
     IF(num_new_particles > 0) THEN
       CALL &
         create_allocated_partlist(partlist, num_new_particles, &
-        use_store_default)
+        use_store_in=use_store_default)
     ELSE
       CALL create_empty_partlist(partlist)
     END IF

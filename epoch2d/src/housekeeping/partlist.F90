@@ -222,6 +222,7 @@ CONTAINS
   !Called in two circumstances
   !Creating a list at first
   !And adding a chunk to a list
+  !In former case can already set all the links and init the particles
   SUBROUTINE create_linked_substore(store, total_size, link_upto_in)
 
     TYPE(particle_store), INTENT(INOUT) :: store
@@ -259,13 +260,19 @@ CONTAINS
         !Each particle slot up to request length should be linked up
         substore%store(i_part)%prev => substore%store(i_part-1)
         substore%store(i_part)%next => substore%store(i_part+1)
+        current => substore%store(i_part)
+        CALL init_particle(current)
+      ELSE IF ((i_part == 1 .AND. i_part < link_upto) &
+          .OR. i_part == link_upto) THEN
+        current => substore%store(i_part)
+        CALL init_particle(current)
       ELSE
         !Nullify pointers
         NULLIFY(substore%store(i_part)%prev, &
             substore%store(i_part)%next)
       END IF
       !Set not-live state
-      substore%store(i_part)%live = -1
+      substore%store(i_part)%live = -1 !TODO why if we've already linked etc?
     END DO
 
     IF(link_upto > 1) THEN
@@ -555,7 +562,8 @@ CONTAINS
           .AND. part_y < y_max_local .AND. part_y > y_min_local) THEN
           WRITE(100+rank, *) 'Error, particle in domain', countd, current%live
           WRITE(100+rank, *) part_x, part_y
-      ELSE IF(.NOT. inside_is_err .AND. (part_x >= x_max_local  .OR. part_x <= x_min_local &
+      ELSE IF(.NOT. inside_is_err .AND. &
+          (part_x >= x_max_local  .OR. part_x <= x_min_local &
           .AND. part_y >= y_max_local .OR. part_y <= y_min_local)) THEN
           WRITE(100+rank, *) 'Error, particle in domain', countd, current%live
           WRITE(100+rank, *) part_x, part_y
@@ -641,7 +649,8 @@ CONTAINS
     i = 1
     WRITE(100+rank, *) "Checking prevs"
     DO WHILE (ASSOCIATED(current))
-      IF(ASSOCIATED(prev) .AND. .NOT. ASSOCIATED(current%prev, TARGET=prev)) THEN
+      IF(ASSOCIATED(prev) .AND. &
+          .NOT. ASSOCIATED(current%prev, TARGET=prev)) THEN
         WRITE(100+rank, *) "Bad prev in walk at ", i
         FLUSH(100+rank)
         CALL abort_with_trace(12)
@@ -672,7 +681,7 @@ CONTAINS
     TYPE(particle), POINTER :: current
     INTEGER(i8) :: ipart
 
-    CALL create_empty_partlist(partlist, holds_copies)
+    CALL create_empty_partlist(partlist, holds_copies=holds_copies)
 
     partlist%safe = .FALSE.
     current => a_particle
@@ -697,7 +706,7 @@ CONTAINS
     TYPE(particle), POINTER :: current
     INTEGER(i8) :: ipart
 
-    CALL create_empty_partlist(partlist, holds_copies)
+    CALL create_empty_partlist(partlist, holds_copies=holds_copies)
 
     partlist%safe = .FALSE.
     partlist%head => head
@@ -765,6 +774,8 @@ CONTAINS
   !Walk the particle store and regenerate a linked list
   !from the slots which hold live particles
   !to make list a valid linked list again
+  !If particles were 'removed' without removing from store
+  ! recount will restore the correct count
   SUBROUTINE relink_partlist(list, recount)
 
     TYPE(particle_list), INTENT(INOUT) :: list
@@ -829,7 +840,8 @@ CONTAINS
       END IF
     ELSE
       !Do this only if we've not created anything new
-      list%store%tail%first_free_element = list%store%tail%first_free_element + 1
+      list%store%tail%first_free_element = &
+          list%store%tail%first_free_element + 1
     END IF
     !Do this always, as if we grew, we have a nice empty, valid substore
     list%store%next_slot => &
@@ -943,7 +955,6 @@ CONTAINS
       ipart = 0
       DO WHILE (ipart < partlist%count)
         next => new_particle%next
-        DEALLOCATE(new_particle)
         CALL destroy_particle(new_particle, &
             partlist%holds_copies .OR. .NOT.partlist%safe)
         new_particle => next
@@ -1040,7 +1051,7 @@ CONTAINS
         next_index = list%store%head%first_free_element
         !End diagnostic
 
-        CALL create_particle_in_list(next, list)
+        CALL create_particle_in_list(next, list, .TRUE.)
         next%live = 1
         CALL copy_particle(current, next)
         add_count = add_count + 1
@@ -1095,6 +1106,10 @@ CONTAINS
     TYPE(particle), POINTER :: a_particle, tmp_particle
     LOGICAL, INTENT(IN), OPTIONAL :: fromstore_in, nocopy_in
     LOGICAL :: fromstore, nocopy
+    ! Remove a particle from a partlist. If fromstore is TRUE the
+    ! particle is also removed from the storem otherwise it remains
+    ! a valid particle in the store, but not part of the list it backs:
+    ! this means a relink will ADD it back!
 
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
@@ -1102,13 +1117,11 @@ CONTAINS
     IF( a_particle%live /= 1) RETURN
 
 
-    !TODO why is there a fromstore when we have partlist%use_store ??
     IF (PRESENT(fromstore_in)) THEN
       fromstore = fromstore_in
     ELSE
      fromstore = .TRUE.
     END IF
-  !  fromstore = partlist%use_store
     IF (PRESENT(nocopy_in)) THEN
       nocopy = nocopy_in
     ELSE
@@ -1132,14 +1145,16 @@ CONTAINS
     IF (ASSOCIATED(a_particle%prev)) a_particle%prev%next => a_particle%next
 
     NULLIFY(a_particle%next, a_particle%prev)
-    IF (partlist%use_store) a_particle%live = 0
+    IF (partlist%use_store .AND. fromstore) THEN
+      a_particle%live = 0
+    END IF
     ! Decrement counter
     partlist%count = partlist%count-1
 
     IF (partlist%use_store .AND. .NOT. nocopy) THEN
       !If a_particle is in a store, make a copy
       !Then what comes back is a valid, FREE particle
-      CALL create_particle(tmp_particle)
+      CALL create_particle(tmp_particle, .TRUE.)
       CALL copy_particle(a_particle, tmp_particle)
       !Return a live particle
       tmp_particle%live = 1
@@ -1302,9 +1317,10 @@ CONTAINS
 
 
 
-  SUBROUTINE init_particle(new_particle)
+  SUBROUTINE init_particle(new_particle, no_gen_id)
 
     TYPE(particle), POINTER :: new_particle
+    LOGICAL, INTENT(IN), OPTIONAL :: no_gen_id
 
     new_particle%part_p = 0.0_num
     new_particle%part_pos = 0.0_num
@@ -1320,7 +1336,13 @@ CONTAINS
     new_particle%processor_at_t0 = 0
 #endif
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
-    new_particle%id = generate_id()
+    IF (PRESENT(no_gen_id)) THEN
+      IF (.NOT. no_gen_id) THEN
+        new_particle%id = generate_id()
+      END IF
+    ELSE
+      new_particle%id = generate_id()
+    END IF
 #endif
 #ifdef COLLISIONS_TEST
     new_particle%coll_count = 0
@@ -1378,26 +1400,28 @@ CONTAINS
 
 
 
-  SUBROUTINE create_particle(new_particle)
+  SUBROUTINE create_particle(new_particle, no_gen_id)
 
     TYPE(particle), POINTER :: new_particle
+    LOGICAL, INTENT(IN), OPTIONAL :: no_gen_id
 
     ALLOCATE(new_particle)
-    CALL init_particle(new_particle)
+    CALL init_particle(new_particle, no_gen_id)
 
   END SUBROUTINE create_particle
 
 
 
-  SUBROUTINE create_particle_in_list(new_particle, list)
+  SUBROUTINE create_particle_in_list(new_particle, list, no_gen_id)
 
     TYPE(particle), POINTER, INTENT(INOUT) :: new_particle
     TYPE(particle_list), INTENT(INOUT) :: list
+    LOGICAL, INTENT(IN), OPTIONAL :: no_gen_id
 
     IF (list%use_store) THEN
       new_particle => list%store%next_slot
-      CALL init_particle(new_particle)
-      new_particle%live = 1
+      CALL init_particle(new_particle, no_gen_id)
+      new_particle%live = 1 !TODO - not needed?
       new_particle%prev => list%tail
       NULLIFY(new_particle%next)
       list%tail => new_particle
@@ -1407,7 +1431,7 @@ CONTAINS
       CALL increment_next_free_element(list)
       new_particle => list%tail !In case reallocation occurred
     ELSE
-      CALL create_particle(new_particle)
+      CALL create_particle(new_particle, no_gen_id)
       new_particle%prev => list%tail
       NULLIFY(new_particle%next)
       list%tail => new_particle
@@ -1416,6 +1440,7 @@ CONTAINS
 
     END IF
     IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
+
   END SUBROUTINE create_particle_in_list
 
 

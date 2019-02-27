@@ -707,8 +707,13 @@ CONTAINS
 
         IF (isubset /= 1) THEN
           DO i = 1, n_species
-            CALL append_partlist(species_list(i)%attached_list, &
-                io_list(i)%attached_list)
+            IF (species_list(i)%attached_list%use_store) THEN
+              CALL relink_partlist(species_list(i)%attached_list, .TRUE.)
+              species_list(i)%attached_list%locked_store = .FALSE.
+            ELSE
+              CALL append_partlist(species_list(i)%attached_list, &
+                  io_list(i)%attached_list)
+            END IF
           END DO
           DO i = 1, n_species
             CALL create_empty_partlist(io_list(i)%attached_list)
@@ -2384,8 +2389,9 @@ CONTAINS
 
         IF (use_particle) THEN
           ! Move particle to io_list
+          species_list(i)%attached_list%locked_store = .TRUE.
           CALL remove_particle_from_partlist(species_list(i)%attached_list, &
-              current)
+              current, fromstore_in=.FALSE., nocopy_in=.TRUE.)
           CALL add_particle_to_partlist(io_list(i)%attached_list, current)
         END IF
         current => next

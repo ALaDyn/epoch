@@ -25,7 +25,7 @@ MODULE utilities
   END INTERFACE grow_array
 
   PRIVATE
-  PUBLIC :: abort_code, grow_array
+  PUBLIC :: abort_code, abort_with_trace, grow_array
 
 CONTAINS
 
