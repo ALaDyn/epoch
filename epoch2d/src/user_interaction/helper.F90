@@ -343,7 +343,7 @@ CONTAINS
     REAL(num), ALLOCATABLE :: num_frac(:)
     INTEGER(i8) :: cell_x
     INTEGER(i8) :: cell_y
-    INTEGER(i8) :: i, ipos, current_index
+    INTEGER(i8) :: i, ipos
     INTEGER :: ix, iy, nx_e
     INTEGER :: ix_min, ix_max, iy_min, iy_max
     CHARACTER(LEN=15) :: string
@@ -523,7 +523,6 @@ CONTAINS
 
     current => partlist%head
 
-    current_index = 1 !TODO Now just diagnostic tracker
     IF (npart_per_cell > 0) THEN
       DO iy = iy_min, iy_max
       DO ix = ix_min, ix_max
@@ -549,7 +548,6 @@ CONTAINS
           ipart = ipart + 1
 
           current => current%next
-          current_index = current_index + 1
 
           ! One particle sucessfully placed
           npart_left = npart_left - 1
@@ -603,7 +601,6 @@ CONTAINS
         current%live = 1
 
         current => current%next
-        current_index = current_index + 1
       END DO
       DEALLOCATE(valid_cell_list)
     END IF

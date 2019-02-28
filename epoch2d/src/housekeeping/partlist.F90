@@ -169,10 +169,11 @@ CONTAINS
       link_el = link_el_in
     END IF
 
-    !TODO Here goes logic on how to split up actual request
-    !Not sure if we want to allocate a large chunk and then add
-    !pieces, or all in pieces, or other
-    !For now, all pieces
+    ! This is currently splitting up the memory into
+    ! uniform chunks of size sublist_size
+    ! This is optimal for memory usage.
+    ! Could alternately allocate a large chunk, say half total
+    ! and then add pieces
 
     n_subs = CEILING(REAL(actual_elements)/REAL(sublist_size))
     ALLOCATE(els_to_allocate(n_subs))
@@ -272,7 +273,7 @@ CONTAINS
             substore%store(i_part)%next)
       END IF
       !Set not-live state
-      substore%store(i_part)%live = -1 !TODO why if we've already linked etc?
+      substore%store(i_part)%live = -1 ! Pseudo-live but not yet populated
     END DO
 
     IF(link_upto > 1) THEN
@@ -746,14 +747,6 @@ CONTAINS
 
     IF (use_store) THEN
       CALL create_particle_store(partlist, n_elements)
-    !  IF(n_elements > 0) THEN
-    !    !TODO and if not condition??
-    !    !TODO actually the following MAY NOT be list tail, should do better
-    !    partlist%tail => partlist%store%next_slot%prev
-    !    partlist%head => partlist%store%head%head
-    !  ELSE
-    !    NULLIFY(partlist%head, partlist%tail)
-    !  END IF
       partlist%count = n_elements
     ELSE
       CALL create_empty_partlist(partlist, holds_copies=holds_copies)
@@ -832,7 +825,7 @@ CONTAINS
       !First resort: compact store
      IF(list%count > 0 .AND..NOT. list%locked_store .AND. &
           REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
-        CALL full_compact_backing_store(list%store, list)
+        CALL compact_backing_store(list%store, list)
       END IF
       IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
         !Compacting insufficient, must grow
@@ -1031,36 +1024,28 @@ CONTAINS
     TYPE(particle_list), INTENT(INOUT) :: newlist, list
     LOGICAL, INTENT(IN) :: override_live !Override any live states in newlist
     TYPE(particle), POINTER :: current, next
-    INTEGER(i8) :: add_count, next_index !TODO both temporary diagnostics
 
-    IF(newlist%count < 1) RETURN
+    IF (newlist%count < 1) RETURN !Nothing to append, make no change
 
     current => newlist%head
     NULLIFY(next)
-    IF ( .NOT. ASSOCIATED(list%head) .AND. newlist%count > 0) THEN
+
+    IF (.NOT. ASSOCIATED(list%head)) THEN
       !List was empty, so hook up the head
       list%head => list%store%next_slot
     END IF
 
-    add_count = 0
     DO WHILE(ASSOCIATED(current))
       !Only consider live particles, unless overrriding
-      IF ( override_live .OR. current%live == 1) THEN
-
-        !Diagnostic only...
-        next_index = list%store%head%first_free_element
-        !End diagnostic
-
+      IF (override_live .OR. current%live == 1) THEN
         CALL create_particle_in_list(next, list, .TRUE.)
-        next%live = 1
         CALL copy_particle(current, next)
-        add_count = add_count + 1
+        next%live = 1 ! Required if over-riding
       END IF
 
       current => current%next
     END DO
     list%id_update = list%id_update + newlist%id_update
-
 
   END SUBROUTINE add_partlist_to_list_and_store
 
@@ -1285,7 +1270,7 @@ CONTAINS
     cpos = cpos+1
 #endif
 #endif
-    a_particle%live = 1 !TODO actually send this info
+    a_particle%live = 1 !Only live particles ever sent
 #ifdef WORK_DONE_INTEGRATED
     a_particle%work_x = array(cpos)
     a_particle%work_y = array(cpos+1)
@@ -1421,7 +1406,6 @@ CONTAINS
     IF (list%use_store) THEN
       new_particle => list%store%next_slot
       CALL init_particle(new_particle, no_gen_id)
-      new_particle%live = 1 !TODO - not needed?
       new_particle%prev => list%tail
       NULLIFY(new_particle%next)
       list%tail => new_particle
@@ -1741,110 +1725,50 @@ CONTAINS
   END SUBROUTINE update_particle_count
 
 
-  !TODO Currently works with only a single store
+
   SUBROUTINE compact_backing_store(store, list)
-
-    TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: section
-    TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), POINTER :: original, new
-    INTEGER(i8) :: i, last_placed, count, moved, j
-
-    !TODO Should we compact between stores?
-    !TODO remove moved diagnostic
-    section => store%head
-    last_placed = 1
-    count = 0
-    moved = 0
-
-    !TODO is there any point compacting the segments or should we
-    ! just remove them when they become empty?
-    !We can compact the last chunk, but if we do the above this might be pointless too
-
-    DO j = 1, store%n_subs
-      !We're doing before we update first_free_element, so it may contain particle
-      last_placed = 1
-
-      DO i = 1, section%first_free_element
-        IF( i > section%length) EXIT
-        IF(section%store(i)%live > 0) THEN
-          count = count + 1
-        END IF
-        IF(section%store(i)%live > 0 .AND. i - last_placed > 1) THEN
-          moved = moved + 1
-          original => section%store(i)
-          new => section%store(last_placed + 1)
-          CALL copy_particle(original, new)
-          last_placed = last_placed + 1
-        ELSE IF(section%store(i)%live > 0) THEN
-          last_placed = i
-        END IF
-      END DO
-
-      DO i = last_placed+1 , section%length
-        new => section%store(i)
-        new%live = 0
-      END DO
-      section%head => section%store(1)
-      section => section%next
-    END DO
-    CALL relink_partlist(list, .FALSE.)
-    CALL update_store_endpoint(list, last_placed)
-
-
-
-  END SUBROUTINE compact_backing_store
-
-
-  SUBROUTINE full_compact_backing_store(store, list)
 
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: src_section, dest_section
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle), POINTER :: original, place_into
-    INTEGER(i8) :: i, next_place_index, count, moved, j
+    INTEGER(i8) :: i, next_place_index, j
 
-    !Completely compact, between stores
-    !Write so as to allow skipping empty subs completely
-    !TODO remove moved diagnostic
+    ! Completely compact, between stores
+    ! Written so as to allow skipping empty subs completely
+    ! These are then removed at the last step
     src_section => store%head
     dest_section => store%head
     next_place_index = 1
-    count = 0
-    moved = 0
 
     place_into => store%head%store(1)
     DO j = 1, store%n_subs
       DO i = 1, src_section%first_free_element
-        IF( i > src_section%length) EXIT
-        IF(src_section%store(i)%live > 0) THEN
-          count = count + 1
-        END IF
-        IF(src_section%store(i)%live > 0 .AND. &
+        IF (i > src_section%length) EXIT
+        IF (src_section%store(i)%live > 0 .AND. &
             .NOT. ASSOCIATED(place_into, TARGET=src_section%store(i))) THEN
-          moved = moved + 1
           original => src_section%store(i)
           CALL copy_particle(original, place_into)
           original%live = 0
           next_place_index = next_place_index + 1
-        ELSE IF(src_section%store(i)%live > 0 ) THEN
+        ELSE IF (src_section%store(i)%live > 0) THEN
          !Otherwise we're leaving it where it is
-         next_place_index = i+1
+         next_place_index = i + 1
         END IF
-        IF(next_place_index > dest_section%length) THEN
+        IF (next_place_index > dest_section%length) THEN
           !Move dest_section to next, before advancing place_into
           !Update dest_section count
-          dest_section%first_free_element = dest_section%length+1
+          dest_section%first_free_element = dest_section%length + 1
 
           !Increment dest_section to next chunk
           !There must be one if we still have live particles
           dest_section => dest_section%next
           next_place_index = 1
         END IF
-        IF(ASSOCIATED(dest_section)) THEN
+        IF (ASSOCIATED(dest_section)) THEN
           place_into => dest_section%store(next_place_index)
         ELSE
-         EXIT
+          EXIT
         END IF
       END DO
       src_section%head => src_section%store(1)
@@ -1860,13 +1784,12 @@ CONTAINS
       END DO
     END IF
 
- 
     CALL remove_empty_subs(list)
     CALL set_next_slot(list)
 
     CALL relink_partlist(list, .FALSE.)
 
-  END SUBROUTINE full_compact_backing_store
+  END SUBROUTINE compact_backing_store
 
 
 
@@ -1875,20 +1798,17 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle_sub_store), POINTER :: current, next
-    INTEGER(i8) :: length, n_dels
+    INTEGER(i8) :: length
 
     current => list%store%head
     length = 0
     !Do nothing if only one sub
     IF (.NOT. ASSOCIATED(current%next)) RETURN
 
-    !TODO remove n_dels diagnostic
-    n_dels = 0
     DO WHILE(ASSOCIATED(current))
       next => current%next
       IF(current%first_free_element == 1) THEN
         !Delete empty segments
-        n_dels = n_dels + 1
         IF(ASSOCIATED(current%prev)) THEN
           current%prev%next => next
         ELSE
@@ -1908,7 +1828,6 @@ CONTAINS
       ELSE
         length = length + current%length
       END IF
-
       current => next
     END DO
 
