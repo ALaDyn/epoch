@@ -105,7 +105,6 @@ CONTAINS
 
     TYPE(injector_block), INTENT(IN), POINTER :: injector
     TYPE(particle_species), POINTER :: species
-    !TODO Need to verfy this really is a return injector?
 
     species => species_list(injector%species)
 

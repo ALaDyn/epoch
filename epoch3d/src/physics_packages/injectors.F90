@@ -535,6 +535,7 @@ CONTAINS
 
     mass = species_list(injector%species)%mass
     typical_mc2 = (mass * c)**2
+    parameters%use_grid_position = .TRUE.
 
     DO ii = 1, nel(1)
       DO jj = 1, nel(2)

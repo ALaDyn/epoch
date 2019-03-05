@@ -965,7 +965,7 @@ CONTAINS
     REAL(num), DIMENSION(:), ALLOCATABLE :: values
 
     TYPE(particle_species), POINTER :: curr_species
-    INTEGER :: i, ispecies, return_species
+    INTEGER :: ispecies, return_species
 
     IF (.NOT. any_return) RETURN
     return_species = -1

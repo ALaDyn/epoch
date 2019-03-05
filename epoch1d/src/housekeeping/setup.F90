@@ -1702,7 +1702,7 @@ CONTAINS
     CHARACTER(LEN=*), INTENT(IN) :: block_id_in, direction_name
     INTEGER, INTENT(IN) :: ndims, boundary
     TYPE(particle_species), POINTER :: curr_species
-    INTEGER :: i, ispecies, return_species
+    INTEGER :: ispecies, return_species
     REAL(KIND=num), DIMENSION(:), ALLOCATABLE :: values
     INTEGER, DIMENSION(4) :: dims
 

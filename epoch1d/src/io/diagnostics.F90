@@ -929,7 +929,7 @@ CONTAINS
     REAL(num), DIMENSION(1):: val !An array to maintain sync w. higher dims
 
     TYPE(particle_species), POINTER :: curr_species
-    INTEGER :: i, ispecies, return_species, ierr
+    INTEGER :: ispecies, return_species, ierr
 
     IF (.NOT. any_return) RETURN
     return_species = -1
