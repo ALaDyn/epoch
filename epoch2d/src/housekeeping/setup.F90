@@ -1103,6 +1103,10 @@ CONTAINS
             block_id, ndims, 'laser_y_min_phase', 'y_min')
         CALL read_laser_phases(sdf_handle, n_laser_y_max, laser_y_max, &
             block_id, ndims, 'laser_y_max_phase', 'y_max')
+        CALL read_return_injectors(sdf_handle, block_id, ndims, &
+            c_bd_x_min, 'x_min')
+        CALL read_return_injectors(sdf_handle, block_id, ndims, &
+            c_bd_x_max, 'x_max')
 
       CASE(c_blocktype_constant)
         IF (str_cmp(block_id, 'dt_plasma_frequency')) THEN
@@ -1801,6 +1805,58 @@ CONTAINS
   END FUNCTION it_optical_depth_trident
 #endif
 #endif
+
+
+  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims, &
+      boundary, direction_name)
+
+    TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_in, direction_name
+    INTEGER, INTENT(IN) :: ndims, boundary
+    TYPE(particle_species), POINTER :: curr_species
+    INTEGER :: i, ispecies, return_species
+    REAL(KIND=num), DIMENSION(:), ALLOCATABLE :: values
+    INTEGER, DIMENSION(4) :: dims
+
+    IF (str_cmp(block_id_in(1:LEN('return_injector')), &
+        'return_injector') .AND. str_cmp(TRIM(block_id_in( &
+        LEN('return_injector')+2:LEN(block_id_in))), TRIM(direction_name))) &
+        THEN
+      CALL sdf_read_array_info(sdf_handle, dims)
+
+      ! In 1-d there is one value, 2-d there is one strip of drifts,
+      ! in 3-d one plane etc
+      IF (ndims /= 1 .OR. dims(1) /= ny_global) THEN
+        PRINT*, '*** WARNING ***'
+        PRINT*, 'Number of values does not match number required.'
+        PRINT*, 'Return boundaries may not restart exactly'
+      END IF
+
+      return_species = -1
+      DO ispecies = 1, n_species
+        IF(species_list(ispecies)%bc_particle(boundary) == c_bc_return) THEN
+          return_species = ispecies
+        END IF
+      END DO
+      IF(return_species == -1) RETURN
+
+      ALLOCATE(values(dims(1)))
+      CALL sdf_read_srl(sdf_handle, values)
+
+      curr_species=>species_list(return_species)
+
+      IF (boundary == c_bd_x_min) THEN
+        curr_species%ext_drift_x_min(1:ny) = &
+            values(ny_global_min:ny_global_max)
+      ELSE IF(boundary == c_bd_x_max) THEN
+        curr_species%ext_drift_x_max(1:ny) = &
+            values(ny_global_min:ny_global_max)
+      ENDIF
+
+      DEALLOCATE(values)
+    END IF
+
+  END SUBROUTINE read_return_injectors
 
 
 

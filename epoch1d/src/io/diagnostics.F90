@@ -934,11 +934,9 @@ CONTAINS
     IF (.NOT. any_return) RETURN
     return_species = -1
     DO ispecies = 1, n_species
-      DO i = 1, c_ndims
-        IF (species_list(ispecies)%bc_particle(i) == c_bc_return) THEN
-          return_species = ispecies
-        END IF
-      END DO
+      IF (species_list(ispecies)%bc_particle(boundary) == c_bc_return) THEN
+        return_species = ispecies
+      END IF
     END DO
 
     IF (return_species /= -1) THEN
