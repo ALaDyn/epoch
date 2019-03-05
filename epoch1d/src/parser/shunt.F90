@@ -185,7 +185,6 @@ CONTAINS
     stack%init = .TRUE.
     stack%is_time_varying = .FALSE.
     stack%should_simplify = simplify_deck
-    stack%post_multiply = 1.0_num
 
   END SUBROUTINE initialise_stack
 

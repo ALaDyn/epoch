@@ -16,32 +16,102 @@ MODULE boosted_frame
   REAL(num) :: dt_lab
   CONTAINS
 
-!  FUNCTION test_valid_packages() RESULT(all_ok)
-!    LOGICAL :: all_ok
+  FUNCTION test_valid_packages() RESULT(any_errors)
+    LOGICAL :: any_errors
 
-!    all_ok = .TRUE.
+    any_errors = .FALSE.
 
 #ifdef WORK_DONE_INTEGRATED
-!    all_ok = .FALSE.
-!    IF (rank == 0) THEN
-!      PRINT *,'Work done diagnostic does not function in boosted frame'
-!    END IF
+    any_errors = .TRUE.
+    IF (rank == 0) THEN
+      PRINT *,'*** ERROR ***'
+      PRINT *,'Work done diagnostic does not function in boosted frame'
+    END IF
 #endif
 
-!  END FUNCTION test_valid_packages
+    IF (move_window) THEN
+      any_errors = .TRUE.
+      IF (rank == 0) THEN
+        PRINT *,'*** ERROR ***'
+        PRINT *,'Cannot have a moving window inside a boosted frame'
+      END IF
+    END IF
+
+  END FUNCTION test_valid_packages
 
 
 
   SUBROUTINE new_simulation_boost
 
+    LOGICAL :: any_errors, ret_err
+
     IF (use_boosted_frame) THEN
+
+      IF (rank == 0) THEN
+        PRINT *,'*******************************************'
+        PRINT *,'Transforming to boosted frame'
+        PRINT *,'*******************************************'
+        PRINT '(A, F16.0)', ' Frame vx(m/s) = ', global_boost_info%vx
+        PRINT '(A, F16.8)', ' Frame beta    = ', global_boost_info%beta
+        PRINT '(A, F16.8)', ' Frame gamma   = ', global_boost_info%lorentz_gamma
+        PRINT *,'*******************************************'
+      END IF
       trans_pos => transform_position
 
-      CALL transform_domain
-      CALL transform_species
-      CALL transform_lasers
-      CALL transform_io
+      !Do not replace these with any_errors = any_errors .OR. transform_*
+      !There is no guaranteed short circuit behaviour in Fortran and this will
+      !definitely fail on gfortran
+      any_errors = .FALSE.
 
+      ret_err = test_valid_packages()
+      any_errors = any_errors .OR. ret_err
+      IF (.NOT. ret_err .AND. rank == 0) PRINT *,'Packages OK'
+
+      IF (rank == 0) &
+          PRINT *,'*******************************************'
+      ret_err = transform_domain()
+      any_errors = any_errors .OR. ret_err
+      IF (.NOT. ret_err .AND. rank == 0) PRINT *,'Domain OK'
+
+      IF (rank == 0) &
+          PRINT *,'*******************************************'
+      ret_err = transform_species()
+      any_errors = any_errors .OR. ret_err
+      IF (.NOT. ret_err .AND. rank == 0) PRINT *,'Particles OK'
+
+      IF (rank == 0) &
+          PRINT *,'*******************************************'
+      ret_err = test_injectors()
+      any_errors = any_errors .OR. ret_err
+      IF (.NOT. ret_err .AND. rank == 0) PRINT *,'Injectors OK'
+
+      IF (rank == 0) &
+          PRINT *,'*******************************************'
+      ret_err = transform_lasers()
+      any_errors = any_errors .OR. ret_err
+      IF (.NOT. ret_err .AND. rank == 0) PRINT *,'Lasers OK'
+
+      IF (rank == 0) &
+          PRINT *,'*******************************************'
+      ret_err = transform_io()
+      IF (.NOT. ret_err .AND. rank == 0) PRINT *,'IO OK'
+
+      IF (any_errors) THEN
+        IF (rank == 0) THEN
+          PRINT *,'*******************************************'
+          PRINT *,'THERE ARE ERRORS IN TRANSFORMING TO THE BOOSTED FRAME'
+          PRINT *,'FIX THESE ERRORS AND RERUN EPOCH'
+          PRINT *,'CODE WILL TERMINATE'
+          PRINT *,'*******************************************'
+        END IF
+        CALL abort_code(c_err_bad_value)
+      ELSE
+        IF (rank == 0) THEN
+          PRINT *,'*******************************************'
+          PRINT *,'Transform to boosted frame succeeded'
+          PRINT *,'*******************************************'
+        END IF
+      END IF
       in_boosted_frame = .TRUE.
     ELSE
       CALL setup_null_io
@@ -57,16 +127,59 @@ MODULE boosted_frame
 
 
 
-  SUBROUTINE transform_domain
+  FUNCTION test_injectors() RESULT(any_errors)
+    LOGICAL :: any_errors
+    TYPE(injector_block), POINTER :: current
+
+    any_errors = .FALSE.
+
+    IF (x_min_boundary) THEN
+      current => injector_x_min
+      DO WHILE(ASSOCIATED(current))
+        IF (current%drift_function(1)%is_time_varying) THEN
+          IF (rank == 0) THEN
+            PRINT *,'*** ERROR ***'
+            PRINT *,'Cannot have time varying momenta in x direction'
+            PRINT *,'for injectors in boosted frame'
+          END IF
+          any_errors = .TRUE.
+        END IF
+        current => current%next
+      END DO
+    END IF
+
+    IF (x_max_boundary) THEN
+      current => injector_x_max
+      DO WHILE(ASSOCIATED(current))
+        IF (current%drift_function(1)%is_time_varying) THEN
+          IF (rank == 0) THEN
+            PRINT *,'*** ERROR ***'       
+            PRINT *,'Cannot have time varying momenta in x direction'
+            PRINT *,'for injectors in boosted frame'
+          END IF
+          any_errors = .TRUE.
+        END IF
+        current => current%next
+      END DO
+    END IF
+
+  END FUNCTION test_injectors
+
+
+
+  FUNCTION transform_domain() RESULT(any_errors)
 
     INTEGER :: ix
     REAL(num) :: time_min
+    LOGICAL :: any_errors
+
+    any_errors = .FALSE.
 
     !Transform time
     dt_lab = dt
-    dt = dt * SQRT(1.0_num - global_boost_info%beta**2)
+    dt = transform_interval_in_prime(global_boost_info, dt)
 
-    t_end = t_end * SQRT(1.0_num - global_boost_info%beta**2)
+    t_end = transform_interval_in_prime(global_boost_info, t_end)
 
     x_grid_min = trans_pos(global_boost_info, x_grid_min)
     x_grid_max = trans_pos(global_boost_info, x_grid_max)
@@ -109,76 +222,108 @@ MODULE boosted_frame
     dt_domain = global_boost_info%lorentz_gamma * global_boost_info%beta &
         * length_x / c
 
+    IF (rank == 0) THEN
+      PRINT '(A, E16.7)', ' Lab time difference between ends of domain(s)   = '&
+          , dt_domain
+    END IF
+
     dx = x(1) - x(0)
 
-  END SUBROUTINE transform_domain
+  END FUNCTION transform_domain
 
 
 
-  SUBROUTINE transform_species(inverse)
+  FUNCTION transform_species(inverse) RESULT(any_errors)
     LOGICAL, INTENT(IN), OPTIONAL :: inverse
     TYPE(particle), POINTER :: current
     INTEGER :: ispecies
     TYPE(particle_species), POINTER :: species_in
+    LOGICAL :: any_errors, retval
+
+    any_errors = .FALSE.
 
     DO ispecies = 1, n_species
       species_in => species_list(ispecies)
       current=>species_in%attached_list%head
       DO WHILE (ASSOCIATED(current))
-        CALL transform_particle(current, species_in%mass, &
-            inverse)
+        retval = transform_particle(current, species_in%mass, inverse)
+        any_errors = any_errors .OR. retval
         current => current%next
       END DO
     END DO
 
-  END SUBROUTINE transform_species
+  END FUNCTION transform_species
 
 
 
-  SUBROUTINE transform_particle(current, mass, inverse)
+  FUNCTION transform_particle(current, mass, inverse) RESULT(any_errors)
     TYPE(particle), INTENT(INOUT) :: current
     REAL(num), INTENT(IN) :: mass
     LOGICAL, INTENT(IN), OPTIONAL :: inverse
+    LOGICAL :: any_errors
+
+    any_errors = .FALSE.
 
     current%part_p = transform_momentum(global_boost_info, current%part_p, &
         mass = mass)
     current%part_pos = transform_position(global_boost_info, current%part_pos)
 
-  END SUBROUTINE transform_particle
+  END FUNCTION transform_particle
 
 
 
-  SUBROUTINE transform_lasers
+  FUNCTION transform_lasers() RESULT(any_errors)
 
     TYPE(laser_block), POINTER :: current
+    LOGICAL :: any_errors, retval
+
+    any_errors = .FALSE.
 
     current => laser_x_min
     DO WHILE(ASSOCIATED(current))
-      CALL transform_laser(current)
+      retval = transform_laser(current)
+      any_errors = any_errors .OR. retval
       current => current%next
     END DO
 
     current => laser_x_max
     DO WHILE(ASSOCIATED(current))
-      CALL transform_laser(current)
+      retval = transform_laser(current)
+      any_errors = any_errors .OR. retval
       current => current%next
     END DO
 
-  END SUBROUTINE transform_lasers
+  END FUNCTION transform_lasers
 
 
 
-  SUBROUTINE transform_laser(laser)
+  FUNCTION transform_laser(laser) RESULT(any_errors)
     TYPE(laser_block), INTENT(INOUT) :: laser
-    REAL(num) :: kboost
+    REAL(num) :: kboost, kx
+    LOGICAL :: any_errors
 
-    IF (.NOT. laser%use_omega_function) THEN
+    any_errors = .FALSE.
+
+    laser%initial_pos(1) = trans_pos(global_boost_info, laser%initial_pos(1))
+
+    IF (.NOT. laser%use_omega_function .AND. &
+        .NOT. ANY(laser%use_k_function)) THEN
+
+      IF (laser%omega_func_type == c_of_k) THEN
+        kx = laser%k(1)
+      ELSE
+        kx = laser%omega/c * laser%kx_mult
+      END IF
+
       laser%omega = transform_frequency(global_boost_info, laser%omega, &
-          laser%omega/c * laser%kx_mult, k_boost = kboost)
+          kx, k_boost = kboost)
+      IF (laser%omega_func_type == c_of_k) THEN
+        laser%k(1) = kboost
+      END IF
       laser%t_start = transform_time(global_boost_info, laser%t_start, &
-          laser%x_at_t0)
+          laser%initial_pos(1))
       laser%t_end = transform_time(global_boost_info, laser%t_end, &
-          laser%x_at_t0)
+          laser%initial_pos(1))
 
       IF (pi / laser%omega < dt) THEN
         dt = pi / laser%omega
@@ -194,7 +339,7 @@ MODULE boosted_frame
           PRINT *,'After frame transform a laser has a wavelength below the'
           PRINT *,'grid spacing. Results will be incorrect'
           PRINT *,'Code will terminate'
-          CALL abort_code(c_err_bad_setup)
+          any_errors = .TRUE.
       END IF
 
       IF (pi / kboost < 10.0_num * dx .AND. rank == 0) THEN
@@ -205,7 +350,7 @@ MODULE boosted_frame
       END IF
     END IF
 
-  END SUBROUTINE transform_laser
+  END FUNCTION transform_laser
 
 
 
@@ -215,42 +360,44 @@ MODULE boosted_frame
  
 
 
-  SUBROUTINE transform_io
+  FUNCTION transform_io() RESULT(any_errors)
 
     INTEGER :: iio, ispecies, iprefix, nprefix
     REAL(num) :: dt_dump
-    LOGICAL :: error
+    LOGICAL :: any_errors
 
     nprefix = SIZE(file_prefixes)
     ALLOCATE(prefix_boosts(nprefix))
 
     dt_dump = HUGE(1.0_num)
-    error = .FALSE.
+    any_errors = .FALSE.
     DO iio = 1, n_io_blocks
 
       !Transform start and end times into the boosted frame
-      io_block_list(iio)%time_start = io_block_list(iio)%time_start &
-          * SQRT(1.0_num - global_boost_info%beta**2)
-      io_block_list(iio)%time_stop = io_block_list(iio)%time_stop &
-          * SQRT(1.0_num - global_boost_info%beta**2)
+      io_block_list(iio)%time_start = &
+          transform_interval_in_prime(global_boost_info, &
+          io_block_list(iio)%time_start)
+      io_block_list(iio)%time_stop = &
+          transform_interval_in_prime(global_boost_info, &
+          io_block_list(iio)%time_stop)
 
       !If using time step between snapshots then transform that
       IF (io_block_list(iio)%dt_snapshot > 0.0_num) THEN
         io_block_list(iio)%dt_snapshot_lab = io_block_list(iio)%dt_snapshot
         io_block_list(iio)%time_prev_lab = io_block_list(iio)%dt_snapshot_lab
-        io_block_list(iio)%time_prev = time
-        io_block_list(iio)%dt_snapshot = io_block_list(iio)%dt_snapshot &
-            * SQRT(1.0_num - global_boost_info%beta**2)
+        io_block_list(iio)%time_prev = 0.0_num
+        io_block_list(iio)%dt_snapshot = transform_interval_in_prime(&
+            global_boost_info, io_block_list(iio)%dt_snapshot)
         IF (io_block_list(iio)%frame == c_frame_lab) THEN
           dt_dump = MIN(dt_dump, io_block_list(iio)%dt_snapshot)
         END IF
       ELSE IF (io_block_list(iio)%frame == c_frame_lab) THEN
         IF (rank == 0) THEN
           PRINT *,'*** ERROR ***'
-          PRINT *,'Output at lab frame time must be specified using'
+          PRINT *,'Output in lab frame must be specified using'
           PRINT *,'dt_snapshot'
         END IF
-        error = .TRUE.
+        any_errors = .TRUE.
       END IF
 
       IF (io_block_list(iio)%frame == c_frame_lab) THEN
@@ -275,7 +422,7 @@ MODULE boosted_frame
                 PRINT *, 'Can only have one IO block per file prefix in'
                 PRINT *, 'lab frame in a boosted frame simulation'
               END IF
-              error = .TRUE.
+              any_errors = .TRUE.
             ELSE
               prefix_boosts(iprefix)%io_assigned = &
                   (io_block_list(iio)%frame == c_frame_lab)
@@ -304,14 +451,16 @@ MODULE boosted_frame
     END DO
 
     IF (dt_dump < dt_domain) THEN
-      PRINT *, '*** ERROR ***'
-      PRINT *, 'Output timescales smaller than a single domain time detected in'
-      PRINT *, 'a lab frame output. This will not work correctly' 
-      PRINT *, 'Code will abort'
-      CALL abort_code(c_err_bad_setup)
+      IF (rank == 0) THEN
+        PRINT *, '*** ERROR ***'
+        PRINT *, 'Output timescales smaller than a single domain time detected'
+        PRINT *, 'in a lab frame output. This will not work correctly' 
+        PRINT *, 'Code will abort'
+      END IF
+      any_errors = .TRUE.
     END IF
 
-  END SUBROUTINE transform_io
+  END FUNCTION transform_io
 
 
 

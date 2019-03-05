@@ -64,6 +64,25 @@ MODULE lorentz
 
 
 
+  FUNCTION transform_interval_in_prime(boost_info, interval_length, inverse)
+    TYPE(boost_info_object), INTENT(IN) :: boost_info
+    REAL(num), INTENT(IN) :: interval_length
+    LOGICAL, INTENT(IN), OPTIONAL :: inverse
+    REAL(num) :: transform_interval_in_prime
+
+    IF (get_optional(default_val = .FALSE., optional_val = inverse)) THEN
+      !Inverse case
+      transform_interval_in_prime = interval_length / SQRT(1.0_num &
+          - boost_info%beta**2)
+    ELSE
+      transform_interval_in_prime = interval_length * SQRT(1.0_num &
+          - boost_info%beta**2)
+    END IF
+
+  END FUNCTION transform_interval_in_prime
+
+
+
   FUNCTION transform_mass(boost_info, mass, inverse)
     TYPE(boost_info_object), INTENT(IN) :: boost_info
     REAL(num), INTENT(IN) :: mass

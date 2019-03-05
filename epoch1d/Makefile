@@ -205,7 +205,7 @@ DEFINES := $(DEFINE)
 
 # Include a unique global particle ID. The first flag defines the ID using
 # an 8-byte integer, the second uses 4-bytes.
-DEFINES += $(D)PARTICLE_ID
+#DEFINES += $(D)PARTICLE_ID
 #DEFINES += $(D)PARTICLE_ID4
 
 # Include QED routines
@@ -257,10 +257,13 @@ DEFINES += $(D)PARTICLE_ID
 # Disable MPI3 features
 #DEFINES += $(D)NO_MPI3
 
+#Enable boosted frame
+#DEFINES += $(D)BOOSTED_FRAME
+
 # If you are having trouble compiling the encoded_source module or
 # don't want embedded source code in restart dumps, uncomment the
 # following line.
-ENCODED_SOURCE = epoch_source_info_dummy.o
+#ENCODED_SOURCE = epoch_source_info_dummy.o
 
 
 # Automatically add -DPARSER_CHECKING for debug builds

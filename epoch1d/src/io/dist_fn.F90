@@ -586,7 +586,7 @@ CONTAINS
 #ifdef BOOSTED_FRAME
       IF (in_boosted_frame .AND. prefix_boosts(iprefix)%frame == c_frame_lab &
           .AND. direction(2) == c_dir_x) THEN
-        DO idir = 1, global_resolution(1)
+        DO idir = 1, global_resolution(2)
           grid2(idir) = transform_position_at_prime(global_boost_info,&
               grid2(idir), time_val = prefix_boosts(iprefix)%next_dump, &
               inverse = .TRUE.)
@@ -604,7 +604,7 @@ CONTAINS
 #ifdef BOOSTED_FRAME
       IF (in_boosted_frame .AND. prefix_boosts(iprefix)%frame == c_frame_lab &
           .AND. direction(3) == c_dir_x) THEN
-        DO idir = 1, global_resolution(1)
+        DO idir = 1, global_resolution(3)
           grid3(idir) = transform_position_at_prime(global_boost_info,&
               grid3(idir), time_val = prefix_boosts(iprefix)%next_dump, &
               inverse = .TRUE.)
@@ -639,9 +639,6 @@ CONTAINS
     ELSE
       mpireal_new = mpireal
     END IF
-
-!    WRITE(100+rank, *) SHAPE(array)
-!    FLUSH(100+rank)
 
     IF (curdims == 1) THEN
       CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid/' // TRIM(var_name), &

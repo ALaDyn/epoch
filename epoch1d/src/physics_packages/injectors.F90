@@ -244,6 +244,10 @@ CONTAINS
     v_inject_s = p_inject_drift / gamma_mass
     v_inject = ABS(v_inject_s)
 
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame) parameters%v_prop = v_inject_s
+#endif
+
     injector%dt_inject = ABS(bdy_space) &
         / MAX(injector%npart_per_cell * v_inject, c_tiny)
     IF (first_inject) THEN

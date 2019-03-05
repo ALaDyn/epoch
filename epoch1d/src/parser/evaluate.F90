@@ -242,7 +242,6 @@ CONTAINS
     ! Now populate output_stack with the simplified expression
     CALL initialise_stack(output_stack)
     output_stack%should_simplify = .FALSE.
-    output_stack%post_multiply = input_stack%post_multiply
 
     IF (sl_size > 0) THEN
       CALL append_stack(output_stack, sl_tail%stack)
@@ -361,7 +360,7 @@ CONTAINS
 
     ! Pop off the final answers
     DO i = MIN(eval_stack_stack_point,n_elements),1,-1
-      array(i) = pop_off_eval() * input_stack%post_multiply
+      array(i) = pop_off_eval()
     END DO
 
   END SUBROUTINE evaluate_with_parameters_to_array

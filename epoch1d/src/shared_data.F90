@@ -255,7 +255,6 @@ MODULE shared_data
 
   TYPE primitive_stack
     TYPE(stack_element), POINTER :: entries(:)
-    REAL(num) :: post_multiply = 1.0_num
     INTEGER :: stack_point, stack_size
     LOGICAL :: init = .FALSE.
     LOGICAL :: is_time_varying = .FALSE.
@@ -937,17 +936,19 @@ MODULE shared_data
     REAL(num) :: current_integral_phase
 
     !Used for boosted frame
-    REAL(num) :: x_at_t0
     REAL(num) :: kx_mult
 
     LOGICAL :: use_time_function, use_phase_function, use_profile_function
     LOGICAL :: use_omega_function
+    LOGICAL, DIMENSION(c_ndims) :: use_k_function
     TYPE(primitive_stack) :: time_function, phase_function, profile_function
     TYPE(primitive_stack) :: omega_function
+    TYPE(primitive_stack), DIMENSION(c_ndims) :: k_function
 
     LOGICAL :: move_x_min
 
     REAL(num) :: amp, omega, pol_angle, t_start, t_end
+    REAL(num), DIMENSION(c_ndims) :: k, initial_pos
     INTEGER :: omega_func_type
 
     TYPE(laser_block), POINTER :: next

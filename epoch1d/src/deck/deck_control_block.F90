@@ -403,9 +403,27 @@ CONTAINS
       global_boost_info%beta = global_boost_info%vx / c
       global_boost_info%lorentz_gamma = 1.0_num/SQRT(1.0_num &
           - global_boost_info%beta**2)
+      IF (global_boost_info%vx > c) THEN
+        errcode = IOR(errcode, c_err_bad_value)
+      END IF
 #else
       extended_error_string = '-DBOOSTED_FRAME'
-      errcode = IAND(errcode, c_err_pp_options_missing)
+      errcode = IOR(errcode, c_err_pp_options_missing)
+#endif
+    ELSE IF (str_cmp(element, 'boost_gamma')) THEN
+#ifdef BOOSTED_FRAME
+      use_boosted_frame = .TRUE.
+      global_boost_info%lorentz_gamma = as_real_print(value, element, errcode)
+      global_boost_info%beta = SQRT(1.0_num &
+          - 1.0_num/global_boost_info%lorentz_gamma**2)
+      global_boost_info%vx = global_boost_info%beta * c
+
+      IF (global_boost_info%lorentz_gamma < 1.0_num) THEN
+        errcode = IOR(errcode, c_err_bad_value)
+      END IF
+#else
+      extended_error_string = '-DBOOSTED_FRAME'
+      errcode = IOR(errcode, c_err_pp_options_missing)
 #endif
     ELSE
       errcode = c_err_unknown_element
