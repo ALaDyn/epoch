@@ -388,10 +388,9 @@ CONTAINS
     LOGICAL :: accepted
 
     accepted = .FALSE.
-    !Start with 5 thermal velocity range
+    ! 3 thermal velocity range - 0.25% error
     vth = SQRT(kb*temperature/mass)
-    !TODO is 5 enough? is it OK to set a fixed range?
-    ran = 5.0 * vth
+    ran = 3.0 * vth
     dvel = drift/mass
     max_vel = -dvel + SQRT(dvel*dvel + 4.0_num*vth*vth)
     norm = 1.0_num/((max_vel + dvel) * EXP(-max_vel*max_vel/(2.0_num*vth*vth)))

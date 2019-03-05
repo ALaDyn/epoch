@@ -397,7 +397,6 @@ CONTAINS
       END IF
     END DO
     IF (ALLOCATED(injector%drift_perp)) THEN
-      !TODO use shape function? Account properly for which edge
       drift(1) = injector%drift_perp(parameters%pack_iy)
     END IF
     IF (errcode /= c_err_none) CALL abort_code(errcode)
