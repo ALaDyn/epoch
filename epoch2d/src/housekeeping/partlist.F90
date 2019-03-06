@@ -154,18 +154,18 @@ CONTAINS
     !If sublists, need to deallocate any
     CALL destroy_store(partlist%store)
 
-    !Allocate one sublist of correct size
+    ! By default, pad the store to have slack
+    ! and always make sure it is at least one sublist long
     actual_elements = FLOOR(MAX(n_els_min, sublist_size) &
         *(1.0_num + sublist_slack), i8)
-    IF(present(no_pad_store)) THEN
+    IF (PRESENT(no_pad_store)) THEN
       IF(no_pad_store) THEN
         actual_elements = MAX(n_els_min, sublist_size)
       END IF
     END IF
-    actual_elements = MAX(n_els_min, sublist_size)
 
     link_el = .TRUE.
-    IF(present(link_el_in)) THEN
+    IF (PRESENT(link_el_in)) THEN
       link_el = link_el_in
     END IF
 
@@ -175,30 +175,40 @@ CONTAINS
     ! Could alternately allocate a large chunk, say half total
     ! and then add pieces
 
-    n_subs = CEILING(REAL(actual_elements)/REAL(sublist_size))
+    n_subs = CEILING(REAL(actual_elements, num)/REAL(sublist_size, num))
     ALLOCATE(els_to_allocate(n_subs))
     els_to_allocate = sublist_size
 
+    ! DO NOT set any element of  els_to_allocate to zero!
     DO i_sub = 1, n_subs
       link_to = els_to_allocate(i_sub)
       IF(.NOT. link_el) link_to = 0
       IF(i_sub == n_subs) THEN
         last = n_els_min - SUM(els_to_allocate(1:n_subs-1))
         IF(link_to > 0) link_to = last
-        !TODO This might be off by 1??
       END IF
       CALL create_linked_substore(partlist%store, els_to_allocate(i_sub),&
           link_to)
     END DO
 
-    partlist%store%next_slot => partlist%store%tail%store(&
-        partlist%store%tail%first_free_element)
+    ! Next slot is the first unlinked element. This is either the
+    ! first element of the whole thing (if unlinked), or the first element of
+    ! the last chunk of the store if linked
+    IF (link_el) THEN
+      partlist%store%next_slot => partlist%store%tail%store(&
+          partlist%store%tail%first_free_element)
+    ELSE
+      partlist%store%next_slot => partlist%store%head%head
+    END IF
+    ! First free element should link to last filled element
+    ! If we linked the store, then the last element is
+    ! At slot number actual_elements, which is in either
+    ! last substore, or at the very end of the one before that
+    ! If we didn't, no elements are filled
     IF(partlist%store%tail%first_free_element > 1) THEN
       partlist%store%next_slot%prev &
           => partlist%store%tail%store(partlist%store%tail%first_free_element-1)
-    ELSE IF(ASSOCIATED(partlist%store%tail%prev)) THEN
-      !TODO this wont work properly in general, e.g. if prev is also empty
-      !Do we ever need to consider this case?
+    ELSE IF(link_el .AND. ASSOCIATED(partlist%store%tail%prev)) THEN
       partlist%store%next_slot%prev &
           => partlist%store%tail%prev%store(&
             partlist%store%tail%prev%first_free_element-1)
@@ -206,8 +216,9 @@ CONTAINS
       NULLIFY(partlist%store%next_slot%prev)
     END IF
 
-    IF(link_to > 0) THEN
-      !TODO actually the following MAY NOT be list tail, should do better
+    IF (link_el) THEN
+      ! Now we can guarantee that the next_slot%prev is associated and
+      ! is the last linked element of the list
       partlist%tail => partlist%store%next_slot%prev
       partlist%head => partlist%store%head%head
     ELSE
@@ -996,7 +1007,6 @@ CONTAINS
     END IF
 
     !Do the appending
-    !TODO this misses the case of a linked list and a store backed newlist
     IF (.NOT. (list%use_store .OR. newlist%use_store)) THEN
       IF (ASSOCIATED(list%tail)) THEN
         list%tail%next => newlist%head
@@ -1007,7 +1017,11 @@ CONTAINS
       IF (ASSOCIATED(newlist%tail)) list%tail => newlist%tail
       list%count = list%count + newlist%count
       list%id_update = list%id_update + newlist%id_update
-
+    ELSE IF (.NOT. list%use_store .AND. newlist%use_store) THEN
+      !This is an error and should never arise.
+      IF (rank == 0) &
+          PRINT *, 'Unable to append partlists'
+      RETURN
     ELSE
       CALL add_partlist_to_list_and_store(list, newlist, ignore_live)
     END IF
