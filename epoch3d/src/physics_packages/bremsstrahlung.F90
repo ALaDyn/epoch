@@ -771,25 +771,6 @@ CONTAINS
 
 
 
-  ! For a function y(x), with values in arrays x and y, we return an array with
-  ! elements i given by the integral y(x)dx between limits x=x(1) and x=x(i)
-  SUBROUTINE get_cumulative_array(x,y,size,output)
-
-    INTEGER, PARAMETER :: num = KIND(1.d0)
-    INTEGER, INTENT(in) :: size
-    REAL(num), INTENT(in) :: x(size), y(size)
-    REAL(num) :: output(size)
-    INTEGER :: i
-
-    output(1) = 0
-    DO i = 2, size
-      output(i) = (x(i)-x(i-1)) * (0.5_num*(y(i)+y(i-1))) + output(i-1)
-    ENDDO
-
-  END SUBROUTINE get_cumulative_array
-
-
-
   ! For a pair of arrays, x and values, of size nx, this function returns the
   ! interpolated value of "values" corresponding to x_in in the x array. This
   ! uses linear interpolation, unlike in photons.F90 which is logarithmic
