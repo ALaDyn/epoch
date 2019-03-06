@@ -403,9 +403,9 @@ CONTAINS
       NULLIFY(species_list(ispecies)%ext_temp_y_max)
       NULLIFY(species_list(ispecies)%ext_temp_z_min)
       NULLIFY(species_list(ispecies)%ext_temp_z_max)
+      NULLIFY(species_list(ispecies)%secondary_list)
       NULLIFY(species_list(ispecies)%injector_x_min)
       NULLIFY(species_list(ispecies)%injector_x_max)
-      NULLIFY(species_list(ispecies)%secondary_list)
       species_list(ispecies)%bc_particle = c_bc_null
     END DO
 
@@ -1178,6 +1178,11 @@ CONTAINS
           END IF
         END IF
 
+        CALL read_return_injectors(sdf_handle, block_id, ndims, &
+            c_bd_x_min, 'x_min')
+        CALL read_return_injectors(sdf_handle, block_id, ndims, &
+            c_bd_x_max, 'x_max')
+
         CALL read_laser_phases(sdf_handle, n_laser_x_min, laser_x_min, &
             block_id, ndims, 'laser_x_min_phase', 'x_min')
         CALL read_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
@@ -1190,10 +1195,6 @@ CONTAINS
             block_id, ndims, 'laser_z_min_phase', 'z_min')
         CALL read_laser_phases(sdf_handle, n_laser_z_max, laser_z_max, &
             block_id, ndims, 'laser_z_max_phase', 'z_max')
-        CALL read_return_injectors(sdf_handle, block_id, ndims, &
-            c_bd_x_min, 'x_min')
-        CALL read_return_injectors(sdf_handle, block_id, ndims, &
-            c_bd_x_max, 'x_max')
 
       CASE(c_blocktype_constant)
         IF (str_cmp(block_id, 'dt_plasma_frequency')) THEN
@@ -1613,14 +1614,14 @@ CONTAINS
     CHARACTER(LEN=*), INTENT(IN) :: block_id_in, direction_name
     INTEGER, INTENT(IN) :: ndims, boundary
     TYPE(particle_species), POINTER :: curr_species
-    INTEGER :: ispecies, return_species
+    INTEGER :: ispecies, return_species, lstr
     REAL(KIND=num), DIMENSION(:,:), ALLOCATABLE :: values
     INTEGER, DIMENSION(4) :: dims
 
-    IF (str_cmp(block_id_in(1:LEN('return_injector')), &
-        'return_injector') .AND. str_cmp(TRIM(block_id_in( &
-        LEN('return_injector')+2:LEN(block_id_in))), TRIM(direction_name))) &
-        THEN
+    lstr = LEN('return_injector')
+    IF (str_cmp(block_id_in(1:lstr), 'return_injector') &
+        .AND. str_cmp(TRIM(block_id_in(lstr+2:LEN(block_id_in))), &
+                      TRIM(direction_name))) THEN
       CALL sdf_read_array_info(sdf_handle, dims)
 
       ! In 1-d there is one value, 2-d there is one strip of drifts,
@@ -1633,24 +1634,25 @@ CONTAINS
 
       return_species = -1
       DO ispecies = 1, n_species
-        IF(species_list(ispecies)%bc_particle(boundary) == c_bc_return) THEN
+        IF (species_list(ispecies)%bc_particle(boundary) == c_bc_return) THEN
           return_species = ispecies
         END IF
       END DO
-      IF(return_species == -1) RETURN
+
+      IF (return_species == -1) RETURN
 
       ALLOCATE(values(dims(1), dims(2)))
       CALL sdf_read_srl(sdf_handle, values)
 
-      curr_species=>species_list(return_species)
+      curr_species => species_list(return_species)
 
       IF (boundary == c_bd_x_min) THEN
-        curr_species%ext_drift_x_min(1:ny, 1:nz) = &
+        curr_species%ext_drift_x_min(1:ny,1:nz) = &
             values(ny_global_min:ny_global_max, nz_global_min:nz_global_max)
       ELSE IF(boundary == c_bd_x_max) THEN
-        curr_species%ext_drift_x_max(1:ny, 1:nz) = &
+        curr_species%ext_drift_x_max(1:ny,1:nz) = &
             values(ny_global_min:ny_global_max, nz_global_min:nz_global_max)
-      ENDIF
+      END IF
 
       DEALLOCATE(values)
     END IF

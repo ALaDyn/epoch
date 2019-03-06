@@ -1086,77 +1086,78 @@ CONTAINS
   SUBROUTINE update_return_bcs
 
     INTEGER :: ispecies, return_species
-    REAL(KIND=num) :: net_jx_min, net_jx_max, alpha, om_pe_fac
-    REAL(KIND=num) :: cell_vol
-    LOGICAL, DIMENSION(2) :: bnds
-    REAL(KIND=num), PARAMETER :: plasma_const=2.0*pi*SQRT(epsilon0/q0/q0)
+    REAL(KIND=num) :: net_jx_min, net_jx_max, alpha
+    REAL(KIND=num) :: cell_vol, om_pe_fac
+    LOGICAL, DIMENSION(2) :: boundaries
+    REAL(KIND=num), PARAMETER :: &
+        plasma_const = 2.0 * pi * SQRT(epsilon0 / q0 / q0)
 
     return_species = -1
     net_jx_min = 0.0_num
     net_jx_max = 0.0_num
     cell_vol = dx
 
-    !Here we don't care if return current is on both ends or not
-    !Is easier to just calculate both cases
+    ! Here we don't care if return current is on both ends or not
+    ! It's easier to just calculate both cases
     DO ispecies = 1, n_species
-
       IF (ANY(species_list(ispecies)%bc_particle(1:2) == c_bc_return)) THEN
         return_species = ispecies
-        bnds = (species_list(ispecies)%bc_particle(1:2) == c_bc_return)
+        boundaries = (species_list(ispecies)%bc_particle(1:2) == c_bc_return)
         CYCLE
       END IF
-      net_jx_min = net_jx_min + &
-          species_list(ispecies)%net_px_min * species_list(ispecies)%charge &
+
+      net_jx_min = net_jx_min &
+          + species_list(ispecies)%net_px_min * species_list(ispecies)%charge &
           / species_list(ispecies)%mass
-      net_jx_max = net_jx_max + &
-          species_list(ispecies)%net_px_max * species_list(ispecies)%charge &
+      net_jx_max = net_jx_max &
+          + species_list(ispecies)%net_px_max * species_list(ispecies)%charge &
           / species_list(ispecies)%mass
     END DO
 
     IF (return_species == -1) RETURN
-    !Summed over weights - to get density divide by volume
+
+    ! Summed over weights - to get density divide by volume
     net_jx_min = net_jx_min / cell_vol
     net_jx_max = net_jx_max / cell_vol
 
-    !Progress towards exact cancellation on inverse plasma
-    !frequency (of inflowing species), calculated at initial
-    !setup time
-    !Exponential average using calculated equillibration time
-    !using p(t+dt) = a p(t) + b p_c
-    om_pe_fac = plasma_const/dt * SQRT(species_list(return_species)%mass)
+    om_pe_fac = plasma_const / dt * SQRT(species_list(return_species)%mass)
 
-    IF (bnds(1)) THEN
+    ! Progress towards exact cancellation on inverse plasma
+    ! frequency (of inflowing species), calculated at initial
+    ! setup time
+    ! Exponential average using calculated equillibration time
+    ! using p(t+dt) = a p(t) + b p_c
+    IF (boundaries(1)) THEN
       alpha = 2.0_num / (om_pe_fac &
-          /SQRT(species_list(return_species)%ext_dens_x_min) + 1.0_num)
+          / SQRT(species_list(return_species)%ext_dens_x_min) + 1.0_num)
 
-      !jx on bnd can be zero if region is evacuated
-      IF (ABS(net_jx_min) > c_tiny .AND. &
-          species_list(return_species)%ext_dens_x_min > c_tiny) THEN
+      ! jx on bnd can be zero if region is evacuated
+      IF (ABS(net_jx_min) > c_tiny &
+          .AND. species_list(return_species)%ext_dens_x_min > c_tiny) THEN
         species_list(return_species)%ext_drift_x_min = &
-            (1.0_num - alpha) * species_list(return_species)%ext_drift_x_min - &
-            alpha * net_jx_min * species_list(return_species)%mass / &
-            species_list(return_species)%charge / &
-            species_list(return_species)%ext_dens_x_min
+            (1.0_num - alpha) * species_list(return_species)%ext_drift_x_min &
+            - alpha * net_jx_min * species_list(return_species)%mass &
+            / species_list(return_species)%charge &
+            / species_list(return_species)%ext_dens_x_min
         CALL update_return_injector(species_list(return_species)%injector_x_min)
       END IF
     END IF
-    IF (bnds(2)) THEN
-      alpha = 2.0_num / (om_pe_fac &
-          /SQRT(species_list(return_species)%ext_dens_x_max) + 1.0_num)
 
-      IF (ABS(net_jx_max) > c_tiny .AND. &
-           species_list(return_species)%ext_dens_x_max > c_tiny) THEN
+    IF (boundaries(2)) THEN
+      alpha = 2.0_num / (om_pe_fac &
+          / SQRT(species_list(return_species)%ext_dens_x_max) + 1.0_num)
+
+      IF (ABS(net_jx_max) > c_tiny &
+          .AND. species_list(return_species)%ext_dens_x_max > c_tiny) THEN
         species_list(return_species)%ext_drift_x_max = &
-            (1.0_num - alpha) * species_list(return_species)%ext_drift_x_max - &
-            alpha * net_jx_max * species_list(return_species)%mass / &
-            species_list(return_species)%charge / &
-            species_list(return_species)%ext_dens_x_max
+            (1.0_num - alpha) * species_list(return_species)%ext_drift_x_max &
+            - alpha * net_jx_max * species_list(return_species)%mass &
+            / species_list(return_species)%charge &
+            / species_list(return_species)%ext_dens_x_max
         CALL update_return_injector(species_list(return_species)%injector_x_max)
       END IF
     END IF
 
-
   END SUBROUTINE update_return_bcs
-
 
 END MODULE boundary

@@ -479,7 +479,7 @@ CONTAINS
     TYPE(injector_block), POINTER :: injector_current
     TYPE(particle_species_migration), POINTER :: mg
     TYPE(initial_condition_block), POINTER :: ic
-    INTEGER :: i, ispecies, io, id, nspec_local, mask
+    INTEGER :: i, ispecies, io, id, nspec_local, mask, bc
 
     nx_new = new_domain(1,2) - new_domain(1,1) + 1
     ny_new = new_domain(2,2) - new_domain(2,1) + 1
@@ -1022,8 +1022,8 @@ CONTAINS
     ! Slice in X-direction with an additional index
 
     DO ispecies = 1, n_species
-      IF (species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_thermal .OR. &
-          species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_return) THEN
+      bc = species_list(ispecies)%bc_particle(c_bd_x_min)
+      IF (bc == c_bc_thermal .OR. bc == c_bc_return) THEN
         IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:ny_new+ng, 3))
 
         max_boundary = .FALSE.
@@ -1039,24 +1039,7 @@ CONTAINS
         species_list(ispecies)%ext_temp_x_min = temp
       END IF
 
-      IF (species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_thermal .OR. &
-         species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_return) THEN
-        IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:ny_new+ng, 3))
-
-        max_boundary = .TRUE.
-
-        DO i = 1, 3
-          CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%ext_temp_x_max(:,i), temp(:,i))
-        END DO
-
-        DEALLOCATE(species_list(ispecies)%ext_temp_x_max)
-        ALLOCATE(species_list(ispecies)%ext_temp_x_max(1-ng:ny_new+ng, 3))
-
-        species_list(ispecies)%ext_temp_x_max = temp
-      END IF
-
-      IF (species_list(ispecies)%bc_particle(c_bd_x_min) == c_bc_return) THEN
+      IF (bc == c_bc_return) THEN
         IF (.NOT.ALLOCATED(temp_slice)) ALLOCATE(temp_slice(1-ng:ny_new+ng))
         max_boundary = .FALSE.
 
@@ -1074,26 +1057,25 @@ CONTAINS
 
         DEALLOCATE(temp_slice)
       END IF
-      IF (any_return) THEN
-        IF (.NOT.ALLOCATED(temp_slice)) ALLOCATE(temp_slice(1-ng:ny_new+ng))
-        max_boundary = .FALSE.
-        CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%net_px_min, temp_slice)
-        DEALLOCATE(species_list(ispecies)%net_px_min)
-        ALLOCATE(species_list(ispecies)%net_px_min(1-ng:ny_new+ng))
-        species_list(ispecies)%net_px_min = temp_slice
+
+      bc = species_list(ispecies)%bc_particle(c_bd_x_max)
+      IF (bc == c_bc_thermal .OR. bc == c_bc_return) THEN
+        IF (.NOT.ALLOCATED(temp)) ALLOCATE(temp(1-ng:ny_new+ng, 3))
 
         max_boundary = .TRUE.
-        CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%net_px_max, temp_slice)
-        DEALLOCATE(species_list(ispecies)%net_px_max)
-        ALLOCATE(species_list(ispecies)%net_px_max(1-ng:ny_new+ng))
-        species_list(ispecies)%net_px_max = temp_slice
 
-        DEALLOCATE(temp_slice)
+        DO i = 1, 3
+          CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%ext_temp_x_max(:,i), temp(:,i))
+        END DO
+
+        DEALLOCATE(species_list(ispecies)%ext_temp_x_max)
+        ALLOCATE(species_list(ispecies)%ext_temp_x_max(1-ng:ny_new+ng, 3))
+
+        species_list(ispecies)%ext_temp_x_max = temp
       END IF
 
-      IF (species_list(ispecies)%bc_particle(c_bd_x_max) == c_bc_return) THEN
+      IF (bc == c_bc_return) THEN
         IF (.NOT.ALLOCATED(temp_slice)) ALLOCATE(temp_slice(1-ng:ny_new+ng))
 
         max_boundary = .TRUE.
@@ -1112,6 +1094,24 @@ CONTAINS
         DEALLOCATE(temp_slice)
       END IF
 
+      IF (any_return) THEN
+        IF (.NOT.ALLOCATED(temp_slice)) ALLOCATE(temp_slice(1-ng:ny_new+ng))
+        max_boundary = .FALSE.
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%net_px_min, temp_slice)
+        DEALLOCATE(species_list(ispecies)%net_px_min)
+        ALLOCATE(species_list(ispecies)%net_px_min(1-ng:ny_new+ng))
+        species_list(ispecies)%net_px_min = temp_slice
+
+        max_boundary = .TRUE.
+        CALL remap_field_slice(c_dir_x, &
+              species_list(ispecies)%net_px_max, temp_slice)
+        DEALLOCATE(species_list(ispecies)%net_px_max)
+        ALLOCATE(species_list(ispecies)%net_px_max(1-ng:ny_new+ng))
+        species_list(ispecies)%net_px_max = temp_slice
+
+        DEALLOCATE(temp_slice)
+      END IF
     END DO
 
     IF (ALLOCATED(temp)) DEALLOCATE(temp)

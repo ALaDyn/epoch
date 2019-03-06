@@ -403,6 +403,11 @@ CONTAINS
         CALL sdf_write_srl(sdf_handle, 'x_grid_min', &
             'Minimum grid position', x_grid_min)
 
+        CALL write_return_injectors(sdf_handle, 'return_injector_x_min', &
+             c_bd_x_min, x_min_boundary)
+        CALL write_return_injectors(sdf_handle, 'return_injector_x_max', &
+             c_bd_x_max, x_max_boundary)
+
         CALL write_laser_phases(sdf_handle, n_laser_x_min, laser_x_min, &
             'laser_x_min_phase')
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
@@ -415,10 +420,6 @@ CONTAINS
             'laser_z_min_phase')
         CALL write_laser_phases(sdf_handle, n_laser_z_max, laser_z_max, &
             'laser_z_max_phase')
-        CALL write_return_injectors(sdf_handle, 'return_injector_x_min', &
-             c_bd_x_min, x_min_boundary)
-        CALL write_return_injectors(sdf_handle, 'return_injector_x_max', &
-             c_bd_x_max, x_max_boundary)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
@@ -998,13 +999,12 @@ CONTAINS
     CHARACTER(LEN=*), INTENT(IN) :: block_name
     INTEGER, INTENT(IN) :: boundary
     LOGICAL, INTENT(IN) :: runs_this_rank
-
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: values
-
     TYPE(particle_species), POINTER :: curr_species
     INTEGER :: ispecies, return_species
 
     IF (.NOT. any_return) RETURN
+
     return_species = -1
     DO ispecies = 1, n_species
       IF (species_list(ispecies)%bc_particle(boundary) == c_bc_return) THEN
@@ -1013,16 +1013,19 @@ CONTAINS
     END DO
 
     IF (return_species /= -1) THEN
-      ALLOCATE(values(1:ny, 1:nz))
+      ALLOCATE(values(1:ny,1:nz))
       curr_species => species_list(return_species)
+
       IF (boundary == c_bd_x_min) THEN
         values(:,:) = curr_species%ext_drift_x_min(1:ny,1:nz)
       ELSE IF (boundary == c_bd_x_max) THEN
         values(:,:) = curr_species%ext_drift_x_max(1:ny,1:nz)
-      ENDIF
+      END IF
+
       CALL sdf_write_array(sdf_handle, TRIM(block_name), TRIM(block_name),&
           values, (/ny_global, nz_global/), (/ny_global_min, nz_global_min/), &
           null_proc=(.NOT. runs_this_rank))
+
       DEALLOCATE(values)
     END IF
 

@@ -459,18 +459,18 @@ CONTAINS
             jz(cx) = jz(cx) + jzh
           END DO
 
-          !Calculate net momentum of species on bnds
-          !Tracers deposit no current so aren't included in return calculations
-          !Using shape functions would require full boundary handling
+          ! Calculate net momentum of species on x bnds
+          ! Tracers deposit no current so aren't included in return calculations
+          ! Using shape functions would require full boundary handling
           IF (any_return) THEN
             IF (cell_x1 == 1) THEN
               species_list(ispecies)%net_px_min = &
-                  species_list(ispecies)%net_px_min + current%part_p(1) * &
-                  current%weight
+                  species_list(ispecies)%net_px_min &
+                  + current%part_p(1) * current%weight
             ELSE IF (cell_x1 == nx) THEN
-               species_list(ispecies)%net_px_max = &
-                  species_list(ispecies)%net_px_max + current%part_p(1) * &
-                  current%weight
+              species_list(ispecies)%net_px_max = &
+                  species_list(ispecies)%net_px_max &
+                  + current%part_p(1) * current%weight
             END IF
           END IF
 
@@ -523,6 +523,7 @@ CONTAINS
     END DO
 
     IF (any_return) CALL update_return_bcs
+
     CALL particle_bcs
 
   END SUBROUTINE push_particles

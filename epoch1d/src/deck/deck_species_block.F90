@@ -265,27 +265,45 @@ CONTAINS
 
       nreturn = 0
       return_sp = 0
-      DO i = 1, n_species
-        !Sanity check return boundaries
-        bc_species = species_list(i)%bc_particle
 
-        DO idx = 1, 2*c_ndims
+      DO i = 1, n_species
+        ! Sanity check return boundaries
+        error = .FALSE.
+        bc_species = species_list(i)%bc_particle
+        DO idx = 1, 2 * c_ndims
           IF (bc_species(idx) == c_bc_return) THEN
-           IF (idx == c_bd_x_min) THEN
+            IF (idx == c_bd_x_min) THEN
               nreturn = nreturn + 1
               any_return = .TRUE.
               IF (return_sp == 0) return_sp = i
             ELSE IF (idx == c_bd_x_max) THEN
               any_return = .TRUE.
               IF (return_sp == 0) return_sp = i
-              IF (bc_species(c_bd_x_min) .NE. c_bc_return) &
-                  nreturn = nreturn + 1
+              IF (bc_species(c_bd_x_min) /= c_bc_return) nreturn = nreturn + 1
+            ELSE
+              error = .TRUE.
+              ! Return boundaries only allowed on x
+              ! Set to thermal as closest option
+              ! If continuation injectors are added, use these instead here
+              bc_species(idx) = c_bc_thermal
             END IF
           END IF
         END DO
 
+        IF (error .AND. rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Return boundaries can only be specified ', &
+                ' for x_min or x_max. Continuing using Thermal for ',&
+                'species ', TRIM(species_list(i)%name)
+          END DO
+        END IF
+
         IF (return_sp == i) THEN
           error = .FALSE.
+
           IF (ABS(species_list(i)%charge) < c_tiny) error = .TRUE.
 #ifndef NO_TRACER_PARTICLES
           error = (error .OR. species_list(i)%tracer)
@@ -304,9 +322,9 @@ CONTAINS
           END IF
         END IF
 
-        !Disable return bnds on all but first species
-        !Continuation injectors would supersede thermal fallback
-        IF (nreturn > 1 .AND. i .NE. return_sp) THEN
+        ! Disable return bnds on all but first species
+        ! Again, continuation injectors would supersede thermal fallback
+        IF (nreturn > 1 .AND. i /= return_sp) THEN
           IF (species_list(i)%bc_particle(c_bd_x_min) == c_bc_return) &
               species_list(i)%bc_particle(c_bd_x_min) = c_bc_thermal
           IF (species_list(i)%bc_particle(c_bd_x_max) == c_bc_return) &
@@ -383,6 +401,7 @@ CONTAINS
       charge(n_species) = species_charge
       mass(n_species) = species_mass
       bc_particle_array(:, n_species) = species_bc_particle
+      IF (ANY(bc_particle_array == c_bc_return)) any_return = .TRUE.
       IF (n_secondary_species_in_block > 0) THEN
         ! Create an empty species for each ionisation energy listed in species
         ! block

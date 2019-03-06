@@ -306,11 +306,11 @@ SRCFILES = balance.F90 boundary.F90 calc_df.F90 collisions.F90 constants.F90 \
   mpi_subtype_control.f90 numerics.f90 particle_id_hash.F90 \
   particle_migration.F90 particle_pointer_advance.f90 particle_temperature.F90 \
   particles.F90 partlist.F90 photons.F90 prefetch.F90 probes.F90 \
-  random_generator.f90 redblack_module.f90 return_boundary.F90 \
-  setup.F90 shape_functions.F90 \
-  shared_data.F90 shunt.F90 simple_io.F90 split_particle.F90 stack.f90 \
-  strings.f90 strings_advanced.f90 terminal_controls.F90 timer.f90 \
-  tokenizer_blocks.f90 utilities.f90 version_data.F90 welcome.F90 window.F90
+  random_generator.f90 redblack_module.f90 return_boundary.F90 setup.F90 \
+  shape_functions.F90 shared_data.F90 shunt.F90 simple_io.F90 \
+  split_particle.F90 stack.f90 strings.f90 strings_advanced.f90 \
+  terminal_controls.F90 timer.f90 tokenizer_blocks.f90 utilities.f90 \
+  version_data.F90 welcome.F90 window.F90
 
 OBJFILES := $(SRCFILES:.f90=.o)
 OBJFILES := $(OBJFILES:.F90=.o)
@@ -434,7 +434,7 @@ FORCE:
 balance.o: balance.F90 boundary.o constants.o mpi_subtype_control.o \
   redblack_module.o timer.o utilities.o
 boundary.o: boundary.F90 laser.o mpi_subtype_control.o particle_id_hash.o \
-  particle_temperature.o partlist.o utilities.o return_boundary.o
+  particle_temperature.o partlist.o return_boundary.o utilities.o
 calc_df.o: calc_df.F90 boundary.o
 collisions.o: collisions.F90 calc_df.o prefetch.o
 constants.o: constants.F90 $(SDFMOD)
@@ -469,7 +469,7 @@ deck_particle_probe_block.o: deck_particle_probe_block.F90 probes.o \
   strings_advanced.o utilities.o
 deck_qed_block.o: deck_qed_block.F90 strings_advanced.o utilities.o
 deck_species_block.o: deck_species_block.F90 partlist.o setup.o simple_io.o \
-  strings_advanced.o utilities.o return_boundary.o
+  strings_advanced.o utilities.o
 deck_stencil_block.o: deck_stencil_block.f90 fields.o strings_advanced.o
 deck_subset_block.o: deck_subset_block.F90 particle_id_hash.o \
   strings_advanced.o utilities.o
@@ -481,8 +481,8 @@ diagnostics.o: diagnostics.F90 calc_df.o constants.o deck.o deck_io_block.o \
 dist_fn.o: dist_fn.F90 mpi_subtype_control.o particles.o $(SDFMOD)
 epoch2d.o: epoch2d.F90 balance.o calc_df.o collisions.o current_smooth.o \
   deck.o diagnostics.o fields.o finish.o helper.o ic_module.o injectors.o \
-  ionise.o mpi_routines.o particle_migration.o particles.o photons.o setup.o \
-  return_boundary.o split_particle.o welcome.o window.o
+  ionise.o mpi_routines.o particle_migration.o particles.o photons.o \
+  return_boundary.o setup.o split_particle.o welcome.o window.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
 evaluate.o: evaluate.F90 shunt.o stack.o
 evaluator_blocks.o: evaluator_blocks.F90 custom_parser.o stack.o strings.o
@@ -515,9 +515,9 @@ prefetch.o: prefetch.F90 shared_data.o
 probes.o: probes.F90 partlist.o $(SDFMOD)
 random_generator.o: random_generator.f90
 redblack_module.o: redblack_module.f90 partlist.o
-return_boundary.o: return_boundary.F90 shared_data.o injectors.o
+return_boundary.o: return_boundary.F90 injectors.o shared_data.o
 setup.o: setup.F90 balance.o constants.o fields.o helper.o laser.o \
-  mpi_routines.o mpi_subtype_control.o particle_id_hash.o injectors.o shunt.o \
+  mpi_routines.o mpi_subtype_control.o particle_id_hash.o shunt.o \
   split_particle.o timer.o version_data.o welcome.o window.o $(SDFMOD)
 shape_functions.o: shape_functions.F90 shared_data.o
 shared_data.o: shared_data.F90 constants.o $(SDFMOD)

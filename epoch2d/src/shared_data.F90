@@ -919,11 +919,9 @@ MODULE shared_data
     TYPE(primitive_stack) :: temperature_function(3)
     TYPE(primitive_stack) :: drift_function(3)
 
-    REAL(num), DIMENSION(:), ALLOCATABLE :: drift_perp
-
     REAL(num) :: t_start, t_end
     LOGICAL :: has_t_end
-    REAL(num), DIMENSION(:), POINTER :: depth, dt_inject
+    REAL(num), DIMENSION(:), ALLOCATABLE :: depth, dt_inject, drift_perp
 
     TYPE(injector_block), POINTER :: next
   END TYPE injector_block

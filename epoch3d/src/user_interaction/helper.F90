@@ -44,7 +44,7 @@ CONTAINS
     ELSE IF (species%bc_particle(c_bd_x_min) == c_bc_return) THEN
       species%ext_temp_x_min(:,:,:) = species_temp(1,:,:,:)
       IF (.NOT. ic_from_restart) species%ext_drift_x_min(:,:) = &
-           species_drift(1,:,:,1)
+          species_drift(1,:,:,1)
       species%ext_dens_x_min(:,:) = species_density(1,:,:)
     END IF
     IF (species%bc_particle(c_bd_x_max) == c_bc_thermal) THEN
@@ -52,7 +52,7 @@ CONTAINS
     ELSE IF (species%bc_particle(c_bd_x_max) == c_bc_return) THEN
       species%ext_temp_x_max(:,:,:) = species_temp(nx,:,:,:)
       IF (.NOT. ic_from_restart) species%ext_drift_x_max(:,:) = &
-           species_drift(nx,:,:,1)
+          species_drift(nx,:,:,1)
       species%ext_dens_x_max(:,:) = species_density(nx,:,:)
     END IF
     IF (species%bc_particle(c_bd_y_min) == c_bc_thermal) THEN

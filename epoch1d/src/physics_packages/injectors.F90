@@ -39,6 +39,7 @@ CONTAINS
     injector%density_min = 0.0_num
     injector%use_flux_injector = .FALSE.
     injector%drift_perp = 0.0_num
+
     injector%depth = 1.0_num
     injector%dt_inject = -1.0_num
     NULLIFY(injector%next)
@@ -255,8 +256,8 @@ CONTAINS
       DO idir = 1, 3
         IF (flux_fn) THEN
           IF (ABS(drift(idir)) > c_tiny) THEN
-            new%part_p(idir) = drifting_flux_momentum_from_temperature(mass, &
-                temperature(idir), drift(idir)) * dir_mult(idir)
+            new%part_p(idir) = drifting_flux_momentum_from_temperature(&
+                mass, temperature(idir), drift(idir)) * dir_mult(idir)
           ELSE
             new%part_p(idir) = flux_momentum_from_temperature(mass, &
                 temperature(idir), drift(idir)) * dir_mult(idir)
@@ -293,7 +294,7 @@ CONTAINS
 
     errcode = 0
     density = MAX(evaluate_with_parameters(injector%density_function, &
-          parameters, errcode), 0.0_num)
+        parameters, errcode), 0.0_num)
 
     ! Stack can only be time varying if valid. Change if this isn't true
     DO i = 1, 3
@@ -312,6 +313,7 @@ CONTAINS
         drift(i) = 0.0_num
       END IF
     END DO
+
     IF (injector%drift_perp > 0.0_num) THEN
       drift(1) = injector%drift_perp
     END IF
@@ -319,6 +321,7 @@ CONTAINS
     IF (errcode /= c_err_none) CALL abort_code(errcode)
 
   END SUBROUTINE populate_injector_properties
+
 
 
   SUBROUTINE update_dt_inject(injector)
@@ -339,14 +342,14 @@ CONTAINS
       parameters%pack_ix = nx
       abs_bdy_space = dx
       dir_index = 1
-    ENDIF
-
-    CALL populate_injector_properties(injector, parameters, density_grid, &
-        temperature, drift)
+    END IF
 
     mass = species_list(injector%species)%mass
     typical_mc2 = (mass * c)**2
+    parameters%use_grid_position = .TRUE.
 
+    CALL populate_injector_properties(injector, parameters, density_grid, &
+        temperature, drift)
 
     ! Assume agressive maximum thermal momentum, all components
     ! like hottest component
@@ -360,6 +363,5 @@ CONTAINS
         / MAX(injector%npart_per_cell * v_inject, c_tiny)
 
   END SUBROUTINE update_dt_inject
-
 
 END MODULE injectors

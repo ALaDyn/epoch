@@ -121,15 +121,15 @@ CONTAINS
       next => current%next
       IF (current%density_function%init) &
           CALL deallocate_stack(current%density_function)
-      IF (ASSOCIATED(current%dt_inject)) DEALLOCATE(current%dt_inject)
-      IF (ASSOCIATED(current%depth)) DEALLOCATE(current%depth)
+      IF (ALLOCATED(current%dt_inject)) DEALLOCATE(current%dt_inject)
+      IF (ALLOCATED(current%depth)) DEALLOCATE(current%depth)
+      IF (ALLOCATED(current%drift_perp)) DEALLOCATE(current%drift_perp)
       DO i = 1, 3
         IF (current%temperature_function(i)%init) &
             CALL deallocate_stack(current%temperature_function(i))
         IF (current%drift_function(i)%init) &
             CALL deallocate_stack(current%drift_function(i))
       END DO
-      IF (ALLOCATED(current%drift_perp)) DEALLOCATE(current%drift_perp)
       DEALLOCATE(current)
       current => next
     END DO
@@ -338,8 +338,8 @@ CONTAINS
         DO idir = 1, 3
           IF (flux_fn) THEN
             IF (ABS(drift(idir)) > c_tiny) THEN
-              new%part_p(idir) = drifting_flux_momentum_from_temperature(mass, &
-                  temperature(idir), drift(idir)) * dir_mult(idir)
+              new%part_p(idir) = drifting_flux_momentum_from_temperature(&
+                  mass, temperature(idir), drift(idir)) * dir_mult(idir)
             ELSE
               new%part_p(idir) = flux_momentum_from_temperature(mass, &
                   temperature(idir), drift(idir)) * dir_mult(idir)
@@ -396,9 +396,11 @@ CONTAINS
         drift(i) = 0.0_num
       END IF
     END DO
+
     IF (ALLOCATED(injector%drift_perp)) THEN
       drift(1) = injector%drift_perp(parameters%pack_iy)
     END IF
+
     IF (errcode /= c_err_none) CALL abort_code(errcode)
 
   END SUBROUTINE populate_injector_properties
@@ -483,7 +485,5 @@ CONTAINS
     END DO
 
   END SUBROUTINE update_dt_inject
-
-
 
 END MODULE injectors
