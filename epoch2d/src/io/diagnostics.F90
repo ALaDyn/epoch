@@ -220,8 +220,8 @@ CONTAINS
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: array
     INTEGER, DIMENSION(2,c_ndims) :: ranges
     INTEGER :: code, i, io, ispecies, iprefix, mask, rn, dir, dumped, nval
-    INTEGER :: ix, iy
-    INTEGER :: random_state(5)
+    INTEGER :: ix
+    INTEGER :: random_state(4)
     INTEGER, ALLOCATABLE :: random_states_per_proc(:)
     INTEGER, DIMENSION(c_ndims) :: dims
     INTEGER, SAVE :: nstep_prev = -1
@@ -235,6 +235,9 @@ CONTAINS
         (/'x_max', 'y_max', 'z_max', 'x_min', 'y_min', 'z_min'/)
     INTEGER, DIMENSION(6) :: fluxdir = &
         (/c_dir_x, c_dir_y, c_dir_z, -c_dir_x, -c_dir_y, -c_dir_z/)
+
+    ! Clean-up any cached RNG state
+    CALL random_flush_cache
 
 #ifdef NO_IO
     RETURN
@@ -418,13 +421,13 @@ CONTAINS
             'Minimum grid position', x_grid_min)
 
         CALL write_laser_phases(sdf_handle, n_laser_x_min, laser_x_min, &
-            'laser_x_min_phase')
+            'laser_x_min_phase', ny, ny_global_min, .NOT. x_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
-            'laser_x_max_phase')
+            'laser_x_max_phase', ny, ny_global_min, .NOT. x_max_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_min, laser_y_min, &
-            'laser_y_min_phase')
+            'laser_y_min_phase', ny, ny_global_min, .NOT. y_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_max, laser_y_max, &
-            'laser_y_max_phase')
+            'laser_y_max_phase', ny, ny_global_min, .NOT. y_max_boundary)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
@@ -456,10 +459,10 @@ CONTAINS
 
         IF (need_random_state) THEN
           CALL get_random_state(random_state)
-          ALLOCATE(random_states_per_proc(5*nproc))
-          CALL MPI_GATHER(random_state, 5, MPI_INTEGER, &
-              random_states_per_proc, 5, MPI_INTEGER, 0, comm, errcode)
-          CALL sdf_write_srl(sdf_handle, 'random_states_full', &
+          ALLOCATE(random_states_per_proc(4*nproc))
+          CALL MPI_GATHER(random_state, 4, MPI_INTEGER, &
+              random_states_per_proc, 4, MPI_INTEGER, 0, comm, errcode)
+          CALL sdf_write_srl(sdf_handle, 'random_states', &
               'Random States', random_states_per_proc)
           DEALLOCATE(random_states_per_proc)
         END IF
@@ -1001,29 +1004,32 @@ CONTAINS
 
 
   SUBROUTINE write_laser_phases(sdf_handle, laser_count, laser_base_pointer, &
-      block_name)
+      block_name, n_global, starts, null_write)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
     INTEGER, INTENT(IN) :: laser_count
     TYPE(laser_block), POINTER :: laser_base_pointer
     CHARACTER(LEN=*), INTENT(IN) :: block_name
-    REAL(num), DIMENSION(:), ALLOCATABLE :: laser_phases
-    INTEGER :: ilas
+    INTEGER, INTENT(IN) :: n_global, starts
+    LOGICAL, INTENT(IN) :: null_write
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: laser_phases
+    INTEGER :: ilas, npts
     TYPE(laser_block), POINTER :: current_laser
 
     IF (laser_count > 0) THEN
-      ALLOCATE(laser_phases(laser_count))
       ilas = 1
       current_laser => laser_base_pointer
+      ALLOCATE(laser_phases(npts, laser_count))
 
       DO WHILE(ASSOCIATED(current_laser))
-        laser_phases(ilas) = current_laser%current_integral_phase
+        laser_phases(:, ilas) = current_laser%current_integral_phase
         ilas = ilas + 1
         current_laser => current_laser%next
       END DO
 
-      CALL sdf_write_srl(sdf_handle, TRIM(block_name), TRIM(block_name), &
-          laser_count, laser_phases, 0)
+      CALL sdf_write_array(sdf_handle, TRIM(block_name), TRIM(block_name), &
+          laser_phases, [n_global, laser_count], [starts, 1], &
+          local_ghosts = [ng,0,ng,0], null_proc = null_write)
       DEALLOCATE(laser_phases)
     END IF
 

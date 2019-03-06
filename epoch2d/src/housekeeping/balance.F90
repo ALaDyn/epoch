@@ -411,11 +411,16 @@ CONTAINS
     ! Redistribute the field variables
     CALL redistribute_fields(domain)
 
+    DEALLOCATE(cell_x_min, cell_x_max)
+    DEALLOCATE(cell_y_min, cell_y_max)
+    ALLOCATE(cell_x_min(nprocx), cell_x_max(nprocx))
+    ALLOCATE(cell_y_min(nprocy), cell_y_max(nprocy))
+
     ! Copy the new lengths into the permanent variables
-    cell_x_min = new_cell_x_min
-    cell_x_max = new_cell_x_max
-    cell_y_min = new_cell_y_min
-    cell_y_max = new_cell_y_max
+    cell_x_min(:) = new_cell_x_min(:)
+    cell_x_max(:) = new_cell_x_max(:)
+    cell_y_min(:) = new_cell_y_min(:)
+    cell_y_max(:) = new_cell_y_max(:)
 
     ! Set the new nx, ny
     nx_global_min = cell_x_min(x_coords+1)
@@ -2091,6 +2096,7 @@ CONTAINS
         IF (new_maxs /= old_maxs) THEN
           maxs(i) = new_maxs
           load_max = -1
+          load_min = HUGE(load_min)
           i0 = 1
           DO proc = 1, nproc
             i1 = maxs(proc)
@@ -2112,6 +2118,7 @@ CONTAINS
         IF (new_maxs /= old_maxs) THEN
           maxs(i) = new_maxs
           load_max = -1
+          load_min = HUGE(load_min)
           i0 = 1
           DO proc = 1, nproc
             i1 = maxs(proc)

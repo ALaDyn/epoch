@@ -29,6 +29,7 @@ CONTAINS
 
     INTEGER, INTENT(IN) :: boundary
     TYPE(laser_block), INTENT(INOUT) :: laser
+    INTEGER, DIMENSION(2) :: array_range
 
     laser%boundary = boundary
     laser%id = -1
@@ -37,11 +38,9 @@ CONTAINS
     laser%use_profile_function = .FALSE.
     laser%use_omega_function = .FALSE.
     laser%amp = -1.0_num
-    laser%omega = -1.0_num
     laser%pol_angle = 0.0_num
     laser%t_start = 0.0_num
     laser%t_end = t_end
-    laser%current_integral_phase = 0.0_num
 
     laser%kx_mult = 0.0_num
 
@@ -51,8 +50,15 @@ CONTAINS
 
     CALL allocate_with_boundary(laser%profile, boundary)
     CALL allocate_with_boundary(laser%phase, boundary)
+    CALL allocate_with_boundary(laser%omega, boundary)
+    CALL allocate_with_boundary(laser%current_integral_phase, boundary)
+    array_range = get_boundary_range(boundary)
+    ALLOCATE(laser%k(array_range(1):array_range(2), c_ndims))
     laser%profile = 1.0_num
     laser%phase = 0.0_num
+    laser%k = 0.0_num
+    laser%omega = 0.0_num
+    laser%current_integral_phase = 0.0_num
 
   END SUBROUTINE init_laser
 
@@ -177,7 +183,7 @@ CONTAINS
 
   SUBROUTINE populate_pack_from_laser(laser, parameters)
 
-    TYPE(laser_block), POINTER :: laser
+    TYPE(laser_block) :: laser
     TYPE(parameter_pack), INTENT(INOUT) :: parameters
 
     parameters%pack_ix = 0
@@ -201,6 +207,70 @@ CONTAINS
     END SELECT
 
   END SUBROUTINE populate_pack_from_laser
+
+
+
+  SUBROUTINE populate_array_from_stack_1d(laser, array, stack)
+
+    TYPE(laser_block), INTENT(IN) :: laser
+    REAL(num), DIMENSION(:), POINTER :: array
+    TYPE(primitive_stack), INTENT(INOUT) :: stack
+    TYPE(parameter_pack) :: parameters
+    INTEGER :: err, i
+
+    err = 0
+    CALL populate_pack_from_laser(laser, parameters)
+    SELECT CASE(laser%boundary)
+      CASE(c_bd_x_min, c_bd_x_max)
+        DO i = 1,ny
+          parameters%pack_iy = i
+          array(i) = &
+              evaluate_with_parameters(stack, parameters, err)
+        END DO
+      CASE(c_bd_y_min, c_bd_y_max)
+        DO i = 1,nx
+          parameters%pack_ix = i
+          array(i) = &
+              evaluate_with_parameters(stack, parameters, err)
+        END DO
+    END SELECT
+
+  END SUBROUTINE populate_array_from_stack_1d
+
+
+
+  SUBROUTINE populate_array_from_stack_ndims(laser, array, stacks)
+
+    TYPE(laser_block), INTENT(IN) :: laser
+    REAL(num), DIMENSION(:,:), POINTER :: array
+    TYPE(primitive_stack), DIMENSION(:), INTENT(INOUT) :: stacks
+    TYPE(parameter_pack) :: parameters
+    INTEGER :: err, i, idims
+
+    err = 0
+    CALL populate_pack_from_laser(laser, parameters)
+    SELECT CASE(laser%boundary)
+      CASE(c_bd_x_min, c_bd_x_max)
+        DO idims = 1, c_ndims
+          IF (.NOT. stacks(idims)%init) CYCLE
+          DO i = 1, ny
+            parameters%pack_iy = i
+            array(i, idims) = &
+                evaluate_with_parameters(stacks(idims), parameters, err)
+          END DO
+        END DO
+      CASE(c_bd_y_min, c_bd_y_max)
+        DO idims = 1, c_ndims
+          IF (.NOT. stacks(idims)%init) CYCLE
+          DO i = 1, nx
+            parameters%pack_ix = i
+            array(i, idims) = &
+                evaluate_with_parameters(stacks(idims), parameters, err)
+          END DO
+      END DO
+    END SELECT
+
+  END SUBROUTINE populate_array_from_stack_ndims
 
 
 
@@ -231,22 +301,24 @@ CONTAINS
     INTEGER :: i, err
     TYPE(parameter_pack) :: parameters
 
-    err = 0
-    CALL populate_pack_from_laser(laser, parameters)
-    SELECT CASE(laser%boundary)
-      CASE(c_bd_x_min, c_bd_x_max)
-        DO i = 1,ny
-          parameters%pack_iy = i
-          laser%phase(i) = &
-              evaluate_with_parameters(laser%phase_function, parameters, err)
-        END DO
-      CASE(c_bd_y_min, c_bd_y_max)
-        DO i = 1,nx
-          parameters%pack_ix = i
-          laser%phase(i) = &
-              evaluate_with_parameters(laser%phase_function, parameters, err)
-        END DO
-    END SELECT
+    CALL populate_array_from_stack_1d(laser, laser%phase, laser%phase_function)
+
+!    err = 0
+!    CALL populate_pack_from_laser(laser, parameters)
+!    SELECT CASE(laser%boundary)
+!      CASE(c_bd_x_min, c_bd_x_max)
+!        DO i = 1,ny
+!          parameters%pack_iy = i
+!          laser%phase(i) = &
+!              evaluate_with_parameters(laser%phase_function, parameters, err)
+!        END DO
+!      CASE(c_bd_y_min, c_bd_y_max)
+!        DO i = 1,nx
+!          parameters%pack_ix = i
+!          laser%phase(i) = &
+!              evaluate_with_parameters(laser%phase_function, parameters, err)
+!        END DO
+!    END SELECT
 
   END SUBROUTINE laser_update_phase
 
@@ -282,13 +354,14 @@ CONTAINS
   SUBROUTINE laser_update_omega(laser)
 
     TYPE(laser_block), POINTER :: laser
-    INTEGER :: err
+    INTEGER :: err, iy
     TYPE(parameter_pack) :: parameters
 
     err = 0
     CALL populate_pack_from_laser(laser, parameters)
-    laser%omega = &
-        evaluate_with_parameters(laser%omega_function, parameters, err)
+    CALL populate_array_from_stack_1d(laser, laser%omega, laser%omega_function)
+!    laser%omega = &
+!        evaluate_with_parameters(laser%omega_function, parameters, err)
     IF (laser%omega_func_type == c_of_freq) &
         laser%omega = 2.0_num * pi * laser%omega
     IF (laser%omega_func_type == c_of_lambda) &
@@ -297,8 +370,13 @@ CONTAINS
     laser%k = 0.0_num
 
 #ifdef BOOSTED_FRAME
-    IF (in_boosted_frame) laser%omega = transform_frequency(global_boost_info, &
-        laser%omega, laser%omega / c * laser%kx_mult)
+    IF (in_boosted_frame .AND. (laser%boundary == c_db_x_min &
+        .OR. laser%boundary == c_db_x_max)) THEN
+      DO iy = 1, ny
+        laser%omega(iy) = transform_frequency(global_boost_info, &
+            laser%omega(iy), laser%omega(iy) / c * laser%kx_mult)
+      END DO
+    END IF
 #endif
 
   END SUBROUTINE laser_update_omega
@@ -309,29 +387,29 @@ CONTAINS
 
     TYPE(laser_block), POINTER :: laser
     INTEGER :: err, idir
+    INTEGER, DIMENSION(2) :: array_range
     TYPE(parameter_pack) :: parameters
 #ifdef BOOSTED_FRAME
     REAL(num) :: kboost
 #endif
 
+    array_range = get_boundary_range(laser%boundary)
+
     err = 0
     CALL populate_pack_from_laser(laser, parameters)
-    DO idir = 1, c_ndims
-      IF (laser%k_function(idir)%init) THEN
-        laser%k(idir) = &
-            evaluate_with_parameters(laser%k_function(idir), parameters, err)
-      END IF
-    END DO
+    CALL populate_array_from_stack_ndims(laser, laser%k, laser%k_function)
 
-    laser%omega = SQRT(DOT_PRODUCT(laser%k, laser%k) * c**2)
-
+    DO idir = array_range(1), array_range(2)
+      laser%omega(idir) = SQRT(DOT_PRODUCT(laser%k(idir,:), laser%k(idir,:)) &
+          * c**2)
 #ifdef BOOSTED_FRAME
-    IF (in_boosted_frame) THEN
-      laser%omega = transform_frequency(global_boost_info, &
-          laser%omega, laser%k(1), k_boost = kboost)
-      IF (laser%k_function(1)%init) laser%k = kboost
-    END IF
+      IF (in_boosted_frame) THEN
+        laser%omega(idir) = transform_frequency(global_boost_info, &
+            laser%omega(idir), laser%k(idir, 1), k_boost = kboost)
+        IF (laser%k_function(1)%init) laser%k(idir,1) = kboost
+      END IF
 #endif
+    END DO
 
   END SUBROUTINE laser_update_k
 
@@ -430,16 +508,28 @@ CONTAINS
 
 
 
+  FUNCTION get_boundary_range(boundary)
+    INTEGER, INTENT(IN) :: boundary
+    INTEGER, DIMENSION(2) :: get_boundary_range
+
+    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
+      get_boundary_range = [1-ng, ny+ng]
+    ELSE IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
+      get_boundary_range = [1-ng, nx+ng]
+    END IF
+
+  END FUNCTION
+
+
+
   SUBROUTINE allocate_with_boundary(array, boundary)
 
     REAL(num), DIMENSION(:), POINTER :: array
     INTEGER, INTENT(IN) :: boundary
+    INTEGER, DIMENSION(2) :: array_range
 
-    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
-      ALLOCATE(array(1-ng:ny+ng))
-    ELSE IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
-      ALLOCATE(array(1-ng:nx+ng))
-    END IF
+    array_range = get_boundary_range(boundary)
+    ALLOCATE(array(array_range(1):array_range(2)))
 
   END SUBROUTINE allocate_with_boundary
 
@@ -454,28 +544,28 @@ CONTAINS
 
     current => laser_x_min
     DO WHILE(ASSOCIATED(current))
-      dt_local = 2.0_num * pi / current%omega
+      dt_local = 2.0_num * pi / MAXVAL(current%omega)
       dt_laser = MIN(dt_laser, dt_local)
       current => current%next
     END DO
 
     current => laser_x_max
     DO WHILE(ASSOCIATED(current))
-      dt_local = 2.0_num * pi / current%omega
+      dt_local = 2.0_num * pi / MAXVAL(current%omega)
       dt_laser = MIN(dt_laser, dt_local)
       current => current%next
     END DO
 
     current => laser_y_min
     DO WHILE(ASSOCIATED(current))
-      dt_local = 2.0_num * pi / current%omega
+      dt_local = 2.0_num * pi / MAXVAL(current%omega)
       dt_laser = MIN(dt_laser, dt_local)
       current => current%next
     END DO
 
     current => laser_y_max
     DO WHILE(ASSOCIATED(current))
-      dt_local = 2.0_num * pi / current%omega
+      dt_local = 2.0_num * pi / MAXVAL(current%omega)
       dt_laser = MIN(dt_laser, dt_local)
       current => current%next
     END DO
@@ -526,9 +616,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,ny
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i) &
-              - current%k(1) * (x(laserpos-1)-current%initial_pos(1)) &
-              - current%k(2) * (y(i)-current%initial_pos(2)))
+              * SIN(current%current_integral_phase(i) + current%phase(i) &
+              - current%k(i, 1) * (x(laserpos-1)-current%initial_pos(1)) &
+              - current%k(i, 2) * (y(i)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
@@ -611,9 +701,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,ny
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i) &
-              - current%k(1) * (x(laserpos-1)-current%initial_pos(1)) &
-              - current%k(2) * (y(i)-current%initial_pos(2)))
+              * SIN(current%current_integral_phase(i) + current%phase(i) &
+              - current%k(i, 1) * (x(laserpos-1)-current%initial_pos(1)) &
+              - current%k(i, 2) * (y(i)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
@@ -696,9 +786,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,nx
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i) &
-              - current%k(1) * (x(i)-current%initial_pos(1)) &
-              - current%k(2) * (y(laserpos-1)-current%initial_pos(2)))
+              * SIN(current%current_integral_phase(i) + current%phase(i) &
+              - current%k(i, 1) * (x(i)-current%initial_pos(1)) &
+              - current%k(i, 2) * (y(laserpos-1)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
@@ -779,9 +869,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,nx
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i) &
-              - current%k(1) * (x(i)-current%initial_pos(1)) &
-              - current%k(2) * (y(laserpos-1)-current%initial_pos(2)))
+              * SIN(current%current_integral_phase(i) + current%phase(i) &
+              - current%k(i, 1) * (x(i)-current%initial_pos(1)) &
+              - current%k(i, 2) * (y(laserpos-1)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO

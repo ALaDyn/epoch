@@ -827,6 +827,7 @@ MODULE shared_data
   REAL(num), ALLOCATABLE, DIMENSION(:,:) :: coll_pairs
   REAL(num) :: coulomb_log
   LOGICAL :: coulomb_log_auto, use_collisions
+  LOGICAL :: use_nanbu = .TRUE.
 
   LOGICAL :: use_field_ionisation, use_collisional_ionisation
   LOGICAL :: use_multiphoton, use_bsi
@@ -961,7 +962,6 @@ MODULE shared_data
     INTEGER :: id
     REAL(num), DIMENSION(:), POINTER :: profile
     REAL(num), DIMENSION(:), POINTER :: phase
-    REAL(num) :: current_integral_phase
 
     !Used for boosted frame
     REAL(num) :: kx_mult
@@ -973,8 +973,10 @@ MODULE shared_data
     TYPE(primitive_stack) :: omega_function
     TYPE(primitive_stack), DIMENSION(c_ndims) :: k_function
 
-    REAL(num) :: amp, omega, pol_angle, t_start, t_end
-    REAL(num), DIMENSION(c_ndims) :: k, initial_pos
+    REAL(num) :: amp, pol_angle, t_start, t_end
+    REAL(num), DIMENSION(:), POINTER :: omega, current_integral_phase
+    REAL(num), DIMENSION(:,:), POINTER :: k
+    REAL(num), DIMENSION(c_ndims) :: initial_pos
     INTEGER :: omega_func_type
 
     TYPE(laser_block), POINTER :: next

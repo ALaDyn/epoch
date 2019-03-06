@@ -214,7 +214,7 @@ CONTAINS
       END IF
       CALL initialise_stack(working_laser%k_function(kdir))
       CALL tokenize(value, working_laser%k_function(kdir), errcode)
-      working_laser%k(kdir) = 0.0_num
+      working_laser%k(:,kdir) = 0.0_num
       working_laser%omega_func_type = c_of_k
       CALL laser_update_k(working_laser)
       IF (working_laser%k_function(kdir)%is_time_varying) THEN
@@ -234,7 +234,7 @@ CONTAINS
       END IF
       CALL initialise_stack(working_laser%k_function(kdir))
       CALL tokenize(value, working_laser%k_function(kdir), errcode)
-      working_laser%k(kdir) = 0.0_num
+      working_laser%k(:,kdir) = 0.0_num
       working_laser%omega_func_type = c_of_k
       CALL laser_update_k(working_laser)
       IF (working_laser%k_function(kdir)%is_time_varying) THEN
@@ -324,28 +324,28 @@ CONTAINS
     error = 0
     current => laser_x_min
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
+      IF (MINVAL(current%omega) < 0.0_num) error = IOR(error, 1)
       IF (current%amp < 0.0_num) error = IOR(error, 2)
       current => current%next
     END DO
 
     current => laser_x_max
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
+      IF (MINVAL(current%omega) < 0.0_num) error = IOR(error, 1)
       IF (current%amp < 0.0_num) error = IOR(error, 2)
       current => current%next
     END DO
 
     current => laser_y_min
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
+      IF (MINVAL(current%omega) < 0.0_num) error = IOR(error, 1)
       IF (current%amp < 0.0_num) error = IOR(error, 2)
       current => current%next
     END DO
 
     current => laser_y_max
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
+      IF (MINVAL(current%omega) < 0.0_num) error = IOR(error, 1)
       IF (current%amp < 0.0_num) error = IOR(error, 2)
       current => current%next
     END DO
@@ -355,7 +355,7 @@ CONTAINS
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
           WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'Must define a "lambda" or "omega" for every laser.'
+          WRITE(io,*) 'Must define a "lambda", "omega" or "k" for every laser.'
         END DO
       END IF
       errcode = c_err_missing_elements
