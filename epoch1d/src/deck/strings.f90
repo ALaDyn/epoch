@@ -247,7 +247,7 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(TRIM(ADJUSTL(str_in)), 'return')) THEN
+    IF (str_cmp(TRIM(ADJUSTL(str_in)), 'zero_current')) THEN
       as_bc = c_bc_return
       RETURN
     END IF
