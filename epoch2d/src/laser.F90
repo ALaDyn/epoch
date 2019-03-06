@@ -18,6 +18,7 @@
 MODULE laser
 
   USE custom_laser
+  USE lorentz
   USE evaluator
 
   IMPLICIT NONE
@@ -41,6 +42,9 @@ CONTAINS
     laser%t_start = 0.0_num
     laser%t_end = t_end
     laser%current_integral_phase = 0.0_num
+
+    laser%kx_mult = 0.0_num
+
     NULLIFY(laser%profile)
     NULLIFY(laser%phase)
     NULLIFY(laser%next)
@@ -76,6 +80,7 @@ CONTAINS
   SUBROUTINE deallocate_laser(laser)
 
     TYPE(laser_block), POINTER :: laser
+    INTEGER :: idir
 
     IF (ASSOCIATED(laser%profile)) DEALLOCATE(laser%profile)
     IF (ASSOCIATED(laser%phase)) DEALLOCATE(laser%phase)
@@ -87,6 +92,10 @@ CONTAINS
         CALL deallocate_stack(laser%time_function)
     IF (laser%use_omega_function) &
         CALL deallocate_stack(laser%omega_function)
+    DO idir = 1, c_ndims
+      IF (laser%use_k_function(idir)) &
+          CALL deallocate_stack(laser%k_function(idir))
+    END DO
     DEALLOCATE(laser)
 
   END SUBROUTINE deallocate_laser
@@ -139,15 +148,23 @@ CONTAINS
 
     IF (boundary == c_bd_x_min) THEN
       n_laser_x_min = n_laser_x_min + 1
+      laser%kx_mult = 1.0_num
+      laser%initial_pos = [x_global(1), 0.0_num]
       CALL attach_laser_to_list(laser_x_min, laser)
     ELSE IF (boundary == c_bd_x_max) THEN
       n_laser_x_max = n_laser_x_max + 1
+      laser%kx_mult = -1.0_num
+      laser%initial_pos = [x_global(nx_global), 0.0_num]
       CALL attach_laser_to_list(laser_x_max, laser)
     ELSE IF (boundary == c_bd_y_min) THEN
       n_laser_y_min = n_laser_y_min + 1
+      laser%kx_mult = 1.0_num
+      laser%initial_pos = [0.0_num, y_global(1)]
       CALL attach_laser_to_list(laser_y_min, laser)
     ELSE IF (boundary == c_bd_y_max) THEN
       n_laser_y_max = n_laser_y_max + 1
+      laser%kx_mult = 1.0_num
+      laser%initial_pos = [0.0_num, y_global(ny_global)]
       CALL attach_laser_to_list(laser_y_max, laser)
     END IF
 
@@ -165,6 +182,12 @@ CONTAINS
 
     parameters%pack_ix = 0
     parameters%pack_iy = 0
+
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame) THEN
+      parameters%v_prop = c * laser%kx_mult
+    END IF
+#endif
 
     SELECT CASE(laser%boundary)
       CASE(c_bd_x_min)
@@ -189,8 +212,8 @@ CONTAINS
     TYPE(parameter_pack) :: parameters
 
     err = 0
-    CALL populate_pack_from_laser(laser, parameters)
     IF (laser%use_time_function) THEN
+      CALL populate_pack_from_laser(laser, parameters)
       laser_time_profile = evaluate_with_parameters(laser%time_function, &
           parameters, err)
       RETURN
@@ -271,7 +294,46 @@ CONTAINS
     IF (laser%omega_func_type == c_of_lambda) &
         laser%omega = 2.0_num * pi * c / laser%omega
 
+    laser%k = 0.0_num
+
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame) laser%omega = transform_frequency(global_boost_info, &
+        laser%omega, laser%omega / c * laser%kx_mult)
+#endif
+
   END SUBROUTINE laser_update_omega
+
+
+
+  SUBROUTINE laser_update_k(laser)
+
+    TYPE(laser_block), POINTER :: laser
+    INTEGER :: err, idir
+    TYPE(parameter_pack) :: parameters
+#ifdef BOOSTED_FRAME
+    REAL(num) :: kboost
+#endif
+
+    err = 0
+    CALL populate_pack_from_laser(laser, parameters)
+    DO idir = 1, c_ndims
+      IF (laser%k_function(idir)%init) THEN
+        laser%k(idir) = &
+            evaluate_with_parameters(laser%k_function(idir), parameters, err)
+      END IF
+    END DO
+
+    laser%omega = SQRT(DOT_PRODUCT(laser%k, laser%k) * c**2)
+
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame) THEN
+      laser%omega = transform_frequency(global_boost_info, &
+          laser%omega, laser%k(1), k_boost = kboost)
+      IF (laser%k_function(1)%init) laser%k = kboost
+    END IF
+#endif
+
+  END SUBROUTINE laser_update_k
 
 
 
@@ -283,6 +345,10 @@ CONTAINS
     DO WHILE(ASSOCIATED(current))
       IF (current%use_omega_function) THEN
         CALL laser_update_omega(current)
+        current%current_integral_phase = current%current_integral_phase &
+            + current%omega * dt
+      ELSE IF (ANY(current%use_k_function)) THEN
+        CALL laser_update_k(current)
         current%current_integral_phase = current%current_integral_phase &
             + current%omega * dt
       ELSE
@@ -297,6 +363,10 @@ CONTAINS
         CALL laser_update_omega(current)
         current%current_integral_phase = current%current_integral_phase &
             + current%omega * dt
+      ELSE IF (ANY(current%use_k_function)) THEN
+        CALL laser_update_k(current)
+        current%current_integral_phase = current%current_integral_phase &
+            + current%omega * dt
       ELSE
         current%current_integral_phase = current%omega * time
       END IF
@@ -309,6 +379,10 @@ CONTAINS
         CALL laser_update_omega(current)
         current%current_integral_phase = current%current_integral_phase &
             + current%omega * dt
+      ELSE IF (ANY(current%use_k_function)) THEN
+        CALL laser_update_k(current)
+        current%current_integral_phase = current%current_integral_phase &
+            + current%omega * dt
       ELSE
         current%current_integral_phase = current%omega * time
       END IF
@@ -319,6 +393,10 @@ CONTAINS
     DO WHILE(ASSOCIATED(current))
       IF (current%use_omega_function) THEN
         CALL laser_update_omega(current)
+        current%current_integral_phase = current%current_integral_phase &
+            + current%omega * dt
+      ELSE IF (ANY(current%use_k_function)) THEN
+        CALL laser_update_k(current)
         current%current_integral_phase = current%current_integral_phase &
             + current%omega * dt
       ELSE
@@ -448,7 +526,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,ny
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i))
+              * SIN(current%current_integral_phase + current%phase(i) &
+              - current%k(1) * (x(laserpos-1)-current%initial_pos(1)) &
+              - current%k(2) * (y(i)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
@@ -456,6 +536,15 @@ CONTAINS
         current => current%next
       END DO
     END IF
+
+#ifdef BOOSTED_FRAME
+    IF (use_boosted_frame) THEN
+      source1 = source1 * global_boost_info%lorentz_gamma &
+          * (1.0_num - global_boost_info%beta)
+      source2 = source2 * global_boost_info%lorentz_gamma &
+          * (1.0_num + global_boost_info%beta)
+    END IF
+#endif
 
     bz(laserpos-1, 1:ny) = sum * ( 4.0_num * source1 &
         + 2.0_num * (ey_x_min(1:ny) + c * bz_x_min(1:ny)) &
@@ -522,7 +611,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,ny
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i))
+              * SIN(current%current_integral_phase + current%phase(i) &
+              - current%k(1) * (x(laserpos-1)-current%initial_pos(1)) &
+              - current%k(2) * (y(i)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
@@ -530,6 +621,15 @@ CONTAINS
         current => current%next
       END DO
     END IF
+
+#ifdef BOOSTED_FRAME
+    IF (use_boosted_frame) THEN
+      source1 = source1 * global_boost_info%lorentz_gamma &
+          * (1.0_num - global_boost_info%beta)
+      source2 = source2 * global_boost_info%lorentz_gamma &
+          * (1.0_num + global_boost_info%beta)
+    END IF
+#endif
 
     bz(laserpos, 1:ny) = sum * (-4.0_num * source1 &
         - 2.0_num * (ey_x_max(1:ny) - c * bz_x_max(1:ny)) &
@@ -596,7 +696,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,nx
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i))
+              * SIN(current%current_integral_phase + current%phase(i) &
+              - current%k(1) * (x(i)-current%initial_pos(1)) &
+              - current%k(2) * (y(laserpos-1)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
@@ -604,6 +706,13 @@ CONTAINS
         current => current%next
       END DO
     END IF
+
+#ifdef BOOSTED_FRAME
+    IF (use_boosted_frame) THEN
+      source2 = source2 * global_boost_info%lorentz_gamma &
+          * (1.0_num - global_boost_info%beta)
+    END IF
+#endif
 
     bx(1:nx, laserpos-1) = sum * ( 4.0_num * source1 &
         + 2.0_num * (ez_y_min(1:nx) + c * bx_y_min(1:nx)) &
@@ -670,7 +779,9 @@ CONTAINS
           t_env = laser_time_profile(current) * current%amp
           DO i = 1,nx
             base = t_env * current%profile(i) &
-              * SIN(current%current_integral_phase + current%phase(i))
+              * SIN(current%current_integral_phase + current%phase(i) &
+              - current%k(1) * (x(i)-current%initial_pos(1)) &
+              - current%k(2) * (y(laserpos-1)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
@@ -678,6 +789,13 @@ CONTAINS
         current => current%next
       END DO
     END IF
+
+#ifdef BOOSTED_FRAME
+    IF (use_boosted_frame) THEN
+      source2 = source2 * global_boost_info%lorentz_gamma &
+          * (1.0_num - global_boost_info%beta)
+    END IF
+#endif
 
     bx(1:nx, laserpos) = sum * (-4.0_num * source1 &
         - 2.0_num * (ez_y_max(1:nx) - c * bx_y_max(1:nx)) &

@@ -969,6 +969,20 @@ CONTAINS
         END DO
       END IF
     END IF
+    IF (IAND(errcode_deck, c_err_set_other_way) /= 0) THEN
+      IF (rank == rank_check) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** WARNING ***'
+          WRITE(io,*) 'Element "' // TRIM(element) &
+              // '" specifies a property that has been set in a different way' &
+              // ' in this deck.'
+          WRITE(io,*) 'Code will continue using last value in deck'
+          WRITE(io,*)
+        END DO
+      END IF
+    END IF
     IF (IAND(errcode_deck, c_err_bad_value) /= 0) THEN
       IF (rank == rank_check) THEN
         DO iu = 1, nio_units ! Print to stdout and to file

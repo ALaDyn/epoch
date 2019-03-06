@@ -265,6 +265,11 @@ CONTAINS
 #else
     defines = IOR(defines, c_def_use_mpi3)
 #endif
+#ifdef BOOSTED_FRAME
+    WRITE(*,*) 'Boosted frame support -DBOOSTED_FRAME'
+    defines = IOR(defines, c_def_use_boost)
+#endif
+
     WRITE(*,*) '*************************************************************'
 
   END SUBROUTINE compiler_directives

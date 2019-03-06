@@ -945,8 +945,6 @@ MODULE shared_data
     TYPE(primitive_stack) :: omega_function
     TYPE(primitive_stack), DIMENSION(c_ndims) :: k_function
 
-    LOGICAL :: move_x_min
-
     REAL(num) :: amp, omega, pol_angle, t_start, t_end
     REAL(num), DIMENSION(c_ndims) :: k, initial_pos
     INTEGER :: omega_func_type

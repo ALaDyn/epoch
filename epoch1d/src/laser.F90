@@ -44,7 +44,6 @@ CONTAINS
     laser%t_end = t_end
     laser%current_integral_phase = 0.0_num
 
-    laser%move_x_min = .FALSE.
     laser%kx_mult = 0.0_num
 
     NULLIFY(laser%next)

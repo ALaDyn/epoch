@@ -61,6 +61,8 @@ CONTAINS
     working_laser%use_phase_function = .TRUE.
     working_laser%use_profile_function = .TRUE.
     working_laser%use_omega_function = .FALSE.
+    working_laser%use_k_function = .FALSE.
+    working_laser%omega_func_type = c_of_null
 
   END SUBROUTINE laser_block_start
 
@@ -82,7 +84,7 @@ CONTAINS
     CHARACTER(*), INTENT(IN) :: element, value
     INTEGER :: errcode
     REAL(num) :: dummy
-    INTEGER :: io, iu
+    INTEGER :: io, iu, kdir
 
     errcode = c_err_none
     IF (deck_state == c_ds_first) RETURN
@@ -147,6 +149,11 @@ CONTAINS
           WRITE(io,*) 'Please use the element name "omega" instead.'
         END DO
       END IF
+      IF (working_laser%omega_func_type == c_of_omega) THEN
+        errcode = IOR(errcode, c_err_preset_element_use_later)
+      ELSE IF (working_laser%omega_func_type /= c_of_null) THEN
+        errcode = IOR(errcode, c_err_set_other_way)
+      END IF
       CALL initialise_stack(working_laser%omega_function)
       CALL tokenize(value, working_laser%omega_function, errcode)
       working_laser%omega = 0.0_num
@@ -161,6 +168,11 @@ CONTAINS
     END IF
 
     IF (str_cmp(element, 'frequency')) THEN
+      IF (working_laser%omega_func_type == c_of_freq) THEN
+        errcode = IOR(errcode, c_err_preset_element_use_later)
+      ELSE IF (working_laser%omega_func_type /= c_of_null) THEN
+        errcode = IOR(errcode, c_err_set_other_way)
+      END IF
       CALL initialise_stack(working_laser%omega_function)
       CALL tokenize(value, working_laser%omega_function, errcode)
       working_laser%omega = 0.0_num
@@ -175,6 +187,11 @@ CONTAINS
     END IF
 
     IF (str_cmp(element, 'lambda')) THEN
+      IF (working_laser%omega_func_type == c_of_lambda) THEN
+        errcode = IOR(errcode, c_err_preset_element_use_later)
+      ELSE IF (working_laser%omega_func_type /= c_of_null) THEN
+        errcode = IOR(errcode, c_err_set_other_way)
+      END IF
       CALL initialise_stack(working_laser%omega_function)
       CALL tokenize(value, working_laser%omega_function, errcode)
       working_laser%omega = 0.0_num
@@ -184,6 +201,46 @@ CONTAINS
         working_laser%use_omega_function = .TRUE.
       ELSE
         CALL deallocate_stack(working_laser%omega_function)
+      END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'kx')) THEN
+      kdir = 1
+      IF (working_laser%omega_func_type == c_of_k) THEN
+        errcode = IOR(errcode, c_err_preset_element_use_later)
+      ELSE IF (working_laser%omega_func_type /= c_of_null) THEN
+        errcode = IOR(errcode, c_err_set_other_way)
+      END IF
+      CALL initialise_stack(working_laser%k_function(kdir))
+      CALL tokenize(value, working_laser%k_function(kdir), errcode)
+      working_laser%k(kdir) = 0.0_num
+      working_laser%omega_func_type = c_of_k
+      CALL laser_update_k(working_laser)
+      IF (working_laser%k_function(kdir)%is_time_varying) THEN
+        working_laser%use_k_function(kdir) = .TRUE.
+      ELSE
+        CALL deallocate_stack(working_laser%k_function(kdir))
+      END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'ky')) THEN
+      kdir = 2
+      IF (working_laser%omega_func_type == c_of_k) THEN
+        errcode = IOR(errcode, c_err_preset_element_use_later)
+      ELSE IF (working_laser%omega_func_type /= c_of_null) THEN
+        errcode = IOR(errcode, c_err_set_other_way)
+      END IF
+      CALL initialise_stack(working_laser%k_function(kdir))
+      CALL tokenize(value, working_laser%k_function(kdir), errcode)
+      working_laser%k(kdir) = 0.0_num
+      working_laser%omega_func_type = c_of_k
+      CALL laser_update_k(working_laser)
+      IF (working_laser%k_function(kdir)%is_time_varying) THEN
+        working_laser%use_k_function(kdir) = .TRUE.
+      ELSE
+        CALL deallocate_stack(working_laser%k_function(kdir))
       END IF
       RETURN
     END IF

@@ -75,9 +75,11 @@ MODULE constants
   INTEGER, PARAMETER :: c_bd_z_max = 6
 
   ! Frequency function type codes
+  INTEGER, PARAMETER :: c_of_null = 0
   INTEGER, PARAMETER :: c_of_omega = 1
   INTEGER, PARAMETER :: c_of_freq = 2
   INTEGER, PARAMETER :: c_of_lambda = 3
+  INTEGER, PARAMETER :: c_of_k = 4
 
   ! Error codes
   INTEGER, PARAMETER :: c_err_none = 0
@@ -99,6 +101,7 @@ MODULE constants
   INTEGER, PARAMETER :: c_err_io_error = 2**15
   INTEGER, PARAMETER :: c_err_bad_setup = 2**16
   INTEGER, PARAMETER :: c_err_window = 2**17
+  INTEGER, PARAMETER :: c_err_set_other_way = 2**18
 
   INTEGER, PARAMETER :: c_ds_first = 1
   INTEGER, PARAMETER :: c_ds_last = 2
@@ -232,6 +235,7 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_hc_push = 2**23
   INTEGER(i8), PARAMETER :: c_def_use_isatty = 2**24
   INTEGER(i8), PARAMETER :: c_def_use_mpi3 = 2**25
+  INTEGER(i8), PARAMETER :: c_def_use_boost = 2**26
 
   ! Stagger types
   INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
@@ -245,6 +249,11 @@ MODULE constants
   INTEGER, PARAMETER :: c_stagger_jx = c_stagger_ex
   INTEGER, PARAMETER :: c_stagger_jy = c_stagger_ey
   INTEGER, PARAMETER :: c_stagger_jz = c_stagger_ez
+
+  ! Frame types
+  INTEGER, PARAMETER :: c_frame_none = 0
+  INTEGER, PARAMETER :: c_frame_lab = 1
+  INTEGER, PARAMETER :: c_frame_boost = 2
 
   ! Length of a standard string
   INTEGER, PARAMETER :: string_length = 256
