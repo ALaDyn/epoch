@@ -154,13 +154,13 @@ CONTAINS
     !If sublists, need to deallocate any
     CALL destroy_store(partlist%store)
 
-    ! By default, pad the store to have slack
-    ! and always make sure it is at least one sublist long
-    actual_elements = FLOOR(MAX(n_els_min, sublist_size) &
-        *(1.0_num + sublist_slack), i8)
+    ! Make sure store is at least one sublist long
+    ! and at least one extra element exists (for next_slot)
+    actual_elements = MAX(n_els_min + 1, sublist_size)
+
     IF (PRESENT(no_pad_store)) THEN
       IF(no_pad_store) THEN
-        actual_elements = MAX(n_els_min, sublist_size)
+        actual_elements = n_els_min + 1
       END IF
     END IF
 
@@ -179,7 +179,7 @@ CONTAINS
     ALLOCATE(els_to_allocate(n_subs))
     els_to_allocate = sublist_size
 
-    ! DO NOT set any element of  els_to_allocate to zero!
+    ! DO NOT set any element of  els_to_allocate to zero, or one!
     DO i_sub = 1, n_subs
       link_to = els_to_allocate(i_sub)
       IF(.NOT. link_el) link_to = 0
@@ -205,6 +205,8 @@ CONTAINS
     ! At slot number actual_elements, which is in either
     ! last substore, or at the very end of the one before that
     ! If we didn't, no elements are filled
+    !TODO why do we establish this link already? Last filled
+    ! does not have corresponding link. Is it just for the tail?
     IF(partlist%store%tail%first_free_element > 1) THEN
       partlist%store%next_slot%prev &
           => partlist%store%tail%store(partlist%store%tail%first_free_element-1)
@@ -224,6 +226,7 @@ CONTAINS
     ELSE
       NULLIFY(partlist%head, partlist%tail)
     END IF
+
   END SUBROUTINE create_particle_store
 
 
@@ -278,6 +281,8 @@ CONTAINS
           .OR. i_part == link_upto) THEN
         current => substore%store(i_part)
         CALL init_particle(current)
+        NULLIFY(substore%store(i_part)%prev, &
+            substore%store(i_part)%next)
       ELSE
         !Nullify pointers
         NULLIFY(substore%store(i_part)%prev, &
@@ -287,9 +292,10 @@ CONTAINS
       substore%store(i_part)%live = -1 ! Pseudo-live but not yet populated
     END DO
 
+    ! Correct links for 0th and n_elements-th particles
     IF(link_upto > 1) THEN
-      !Correct links for 0th and n_elements-th particles
       substore%store(1)%next => substore%store(2)
+      !TODO what is following trying to do?
       IF(total_size > 1 .AND. link_upto >= total_size) THEN
         substore%store(total_size)%prev => substore%store(total_size-1)
       ELSE IF(link_upto > 1) THEN
@@ -313,8 +319,8 @@ CONTAINS
         IF(store%tail%first_free_element > 1) THEN
           prev => store%tail%store(store%tail%first_free_element-1)
         ELSE
-          !Have a completely empty sub before this one
-          !Probably means it's been compacted out?
+          !TODO Have a completely empty sub before this one
+          !Probably means it's been compacted out? Anything to do?
        END IF
         current => substore%store(1)
         prev%next => current
@@ -531,7 +537,7 @@ CONTAINS
     END DO
     WRITE(100+rank, *) "Positions Done"
     WRITE(100+rank, *) "Checking Counts"
-
+    FLUSH(100+rank)
     IF (species%attached_list%use_store) THEN
       IF(counta /= countb .OR. countb /= countc) THEN
         CALL abort_with_trace(1)
@@ -1751,6 +1757,10 @@ CONTAINS
     ! Completely compact, between stores
     ! Written so as to allow skipping empty subs completely
     ! These are then removed at the last step
+    IF (store_debug) THEN
+      PRINT*, 'Compacting backing store on ',  rank
+    END IF
+
     src_section => store%head
     dest_section => store%head
     next_place_index = 1

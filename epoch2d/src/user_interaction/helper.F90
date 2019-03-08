@@ -351,10 +351,11 @@ CONTAINS
 
     npart_this_species = species%count
     IF (npart_this_species <= 0) THEN
-     IF (use_store_default) THEN
-       CALL create_empty_partlist(species%attached_list, use_store_in=.TRUE.)
-     END IF
-     RETURN
+      IF (use_store_default) THEN
+        CALL create_empty_partlist(species%attached_list, use_store_in=.TRUE.)
+      END IF
+        !TODO is there definitely nothing to do without store?
+      RETURN
     END IF
 
     ix_min = 1
@@ -517,6 +518,7 @@ CONTAINS
     END IF
     !Now have a store with at least one chunk of memory allocated
     !And all linking etc is done
+    !NOTE that positions etc not yet set
 
     !Randomly place npart_per_cell particles into each valid cell
     npart_left = num_new_particles
