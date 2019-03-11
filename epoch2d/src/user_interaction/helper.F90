@@ -610,6 +610,7 @@ CONTAINS
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
     ! Remove any particles from list that weren't placed
+    !TODO this must also update the count for stores if there are any unplaced
     IF(partlist%use_store) THEN
       !We just have to fix the last actual particle and the list tail
       IF(ASSOCIATED(current)) THEN

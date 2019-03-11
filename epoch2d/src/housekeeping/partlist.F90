@@ -410,20 +410,20 @@ CONTAINS
 
 
 
-  SUBROUTINE test_store(species)
+  SUBROUTINE test_store(list)
 
-    TYPE(particle_species), INTENT(IN) :: species
-    TYPE(particle), POINTER :: current
+    TYPE(particle_list), INTENT(IN) :: list
+    TYPE(particle), POINTER :: current, prev
     TYPE(particle_sub_store), POINTER :: sub
-    INTEGER(i8) :: counta, countb, countc, i, a_count, countd, j
-    REAL(num) :: idx, idy, part_x, part_y
+    INTEGER(i8) :: counta, countb, countc, i, a_count, countd, j, b_pos
+    REAL(num) :: part_x, part_y
 
-    IF(.NOT. species%attached_list%use_store) RETURN
+    IF(.NOT. list%use_store) RETURN
     !First check general integrity
     counta = 0
     countb = 0
     i = 0
-    sub => species%attached_list%store%head
+    sub => list%store%head
     DO WHILE(ASSOCIATED(sub))
       i = i + 1
       IF(ASSOCIATED(sub%store)) THEN
@@ -431,39 +431,39 @@ CONTAINS
       ELSE
         WRITE(100+rank, *) 'Bad substore', i
       END IF
-      IF(ASSOCIATED(species%attached_list%store%tail, TARGET = sub)) &
+      IF(ASSOCIATED(list%store%tail, TARGET = sub)) &
         countb = i
       sub => sub%next
     END DO
     WRITE(100+rank, *) 'Number of sublists ', &
-        species%attached_list%store%n_subs, counta
+        list%store%n_subs, counta
     FLUSH(100+rank)
-    IF (species%attached_list%use_store) THEN
-      IF(species%attached_list%store%n_subs .GT. 0 .AND. &
-          counta /= species%attached_list%store%n_subs) &
+    IF (list%use_store) THEN
+      IF(list%store%n_subs .GT. 0 .AND. &
+          counta /= list%store%n_subs) &
           CALL abort_with_trace(7)
     END IF
 
-    sub => species%attached_list%store%head
+    sub => list%store%head
 
     WRITE(100+rank, *) "Head matches ", &
-        ASSOCIATED(sub%head, TARGET=species%attached_list%head)
+        ASSOCIATED(sub%head, TARGET=list%head)
 
     j = 1
     DO WHILE(ASSOCIATED(sub))
       DO i = 1, sub%length
-        IF(ASSOCIATED(species%attached_list%tail, &
+        IF(ASSOCIATED(list%tail, &
             TARGET=sub%store(i))) &
             WRITE(100+rank, *) 'Tail is at index ', i, 'in', j
       END DO
       sub => sub%next
       j = j + 1
     END DO
-    sub => species%attached_list%store%head
+    sub => list%store%head
     j = 1
     DO WHILE(ASSOCIATED(sub))
       DO i = 1, sub%length
-        IF(ASSOCIATED(species%attached_list%store%next_slot, &
+        IF(ASSOCIATED(list%store%next_slot, &
             TARGET=sub%store(i))) &
             WRITE(100+rank, *) 'Next slot is at index ', i, 'in', j
       END DO
@@ -472,33 +472,33 @@ CONTAINS
     END DO
 
     counta = 0
-    current => species%attached_list%head
+    current => list%head
     DO WHILE (ASSOCIATED(current))
       counta = counta + 1
       current => current%next
     END DO
 
     WRITE(100+rank, *)  "Checking partlists"
-    WRITE(100+rank, *) counta, species%attached_list%count
+    WRITE(100+rank, *) counta, list%count
     FLUSH(100+rank)
 
     countb = 0
-    current => species%attached_list%head
-    DO i=1, species%attached_list%count
+    current => list%head
+    DO i=1, list%count
       IF (ASSOCIATED(current)) THEN
         countb = countb + 1
         current => current%next
       ELSE
         CONTINUE
       END IF
-      IF (ASSOCIATED(current, species%attached_list%tail)) CONTINUE
+      IF (ASSOCIATED(current, list%tail)) CONTINUE
     END DO
     WRITE(100+rank, *) countb, ASSOCIATED(current)
     FLUSH(100+rank)
 
     countc = 0
     a_count = 0
-    sub => species%attached_list%store%head
+    sub => list%store%head
     DO WHILE(ASSOCIATED(sub))
       DO i = 1, sub%length
         IF (sub%store(i)%live > 0) THEN
@@ -509,46 +509,61 @@ CONTAINS
       END DO
       sub => sub%next
     END DO
-    WRITE(100+rank, *)  countc, species%attached_list%count, a_count+1
+    WRITE(100+rank, *)  countc, list%count, a_count+1
     FLUSH(100+rank)
 
-    idx = 1.0_num / dx
-    idy = 1.0_num / dy
+    current => list%head
+    NULLIFY(prev)
+    i = 1
+    WRITE(100+rank, *) "Checking prevs"
+    DO WHILE (ASSOCIATED(current))
+      IF(ASSOCIATED(prev) .AND. &
+          .NOT. ASSOCIATED(current%prev, TARGET=prev)) THEN
+        WRITE(100+rank, *) "Bad prev in walk at ", i
+        FLUSH(100+rank)
+        CALL abort_with_trace(12)
+      END IF
+      prev => current
+      current => current%next
+      i = i + 1
+    END DO
 
 
     WRITE(100+rank, *) 'Checking all positions'
     FLUSH(100+rank)
-    current => species%attached_list%head
+    current => list%head
 
     countd = 0
+    b_pos = 1
     DO WHILE (ASSOCIATED(current))
       part_x  = current%part_pos(1)
       part_y  = current%part_pos(2)
       IF( part_x .GT. x_max_local  .OR. part_x .LT. x_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, x', part_x
+        WRITE(100+rank, *) 'Error, particle out of range, x', part_x, b_pos
         countd = countd + 1
       END IF
       IF(part_y .GT. y_max_local  .OR. part_y .LT. y_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, y', part_y
+        WRITE(100+rank, *) 'Error, particle out of range, y', part_y, b_pos
+        WRITE(100+rank, *) y_min_local, y_max_local, current%live
         countd = countd + 1
       END IF
       current => current%next
-
+      b_pos = b_pos + 1
     END DO
     WRITE(100+rank, *) "Positions Done"
     WRITE(100+rank, *) "Checking Counts"
     FLUSH(100+rank)
-    IF (species%attached_list%use_store) THEN
+    IF (list%use_store) THEN
       IF(counta /= countb .OR. countb /= countc) THEN
         CALL abort_with_trace(1)
       END IF
-      IF(counta /= species%attached_list%count) &
+      IF(counta /= list%count) &
         CALL abort_with_trace(2)
       IF(countc > 0 .AND. countb /= a_count+1) THEN
           CALL abort_with_trace(3)
       END IF
     ELSE
-      IF(counta /= countb .OR. countb /= species%attached_list%count) &
+      IF(counta /= countb .OR. countb /= list%count) &
           CALL abort_with_trace(4)
     END IF
 
@@ -818,6 +833,10 @@ CONTAINS
     IF (ASSOCIATED(previous)) THEN
       NULLIFY(previous%next)
       list%tail => previous
+    ELSE
+      ! Can only happen if there is nothing in list
+      NULLIFY(list%tail)
+      IF (store_debug) PRINT*, "ERROR, empty list"
     END IF
     list%store%head%head => list%head
 
@@ -839,8 +858,9 @@ CONTAINS
     TYPE(particle_list), INTENT(INOUT) :: list
 
     IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
+      ! Any path here will leave first_free_element incremented
       !First resort: compact store
-     IF(list%count > 0 .AND..NOT. list%locked_store .AND. &
+      IF(list%count > 0 .AND..NOT. list%locked_store .AND. &
           REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
         CALL compact_backing_store(list%store, list)
       END IF
@@ -1060,7 +1080,7 @@ CONTAINS
       IF (override_live .OR. current%live == 1) THEN
         CALL create_particle_in_list(next, list, .TRUE.)
         CALL copy_particle(current, next)
-        next%live = 1 ! Required if over-riding
+        next%live = 1 ! Required if over-riding, does nothing else
       END IF
 
       current => current%next
@@ -1081,6 +1101,7 @@ CONTAINS
 
     ! if (!particle) return;
     IF (.NOT. ASSOCIATED(new_particle)) RETURN
+    !TODO remove below as unhelpful?
     IF (partlist%use_store) CALL abort_code(8)
     NULLIFY(new_particle%next, new_particle%prev)
 
@@ -1151,6 +1172,8 @@ CONTAINS
 
     NULLIFY(a_particle%next, a_particle%prev)
     IF (partlist%use_store .AND. fromstore) THEN
+      ! Setting live effectively removes particle from store -
+      ! it will be overwritten on next compact etc
       a_particle%live = 0
     END IF
     ! Decrement counter
@@ -1429,11 +1452,18 @@ CONTAINS
       new_particle%prev => list%tail
       NULLIFY(new_particle%next)
       list%tail => new_particle
-      IF(ASSOCIATED(new_particle%prev)) new_particle%prev%next => new_particle
+      IF(ASSOCIATED(new_particle%prev)) THEN
+        new_particle%prev%next => new_particle
+      ELSE
+        IF (.NOT. ASSOCIATED(list%head, TARGET=new_particle)) THEN
+          IF (store_debug) PRINT*, 'Error creating in list - bad head'
+        END IF
+      END IF
       list%count = list%count + 1
 
       CALL increment_next_free_element(list)
-      new_particle => list%tail !In case reallocation occurred
+      ! If compact occured on line above, our slot can have moved, so reset
+      new_particle => list%tail
     ELSE
       CALL create_particle(new_particle, no_gen_id)
       new_particle%prev => list%tail
@@ -1746,6 +1776,10 @@ CONTAINS
 
 
 
+  !The following goes through the backing store as an array, packing
+  ! particles into a contiguous chunk. Any empty substores are skipped
+  ! over and then removed. In some cases this can save some copying
+
   SUBROUTINE compact_backing_store(store, list)
 
     TYPE(particle_store), INTENT(INOUT) :: store
@@ -1754,9 +1788,6 @@ CONTAINS
     TYPE(particle), POINTER :: original, place_into
     INTEGER(i8) :: i, next_place_index, j
 
-    ! Completely compact, between stores
-    ! Written so as to allow skipping empty subs completely
-    ! These are then removed at the last step
     IF (store_debug) THEN
       PRINT*, 'Compacting backing store on ',  rank
     END IF
@@ -1769,6 +1800,7 @@ CONTAINS
     DO j = 1, store%n_subs
       DO i = 1, src_section%first_free_element
         IF (i > src_section%length) EXIT
+        ! Check if current particle is live and not already in right place
         IF (src_section%store(i)%live > 0 .AND. &
             .NOT. ASSOCIATED(place_into, TARGET=src_section%store(i))) THEN
           original => src_section%store(i)
@@ -1833,6 +1865,13 @@ CONTAINS
       next => current%next
       IF(current%first_free_element == 1) THEN
         !Delete empty segments
+        IF (store_debug) THEN
+          !Check store is truly empty!
+          IF (count_live(current) > 0) THEN
+            CALL abort_with_trace(17)
+          END IF
+        END IF
+
         IF(ASSOCIATED(current%prev)) THEN
           current%prev%next => next
         ELSE
@@ -1859,6 +1898,21 @@ CONTAINS
     list%store%total_length = length
 
   END SUBROUTINE remove_empty_subs
+
+
+
+  FUNCTION count_live(sub_store)
+
+    INTEGER(KIND=i8) :: count_live, i
+    TYPE(particle_sub_store), POINTER :: sub_store
+
+    count_live = 0
+    DO i = 1, sub_store%length
+      IF (sub_store%store(i)%live == 1) count_live = count_live + 1
+    END DO
+
+  END FUNCTION
+
 
 
   SUBROUTINE set_next_slot(list)
