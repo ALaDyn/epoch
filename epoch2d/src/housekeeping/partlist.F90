@@ -862,7 +862,11 @@ CONTAINS
       !First resort: compact store
       IF(list%count > 0 .AND..NOT. list%locked_store .AND. &
           REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
-        CALL compact_backing_store(list%store, list)
+        IF (fold_compact) THEN
+          CALL fold_compact_backing_store(list%store, list)
+        ELSE
+          CALL compact_backing_store(list%store, list)
+        END IF
       END IF
       IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
         !Compacting insufficient, must grow
@@ -1843,9 +1847,106 @@ CONTAINS
     CALL remove_empty_subs(list)
     CALL set_next_slot(list)
 
+    !TODO do this on the fly? Does it help at all?
     CALL relink_partlist(list, .FALSE.)
 
   END SUBROUTINE compact_backing_store
+
+
+  !The following goes through the backing store as an array, packing
+  ! particles into a contiguous chunk. This is done by wrapping
+  ! particles from the tail of the list into empty spaces.
+  ! THIS DOES NOT preserve list ordering!
+  ! However, for various reasons it DOES preserve the tail particle
+  ! As for the regular compact, any empty substores are skipped
+  ! over and then removed. In some cases this can save some copying
+
+  SUBROUTINE fold_compact_backing_store(store, list)
+
+    TYPE(particle_store), INTENT(INOUT) :: store
+    TYPE(particle_sub_store), POINTER :: dest_section
+    TYPE(particle_list), INTENT(INOUT) :: list
+    TYPE(particle), POINTER :: original, place_into
+    INTEGER(i8) :: i, d_count, offset
+    LOGICAL :: patched_tail
+
+    IF (store_debug) THEN
+      PRINT*, 'Folding backing store on ',  rank
+    END IF
+
+   ! THIS should only be called if compact is needed
+   ! Assume there is some space unused
+    dest_section => store%head
+
+    ! List can only have no tail if empty or corrupt
+    IF (.NOT. ASSOCIATED(list%tail)) RETURN
+    ! Below means only one element left in list, the head/tail
+    ! Folding makes no sense in that case
+    IF (.NOT. ASSOCIATED(list%tail%prev)) &
+      CALL compact_backing_store(store, list)
+
+    patched_tail = .FALSE.
+    original => list%tail%prev
+    offset = 0
+    d_count = 0
+    outer: DO WHILE (offset < list%count .AND. ASSOCIATED(dest_section))
+      dest_section%head => dest_section%store(1)
+      DO i = 1, dest_section%length
+        ! At worst we copy every particle
+        ! offset tracks the total of either live, or filled by copying
+        ! We're done when this is 1 below the list count as the
+        ! tail is handled separately
+        offset = offset + 1
+        IF (offset >= list%count) THEN
+          dest_section%first_free_element = i+1
+          place_into => dest_section%store(i)
+          CALL copy_particle(list%tail, place_into)
+          list%tail%live = 0
+          patched_tail = .TRUE.
+          EXIT outer
+        END IF
+        ! Find next empty slot
+        IF (dest_section%store(i)%live == 1) CYCLE
+        ! Got a slot, copy it and move on src
+        place_into => dest_section%store(i)
+        CALL copy_particle(original, place_into)
+        original%live = 0
+        original => original%prev
+      END DO
+      ! For all except the last filled segment, below is correct
+      dest_section%first_free_element = dest_section%length+1
+      dest_section => dest_section%next
+    END DO outer
+
+    IF (.NOT. patched_tail) THEN
+      ! Must have ended exactly on a section boundary
+      ! hence exited from WHILE cond, not EXIT outer
+      ! That cannot have been the last segment
+      dest_section => dest_section%next
+      place_into => dest_section%store(1)
+      CALL copy_particle(list%tail, place_into)
+      list%tail%live = 0
+      dest_section%first_free_element = 2
+    END IF
+
+    !Set first_free for any remaining sections
+    IF(ASSOCIATED(dest_section)) THEN
+      DO WHILE(ASSOCIATED(dest_section))
+        dest_section => dest_section%next
+        IF(ASSOCIATED(dest_section)) THEN
+          dest_section%first_free_element = 1
+          dest_section%head => dest_section%store(1)
+        END IF
+      END DO
+    END IF
+
+    CALL remove_empty_subs(list)
+    CALL set_next_slot(list)
+
+    !TODO do this on the fly? Does it help at all?
+    CALL relink_partlist(list, .FALSE.)
+
+  END SUBROUTINE fold_compact_backing_store
 
 
 

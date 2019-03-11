@@ -375,6 +375,7 @@ MODULE shared_data
   REAL(num) :: fill_factor = 0.5  !Minimum fill level of list - will compact if lower
   LOGICAL :: use_store_default = .TRUE.  !Default to using stores for lists; deck can override
   LOGICAL :: store_debug = .FALSE.
+  LOGICAL :: fold_compact =.FALSE. !Use alternative compaction which does not maintain list ordering
 
   !Segment of memory storing particles
   !Does not track number of valid particles, only its own length

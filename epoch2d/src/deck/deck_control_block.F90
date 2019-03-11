@@ -438,6 +438,9 @@ CONTAINS
     ELSE IF (str_cmp(element, 'backing_store_fill_fac')) THEN
       fill_factor = as_real_print(value, element, errcode)
 
+    ELSE IF (str_cmp(element, 'backing_store_alt')) THEN
+      fold_compact = as_logical_print(value, element, errcode)
+
     ELSE
       errcode = c_err_unknown_element
 
