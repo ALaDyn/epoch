@@ -19,6 +19,7 @@ MODULE iterators
   USE particle_pointer_advance
   USE partlist
   USE particle_id_hash_mod
+  USE lorentz
 
   IMPLICIT NONE
 
@@ -55,7 +56,9 @@ CONTAINS
             == c_frame_lab .AND. direction == 1) THEN
           array(part_count) = transform_position_at_prime(global_boost_info, &
               array(part_count), time_val = &
-              prefix_boosts(current_prefix)%next_dump, inverse = .TRUE.)
+              prefix_boosts(current_prefix)% &
+              next_dump(prefix_boosts(current_prefix)%current_recorder), &
+              inverse = .TRUE.)
         END IF
 #endif
 

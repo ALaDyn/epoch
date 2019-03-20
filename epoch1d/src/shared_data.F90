@@ -596,12 +596,20 @@ MODULE shared_data
   INTEGER :: current_prefix = -1
   CHARACTER(LEN=c_id_length), ALLOCATABLE :: file_prefixes(:)
 #ifdef BOOSTED_FRAME
+  TYPE particle_species_holder
+    TYPE(particle_species), DIMENSION(:), POINTER :: &
+      particle_lists => NULL()
+  END TYPE particle_species_holder
+
   TYPE prefix_boost_info
     INTEGER :: frame = c_frame_boost
-    REAL(num) :: next_dump = 0.0_num
-    TYPE(particle_species), DIMENSION(:), POINTER :: &
-        particle_lists => NULL()
-    REAL(num), DIMENSION(:, :), ALLOCATABLE :: field_lists
+    INTEGER :: n_recorders = 1
+    INTEGER :: current_recorder = 1
+    REAL(num) :: dt_snapshot_lab
+    REAL(num), DIMENSION(:), ALLOCATABLE :: next_dump
+    TYPE(particle_species_holder), DIMENSION(:), ALLOCATABLE :: &
+        particle_recorders
+    REAL(num), DIMENSION(:, :, :), ALLOCATABLE :: field_lists
     LOGICAL :: io_assigned = .FALSE.
   END TYPE prefix_boost_info
   TYPE(prefix_boost_info), DIMENSION(:), ALLOCATABLE :: prefix_boosts

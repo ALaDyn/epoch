@@ -620,7 +620,8 @@ CONTAINS
         .AND. direction(1) == c_dir_x) THEN
       DO idir = 1, global_resolution(1)
         grid1(idir) = transform_position_at_prime(global_boost_info,&
-            grid1(idir), time_val = prefix_boosts(iprefix)%next_dump, &
+            grid1(idir), time_val = prefix_boosts(iprefix)% &
+            next_dump(prefix_boosts(iprefix)%current_recorder), &
             inverse = .TRUE.)
       END DO
     END IF
@@ -637,8 +638,9 @@ CONTAINS
           .AND. direction(2) == c_dir_x) THEN
         DO idir = 1, global_resolution(2)
             grid2(idir) = transform_position_at_prime(global_boost_info,&
-              grid2(idir), time_val = prefix_boosts(iprefix)%next_dump, &
-              inverse = .TRUE.)
+                grid2(idir), time_val = prefix_boosts(iprefix)% &
+                next_dump(prefix_boosts(iprefix)%current_recorder), &
+                inverse = .TRUE.)
         END DO
       END IF
 #endif
@@ -655,7 +657,8 @@ CONTAINS
           .AND. direction(3) == c_dir_x) THEN
         DO idir = 1, global_resolution(3)
           grid3(idir) = transform_position_at_prime(global_boost_info,&
-              grid3(idir), time_val = prefix_boosts(iprefix)%next_dump, &
+              grid3(idir), time_val = prefix_boosts(iprefix)%&
+              next_dump(prefix_boosts(iprefix)%current_recorder), &
               inverse = .TRUE.)
         END DO
       END IF

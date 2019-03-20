@@ -391,6 +391,9 @@ CONTAINS
     TYPE(particle_species_migration), POINTER :: mg
     TYPE(initial_condition_block), POINTER :: ic
     INTEGER :: i, ispecies, io, id, nspec_local, mask
+#ifdef BOOSTED_FRAME
+    REAL(num), DIMENSION(:,:,:,:), ALLOCATABLE :: field_balance
+#endif
 
     nx_new = new_domain(1,2) - new_domain(1,1) + 1
 
@@ -469,6 +472,24 @@ CONTAINS
     DEALLOCATE(bz)
     ALLOCATE(bz(1-ng:nx_new+ng))
     bz = temp
+
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame) THEN
+        DO iprefix = 1, SIZE(file_prefixes)
+          IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
+          ALLOCATE(field_balance(1-ng:nx_new+ng, 6, &
+              prefix_boosts(iprefix)%n_recorders))
+          DO ifield = 1, 6
+            DO irec = 1, prefix_boosts(iprefix)%n_recorders
+              CALL remap_field(prefix_boosts(iprefix)%field_lists(:,ifield, &
+                  irec), field_balance(:, ifield, irec))
+            END DO
+          END DO
+          DEALLOCATE(prefix_boosts(iprefix)%field_lists)
+          CALL MOVE_ALLOC(field_balance, prefix_boosts(iprefix)%field_lists)
+        END DO
+      END IF
+#endif
 
     IF (pre_loading) THEN
       IF (ALLOCATED(global_species_density)) DEALLOCATE(global_species_density)

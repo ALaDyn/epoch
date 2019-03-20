@@ -235,6 +235,9 @@ PROGRAM pic
 
     CALL check_for_stop_condition(halt, force_dump)
     IF (halt) EXIT
+#ifdef BOOSTED_FRAME
+    CALL record_fields
+#endif
     step = step + 1
     time = time + dt / 2.0_num
     CALL output_routines(step)

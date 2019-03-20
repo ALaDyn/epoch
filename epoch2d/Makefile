@@ -69,7 +69,7 @@ endif
 # gfortran
 # ========
 ifeq ($(strip $(COMPILER)),gfortran)
-  FFLAGS = -O3 -g -std=f2003
+  FFLAGS = -O3 -g -std=f2003 -pg -no-pie
 
   GNUVER := $(shell gfortran -dumpversion | head -1 \
       | sed 's/[^0-9\.]*\([0-9\.]\+\).*/\1/')
@@ -258,7 +258,7 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)NO_MPI3
 
 #Enable boosted frame
-#DEFINES += $(D)BOOSTED_FRAME
+DEFINES += $(D)BOOSTED_FRAME
 
 # If you are having trouble compiling the encoded_source module or
 # don't want embedded source code in restart dumps, uncomment the
@@ -436,6 +436,8 @@ FORCE:
 
 balance.o: balance.F90 boundary.o constants.o mpi_subtype_control.o \
   redblack_module.o timer.o utilities.o partlist.o
+boosted_frame.o: boosted_frame.F90 lorentz_1d.o shared_data.o utilities.o \
+  partlist.o
 boundary.o: boundary.F90 laser.o mpi_subtype_control.o particle_id_hash.o \
   particle_temperature.o partlist.o utilities.o
 calc_df.o: calc_df.F90 boundary.o
@@ -488,7 +490,8 @@ epoch2d.o: epoch2d.F90 boosted_frame.o balance.o calc_df.o collisions.o \
   photons.o setup.o split_particle.o welcome.o window.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
 evaluate.o: evaluate.F90 shunt.o stack.o
-evaluator_blocks.o: evaluator_blocks.F90 custom_parser.o stack.o strings.o
+evaluator_blocks.o: evaluator_blocks.F90 custom_parser.o lorentz_1d.o stack.o \
+  strings.o
 fields.o: fields.f90 boundary.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
 finish.o: finish.f90 collisions.o deck.o diagnostics.o dist_fn.o injectors.o \

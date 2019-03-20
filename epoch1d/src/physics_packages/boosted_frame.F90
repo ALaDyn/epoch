@@ -94,6 +94,7 @@ MODULE boosted_frame
       IF (rank == 0) &
           PRINT *,'*******************************************'
       ret_err = transform_io()
+      any_errors = any_errors .OR. ret_err
       IF (.NOT. ret_err .AND. rank == 0) PRINT *,'IO OK'
 
       IF (any_errors) THEN
@@ -266,7 +267,8 @@ MODULE boosted_frame
 
     current%part_p = transform_momentum(global_boost_info, current%part_p, &
         mass = mass)
-    current%part_pos = transform_position(global_boost_info, current%part_pos)
+    current%part_pos(1) = transform_position(global_boost_info, &
+        current%part_pos(1))
 
   END FUNCTION transform_particle
 
@@ -299,7 +301,8 @@ MODULE boosted_frame
 
   FUNCTION transform_laser(laser) RESULT(any_errors)
     TYPE(laser_block), INTENT(INOUT) :: laser
-    REAL(num) :: kboost, kx
+    REAL(num) :: kboost, kx, minkboost
+    INTEGER :: i
     LOGICAL :: any_errors
 
     any_errors = .FALSE.
@@ -309,24 +312,29 @@ MODULE boosted_frame
     IF (.NOT. laser%use_omega_function .AND. &
         .NOT. ANY(laser%use_k_function)) THEN
 
-      IF (laser%omega_func_type == c_of_k) THEN
-        kx = laser%k(1)
-      ELSE
-        kx = laser%omega/c * laser%kx_mult
-      END IF
+      minkboost = c_largest_number
+      DO i = LBOUND(laser%omega,1), UBOUND(laser%omega,1)
+        IF (laser%omega_func_type == c_of_k) THEN
+          kx = laser%k(i, 1)
+        ELSE
+          kx = laser%omega(i)/c * laser%kx_mult
+        END IF
 
-      laser%omega = transform_frequency(global_boost_info, laser%omega, &
-          kx, k_boost = kboost)
-      IF (laser%omega_func_type == c_of_k) THEN
-        laser%k(1) = kboost
-      END IF
+        laser%omega(i) = transform_frequency(global_boost_info, &
+            laser%omega(i), kx, k_boost = kboost)
+        IF (kboost < minkboost) minkboost=kboost
+        IF (laser%omega_func_type == c_of_k) THEN
+          laser%k(i, 1) = kboost
+        END IF
+      END DO
+
       laser%t_start = transform_time(global_boost_info, laser%t_start, &
           laser%initial_pos(1))
       laser%t_end = transform_time(global_boost_info, laser%t_end, &
           laser%initial_pos(1))
 
-      IF (pi / laser%omega < dt) THEN
-        dt = pi / laser%omega
+      IF (pi / MAXVAL(laser%omega) < dt) THEN
+        dt = pi / MAXVAL(laser%omega)
         IF (rank == 0) THEN
           PRINT *,'***WARNING***'
           PRINT *,'Timestep reducing to resolve laser after boost'
@@ -334,7 +342,7 @@ MODULE boosted_frame
         END IF
       END IF
 
-      IF (pi / kboost < dx .AND. rank == 0) THEN
+      IF (pi / MAX(minkboost, c_tiny) < dx .AND. rank == 0) THEN
           PRINT *,'***ERROR***'
           PRINT *,'After frame transform a laser has a wavelength below the'
           PRINT *,'grid spacing. Results will be incorrect'
@@ -342,7 +350,7 @@ MODULE boosted_frame
           any_errors = .TRUE.
       END IF
 
-      IF (pi / kboost < 10.0_num * dx .AND. rank == 0) THEN
+      IF (pi / MAX(minkboost, c_tiny) < 10.0_num * dx .AND. rank == 0) THEN
           PRINT *,'***WARNING***'
           PRINT *,'After frame transform a laser is now in a part of the EM'
           PRINT *,'dispersion curve where result quality is likely to be poor.'
@@ -362,14 +370,17 @@ MODULE boosted_frame
 
   FUNCTION transform_io() RESULT(any_errors)
 
-    INTEGER :: iio, ispecies, iprefix, nprefix
-    REAL(num) :: dt_dump
+    INTEGER :: iio, ispecies, iprefix, nprefix, irec
+    REAL(num), DIMENSION(:), ALLOCATABLE :: dt_dump
+    INTEGER :: n_recorders, max_n_recorders, total_recorders
     LOGICAL :: any_errors
 
     nprefix = SIZE(file_prefixes)
     ALLOCATE(prefix_boosts(nprefix))
+    ALLOCATE(dt_dump(nprefix))
+    max_n_recorders = 0
 
-    dt_dump = HUGE(1.0_num)
+    dt_dump = c_largest_number
     any_errors = .FALSE.
     DO iio = 1, n_io_blocks
 
@@ -385,11 +396,13 @@ MODULE boosted_frame
       IF (io_block_list(iio)%dt_snapshot > 0.0_num) THEN
         io_block_list(iio)%dt_snapshot_lab = io_block_list(iio)%dt_snapshot
         io_block_list(iio)%time_prev_lab = io_block_list(iio)%dt_snapshot_lab
-        io_block_list(iio)%time_prev = 0.0_num
+        io_block_list(iio)%time_prev = time
         io_block_list(iio)%dt_snapshot = transform_interval_in_prime(&
             global_boost_info, io_block_list(iio)%dt_snapshot)
         IF (io_block_list(iio)%frame == c_frame_lab) THEN
-          dt_dump = MIN(dt_dump, io_block_list(iio)%dt_snapshot)
+          dt_dump(io_block_list(iio)%prefix_index) = &
+              MIN(dt_dump(io_block_list(iio)%prefix_index), &
+              io_block_list(iio)%dt_snapshot)
         END IF
       ELSE IF (io_block_list(iio)%frame == c_frame_lab) THEN
         IF (rank == 0) THEN
@@ -427,8 +440,8 @@ MODULE boosted_frame
               prefix_boosts(iprefix)%io_assigned = &
                   (io_block_list(iio)%frame == c_frame_lab)
             END IF
-            prefix_boosts(iprefix)%next_dump = &
-                io_block_list(iio)%dt_snapshot_lab + dt_domain
+            prefix_boosts(iprefix)%dt_snapshot_lab = &
+                io_block_list(iio)%dt_snapshot_lab
             prefix_boosts(iprefix)%frame = io_block_list(iio)%frame
           END IF
         END DO
@@ -439,26 +452,71 @@ MODULE boosted_frame
     !if this prefix is in the lab frame
     DO iprefix = 1, nprefix
       IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
-      ALLOCATE(prefix_boosts(iprefix)%particle_lists(1:n_species))
-      ALLOCATE(prefix_boosts(iprefix)%field_lists(1-ng:nx+ng, 6))
-      DO ispecies = 1, n_species
-        prefix_boosts(iprefix)%particle_lists(ispecies) = species_list(ispecies)
-        prefix_boosts(iprefix)%particle_lists(ispecies)%count = 0
-        CALL create_empty_partlist(&
-            prefix_boosts(iprefix)%particle_lists(ispecies)% &
-            attached_list, .TRUE.)
+      n_recorders = CEILING(dt_domain/dt_dump(iprefix))
+      total_recorders = total_recorders + 1
+      IF (max_n_recorders < n_recorders) max_n_recorders = n_recorders
+      prefix_boosts(iprefix)%n_recorders = n_recorders
+      ALLOCATE(prefix_boosts(iprefix)%field_lists(1-ng:nx+ng, 1-ng:ny+ng, 6, &
+          n_recorders))
+      ALLOCATE(prefix_boosts(iprefix)%particle_recorders(n_recorders))
+      ALLOCATE(prefix_boosts(iprefix)%next_dump(n_recorders))
+      prefix_boosts%current_recorder = 1
+      DO irec = 1, n_recorders
+        ALLOCATE(prefix_boosts(iprefix)%particle_recorders(irec)% &
+            particle_lists(1:n_species))
+        prefix_boosts(iprefix)%next_dump(irec) &
+            = REAL(irec-1, num) * prefix_boosts(iprefix)%dt_snapshot_lab
+        DO ispecies = 1, n_species
+          prefix_boosts(iprefix)%particle_recorders(irec)%&
+              particle_lists(ispecies) = species_list(ispecies)
+          prefix_boosts(iprefix)%particle_recorders(irec)%&
+              particle_lists(ispecies)%count = 0
+          CALL create_empty_partlist(&
+              prefix_boosts(iprefix)%particle_recorders(irec)%&
+              particle_lists(ispecies)%attached_list, .TRUE.)
+        END DO
       END DO
     END DO
 
-    IF (dt_dump < dt_domain) THEN
-      IF (rank == 0) THEN
-        PRINT *, '*** ERROR ***'
-        PRINT *, 'Output timescales smaller than a single domain time detected'
-        PRINT *, 'in a lab frame output. This will not work correctly' 
-        PRINT *, 'Code will abort'
+    IF (total_recorders == max_n_recorders) THEN
+      IF (max_n_recorders == 1) THEN
+        IF (rank == 0) THEN
+          PRINT *, '*** CAUTION ***'
+          PRINT *, 'Output in the lab frame has been requested. This requires'
+          PRINT *, 'that EPOCH store copies of particles and fields at constant'
+          PRINT *, 'lab time. EPOCH''s memory footprint will be above normal'
+        END IF
+      ELSE IF (max_n_recorders > 1) THEN
+        IF (rank == 0) THEN
+          PRINT *, '*** WARNING ***'
+          PRINT *, 'Output in the lab frame has been requested with an interval'
+          PRINT *, 'lower than the lab frame time difference across the'
+          PRINT '(A,I3,A)', ' simulation domain. This will require', &
+              max_n_recorders ,' copies of'
+          PRINT *, 'fields and particles to be kept and will lead to very high'
+          PRINT *, 'memory usage. To avoid this, reduce "dt_snapshot" in '
+          PRINT *, 'lab frame diagnostics to be less then', dt_domain
+        END IF
       END IF
-      any_errors = .TRUE.
+    ELSE
+      PRINT *, '*** WARNING ***'
+      PRINT *, 'Multiple lab frame outputs have been requested.'
+      PRINT '(A,I3,A)', ' This will require', &
+            total_recorders ,'copies of'
+      PRINT *, 'fields and particles to be kept and will lead to very high'
+      PRINT *, 'memory usage.'
+      IF (max_n_recorders > 1) THEN
+        PRINT *, 'Also some requested lab frame outputs have an interval'
+        PRINT *, 'lower than the lab frame time difference across the'
+        PRINT '(A,I3,A)', ' simulation domain. The most restrictive requires', &
+            max_n_recorders ,' copies of'
+        PRINT *, 'fields and particles to be kept. To avoid this, reduce '
+        PRINT *, '"dt_snapshot" in lab frame diagnostics to be less then', &
+            dt_domain
+      END IF
     END IF
+
+    DEALLOCATE(dt_dump)
 
   END FUNCTION transform_io
 
@@ -471,7 +529,7 @@ MODULE boosted_frame
     INTEGER, INTENT(IN) :: ispecies
     REAL(num) :: init_t, final_t, mass
     TYPE(particle), POINTER :: new_part
-    INTEGER :: iprefix
+    INTEGER :: iprefix, irec
 
     init_t = transform_time(global_boost_info, time, init_x, &
         inverse = .TRUE.)
@@ -485,18 +543,19 @@ MODULE boosted_frame
 
     DO iprefix = 1, SIZE(file_prefixes)
       IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
-      IF (init_t <= prefix_boosts(iprefix)%next_dump .AND. final_t &
-          >= prefix_boosts(iprefix)%next_dump) THEN
-        ALLOCATE(new_part, SOURCE = part)
-        !Transform the particle's momentum and energy to lab frame now but
-        !keep position in boosted frame. 
-        new_part%part_p = transform_momentum(global_boost_info, &
-            new_part%part_p, mass = mass, inverse = .TRUE.)
-        CALL add_particle_to_partlist(prefix_boosts(iprefix)%&
-            particle_lists(ispecies)%attached_list, new_part)
-        prefix_boosts(iprefix)%particle_lists(ispecies)%count = &
-            prefix_boosts(iprefix)%particle_lists(ispecies)%count + 1
-      END IF
+      DO irec = 1, prefix_boosts(iprefix)%n_recorders
+        IF (init_t <= prefix_boosts(iprefix)%next_dump(irec) .AND. final_t &
+            >= prefix_boosts(iprefix)%next_dump(irec)) THEN
+          ALLOCATE(new_part, SOURCE = part)
+          !Transform the particle's momentum and energy to lab frame now but
+          !keep position in boosted frame. 
+          new_part%part_p = transform_momentum(global_boost_info, &
+              new_part%part_p, mass = mass, inverse = .TRUE.)
+          CALL add_particle_to_partlist(prefix_boosts(iprefix)%&
+              particle_recorders(irec)%particle_lists(ispecies)%attached_list, &
+              new_part)
+        END IF
+      END DO
     END DO
 
   END SUBROUTINE record_particle
@@ -507,7 +566,7 @@ MODULE boosted_frame
 
     REAL(num) :: t_local0, t_local1
     REAL(num), DIMENSION(6) :: fields_in, fields_out
-    INTEGER :: iprefix, ix
+    INTEGER :: iprefix, ix, irec
 
     DO iprefix = 1, SIZE(file_prefixes)
       IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
@@ -516,13 +575,15 @@ MODULE boosted_frame
             inverse = .TRUE.)
         t_local1 = transform_time(global_boost_info, time, x(ix), &
             inverse = .TRUE.)
-        IF (t_local0 <= prefix_boosts(iprefix)%next_dump .AND. t_local1 &
-            >= prefix_boosts(iprefix)%next_dump) THEN
-          fields_in = [ex(ix), ey(ix), ez(ix), bx(ix), by(ix), bz(ix)]
-          CALL transform_em_fields(global_boost_info, fields_in, &
-              fields_out, inverse = .TRUE.)
-          prefix_boosts(iprefix)%field_lists(ix, :) = fields_out
-        END IF
+        DO irec = 1, prefix_boosts(iprefix)%n_recorders
+          IF (t_local0 <= prefix_boosts(iprefix)%next_dump(irec) &
+              .AND. t_local1 >= prefix_boosts(iprefix)%next_dump(irec)) THEN
+            fields_in = [ex(ix), ey(ix), ez(ix), bx(ix), by(ix), bz(ix)]
+            CALL transform_em_fields(global_boost_info, fields_in, &
+                fields_out, inverse = .TRUE.)
+            prefix_boosts(iprefix)%field_lists(ix, :, irec) = fields_out
+          END IF
+        END DO
       END DO
     END DO
 

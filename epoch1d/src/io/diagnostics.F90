@@ -325,6 +325,9 @@ CONTAINS
 
       IF (.NOT.print_arrays) CYCLE
       current_prefix = iprefix
+#ifdef BOOSTED_FRAME
+      current_rec = prefix_boosts(iprefix)%current_recorder
+#endif
 
       IF (.NOT.any_written) THEN
         ALLOCATE(array(1-ng:nx+ng))
@@ -387,8 +390,7 @@ CONTAINS
       IF (in_boosted_frame .AND. &
           prefix_boosts(iprefix)%frame == c_frame_lab) THEN
         CALL sdf_write_header(sdf_handle, 'Epoch1d', 1, step, &
-            prefix_boosts(iprefix)%next_dump, restart_flag, jobid)
-      ELSE
+            prefix_boosts(iprefix)%next_dump(current_rec), restart_flag, jobid)
 #endif
         CALL sdf_write_header(sdf_handle, 'Epoch1d', 1, step, time, &
             restart_flag, jobid)
@@ -470,18 +472,18 @@ CONTAINS
           .AND. prefix_boosts(iprefix)%frame == c_frame_lab) THEN
         species_list_corrected => prefix_boosts(iprefix)%particle_lists
         CALL write_field(c_dump_ex, code, 'ex', 'Electric Field/Ex', 'V/m', &
-            c_stagger_ex, prefix_boosts(iprefix)%field_lists(:, 1))
+            c_stagger_ex, prefix_boosts(iprefix)%field_lists(:, 1, current_rec))
         CALL write_field(c_dump_ey, code, 'ey', 'Electric Field/Ey', 'V/m', &
-            c_stagger_ey, prefix_boosts(iprefix)%field_lists(:, 2))
+            c_stagger_ey, prefix_boosts(iprefix)%field_lists(:, 2, current_rec))
         CALL write_field(c_dump_ez, code, 'ez', 'Electric Field/Ez', 'V/m', &
-            c_stagger_ez, prefix_boosts(iprefix)%field_lists(:, 3))
+            c_stagger_ez, prefix_boosts(iprefix)%field_lists(:, 3, current_rec))
 
         CALL write_field(c_dump_bx, code, 'bx', 'Magnetic Field/Bx', 'T', &
-            c_stagger_bx, prefix_boosts(iprefix)%field_lists(:, 4))
+            c_stagger_bx, prefix_boosts(iprefix)%field_lists(:, 4, current_rec))
         CALL write_field(c_dump_by, code, 'by', 'Magnetic Field/By', 'T', &
-            c_stagger_by, prefix_boosts(iprefix)%field_lists(:, 5))
+            c_stagger_by, prefix_boosts(iprefix)%field_lists(:, 5, current_rec))
         CALL write_field(c_dump_bz, code, 'bz', 'Magnetic Field/Bz', 'T', &
-            c_stagger_bz, prefix_boosts(iprefix)%field_lists(:, 6))
+            c_stagger_bz, prefix_boosts(iprefix)%field_lists(:, 6, current_rec))
 
         prefix_boosts(iprefix)%field_lists = 0.0_num
       ELSE
@@ -918,7 +920,7 @@ CONTAINS
           WRITE(stat_unit, '(''Wrote '', a7, '' dump number'', i5, & 
             &'' at lab time'', g20.12, '' and iteration'', i7)') &
             dump_type, file_numbers(iprefix)-1, &
-            prefix_boosts(iprefix)%next_dump, step
+            prefix_boosts(iprefix)%next_dump(current_rec), step
         ELSE
 #endif
           WRITE(stat_unit, '(''Wrote '', a7, '' dump number'', i5, & 
@@ -934,10 +936,19 @@ CONTAINS
       IF (in_boosted_frame &
           .AND. prefix_boosts(iprefix)%frame == c_frame_lab) THEN
         DO ispecies = 1, n_species
-          CALL destroy_partlist(prefix_boosts(iprefix)%&
-              particle_lists(ispecies)% attached_list)
-          prefix_boosts(iprefix)%particle_lists(ispecies)%count = 0
+          CALL destroy_partlist(prefix_boosts(iprefix)% &
+              particle_recorders(current_rec)%particle_lists(ispecies)% &
+              attached_list)
         END DO
+        prefix_boosts(iprefix)%next_dump(current_rec) &
+            = prefix_boosts(iprefix)%next_dump(current_rec) &
+            + prefix_boosts(iprefix)%dt_snapshot_lab &
+            * REAL(prefix_boosts(iprefix)%n_recorders, num)
+        prefix_boosts(iprefix)%current_recorder &
+            = prefix_boosts(iprefix)%current_recorder + 1
+        IF (prefix_boosts(iprefix)%current_recorder &
+            > prefix_boosts(iprefix)%n_recorders) &
+            prefix_boosts(iprefix)%current_recorder = 1
       END IF
 #endif
 
@@ -1249,14 +1260,6 @@ CONTAINS
           IF (dump .AND. step > nstep_stop)  dump = .FALSE.
           IF (dump) io_block_list(io)%dump = .TRUE.
 
-#ifdef BOOSTED_FRAME
-          IF (in_boosted_frame) THEN
-            prefix_boosts(iprefix)%next_dump = io_block_list(io)%time_prev_lab &
-                + io_block_list(io)%dt_snapshot_lab
-            io_block_list(io)%time_prev_lab = io_block_list(io)%time_prev_lab &
-                + io_block_list(io)%dt_snapshot_lab
-          END IF
-#endif
         END IF
       ELSE
         ! Next I/O dump based on nstep_snapshot

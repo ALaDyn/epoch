@@ -20,6 +20,7 @@ MODULE evaluator_blocks
   USE custom_parser
   USE stack
   USE strings
+  USE lorentz
 
   IMPLICIT NONE
 
@@ -173,10 +174,14 @@ CONTAINS
     IF (simplify) THEN
       err_simplify = c_err_other
       err_simplify_xt = c_err_other
+#ifndef BOOSTED_FRAME
       IF (window_expression) THEN
+#endif
         err_simplify_xt = c_err_window
         err_simplify_window = c_err_window
+#ifndef BOOSTED_FRAME
       END IF
+#endif
     END IF
 
     IF (opcode == c_const_time) THEN
@@ -185,7 +190,7 @@ CONTAINS
         IF (parameters%use_grid_position) THEN
           val = x(parameters%pack_ix)
         ELSE
-          val = parameters%pack_pos
+          val = parameters%pack_pos(1)
         END IF
         val = transform_time(global_boost_info, time, val, &
             inverse = .TRUE.)
@@ -549,7 +554,7 @@ CONTAINS
         IF (parameters%use_grid_position) THEN
           val = x(parameters%pack_ix)
         ELSE
-          val = parameters%pack_pos
+          val = parameters%pack_pos(1)
         END IF
         val = transform_time(global_boost_info, t_end, val, &
             inverse = .TRUE.)
