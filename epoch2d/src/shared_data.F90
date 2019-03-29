@@ -383,8 +383,6 @@ MODULE shared_data
     INTEGER(i8) :: length
     INTEGER(i8) :: first_free_element
     TYPE(particle_sub_store), POINTER :: prev, next
-    TYPE(particle), POINTER :: head !First live particle in chunk, i.e. head of list 
-  !TODO what is above used for? REMOVE IT
     TYPE(particle), DIMENSION(:), POINTER :: store => NULL() !Actual memory
   END TYPE particle_sub_store
 

@@ -198,7 +198,7 @@ CONTAINS
       partlist%store%next_slot => partlist%store%tail%store(&
           partlist%store%tail%first_free_element)
     ELSE
-      partlist%store%next_slot => partlist%store%head%head
+      partlist%store%next_slot => partlist%store%head%store(1)
     END IF
     ! First free element should link to last filled element
     ! If we linked the store, then the last element is
@@ -222,7 +222,7 @@ CONTAINS
       ! Now we can guarantee that the next_slot%prev is associated and
       ! is the last linked element of the list
       partlist%tail => partlist%store%next_slot%prev
-      partlist%head => partlist%store%head%head
+      partlist%head => partlist%store%head%store(1)
     ELSE
       NULLIFY(partlist%head, partlist%tail)
     END IF
@@ -260,7 +260,6 @@ CONTAINS
     NULLIFY(substore%prev, substore%next)
     !Allocate backing memory
     ALLOCATE(substore%store(total_size))
-    substore%head => substore%store(1)
     !If creating list, we can link it all up already
     !And setup the list
     !Then calling code just sets positions etc
@@ -448,9 +447,6 @@ CONTAINS
 
     sub => list%store%head
 
-    WRITE(100+rank, *) "Head matches ", &
-        ASSOCIATED(sub%head, TARGET=list%head)
-
     j = 1
     DO WHILE(ASSOCIATED(sub))
       DO i = 1, sub%length
@@ -610,100 +606,6 @@ CONTAINS
   END SUBROUTINE test_list_positions
 
 
-  SUBROUTINE test_store_walk(store)
-
-    TYPE(particle_store), INTENT(IN) :: store
-    TYPE(particle), POINTER :: current, prev
-    TYPE(particle_sub_store), POINTER :: sub
-    INTEGER(i8) :: counta, countb, countc, i, a_count, j
-
-    WRITE(100+rank, *) 'Walking'
-    !First check general integrity
-    counta = 0
-    countb = 0
-    i = 0
-    sub => store%head
-    DO WHILE(ASSOCIATED(sub))
-      i = i + 1
-      IF(ASSOCIATED(sub%store)) THEN
-        counta = counta + 1
-      ELSE
-        WRITE(100+rank, *) 'Bad substore', i
-      END IF
-      IF(ASSOCIATED(store%tail, TARGET = sub)) &
-        countb = i
-      sub => sub%next
-    END DO
-    WRITE(100+rank, *) 'Number of sublists ', &
-        store%n_subs, counta
-    FLUSH(100+rank)
-    IF(store%n_subs > 0 .AND. counta /= store%n_subs) &
-          CALL abort_with_trace(11)
-
-    sub => store%head
-    j = 1
-    DO WHILE(ASSOCIATED(sub))
-      DO i = 1, sub%length
-        IF(ASSOCIATED(store%next_slot, &
-            TARGET=sub%store(i))) &
-            WRITE(100+rank, *) 'Next slot is at index ', i, 'in', j
-      END DO
-      sub => sub%next
-      j = j + 1
-    END DO
-
-    counta = 0
-    current => store%head%head
-
-    DO WHILE (ASSOCIATED(current))
-      counta = counta + 1
-      current => current%next
-    END DO
-
-    WRITE(100+rank, *)  "Checking store"
-    WRITE(100+rank, *) counta
-    FLUSH(100+rank)
-
-    countc = 0
-    a_count = 0
-    sub => store%head
-    DO WHILE(ASSOCIATED(sub))
-      DO i = 1, sub%length
-        IF (sub%store(i)%live > 0) THEN
-        countc = countc + 1
-        IF (ASSOCIATED(sub%store(i)%next)) &
-            a_count = a_count + 1
-       END IF
-      END DO
-      sub => sub%next
-    END DO
-    WRITE(100+rank, *)  countc, a_count+1
-
-    current => store%head%head
-    NULLIFY(prev)
-    i = 1
-    WRITE(100+rank, *) "Checking prevs"
-    DO WHILE (ASSOCIATED(current))
-      IF(ASSOCIATED(prev) .AND. &
-          .NOT. ASSOCIATED(current%prev, TARGET=prev)) THEN
-        WRITE(100+rank, *) "Bad prev in walk at ", i
-        FLUSH(100+rank)
-        CALL abort_with_trace(12)
-      END IF
-      prev => current
-      current => current%next
-      i = i + 1
-    END DO
-
-
-    WRITE(100+rank, *) 'Walk complete'
-    FLUSH(100+rank)
-    IF(countc /= 0 .AND. counta /= countc .OR. counta /= a_count+1) &
-          CALL abort_with_trace(13)
-
-
-  END SUBROUTINE test_store_walk
-
 
 
   SUBROUTINE create_unsafe_partlist(partlist, a_particle, n_elements, &
@@ -801,9 +703,9 @@ CONTAINS
   !Walk the particle store and regenerate a linked list
   !from the slots which hold live particles
   !to make list a valid linked list again
+
   !If particles were 'removed' without removing from store
-  ! recount will restore the correct count
-  ! TODO do we ever use recount?
+  ! recount will restore the correct count!
   SUBROUTINE relink_partlist(list, recount)
 
     TYPE(particle_list), INTENT(INOUT) :: list
@@ -841,7 +743,6 @@ CONTAINS
       NULLIFY(list%tail)
       IF (store_debug) PRINT*, "ERROR, empty list ", cnt
     END IF
-    list%store%head%head => list%head
 
     IF(recount) list%count = cnt
 
@@ -849,13 +750,15 @@ CONTAINS
 
 
   !Increment the position of the next slot in store
+  ! This is meant to be done AFTER you have filled the
+  ! next_slot and want it to be updated to a new value
   !If this overflows, then make space
   !First try compacting the list
-  !If that doesn't help, rellocate larger
+  !If that doesn't help, allocate a new sub-store chunk
   !THIS ROUTINE MAY INVALIDATE POINTERS!!
   !ANY CALLER MUST CHECK LIST IS UNCHANGED OR REPOINT!!
-  !Once add multiple linked sub_stores and/or more sophisticated
-  !trcking of free slots, this must get more clever
+  ! Next_slot (==list%tail) when this routine is entered
+  ! will remain the list%tail particle
   SUBROUTINE increment_next_free_element(list)
 
     TYPE(particle_list), INTENT(INOUT) :: list
@@ -1146,7 +1049,7 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL :: fromstore_in, nocopy_in
     LOGICAL :: fromstore, nocopy
     ! Remove a particle from a partlist. If fromstore is TRUE the
-    ! particle is also removed from the storem otherwise it remains
+    ! particle is also removed from the store, otherwise it remains
     ! a valid particle in the store, but not part of the list it backs:
     ! this means a relink will ADD it back!
 
@@ -1171,8 +1074,6 @@ CONTAINS
     ! Check whether particle is head or tail of list and unlink
     IF (ASSOCIATED(partlist%head, TARGET=a_particle)) THEN
       partlist%head => a_particle%next
-      IF (partlist%use_store) &
-          partlist%store%head%head => partlist%head
     END IF
 
     IF (ASSOCIATED(partlist%tail, TARGET=a_particle)) THEN
@@ -1478,7 +1379,6 @@ CONTAINS
       list%count = list%count + 1
 
       CALL increment_next_free_element(list)
-      ! TODO only call increment here, so maybe do it before creation??
       ! If compact occured on line above, our slot can have moved, so reset
       new_particle => list%tail
     ELSE
@@ -1845,7 +1745,6 @@ CONTAINS
           EXIT outer
         END IF
       END DO
-      src_section%head => src_section%store(1)
       src_section => src_section%next
     END DO outer
 
@@ -1867,13 +1766,72 @@ CONTAINS
   END SUBROUTINE compact_backing_store
 
 
+
+  !This does the same as above, but in a slightly simpler way
+  ! However, this one can't skip empty sections
+  SUBROUTINE alt_compact_backing_store(store, list)
+
+    TYPE(particle_store), INTENT(INOUT) :: store
+    TYPE(particle_sub_store), POINTER :: dest_section
+    TYPE(particle_list), INTENT(INOUT) :: list
+    TYPE(particle), POINTER :: original, place_into
+    INTEGER(i8) :: i, j
+
+    IF (store_debug) THEN
+      PRINT*, 'Compacting backing store on ',  rank
+    END IF
+
+    dest_section => store%head
+    original => list%head
+    place_into => store%head%store(1)
+    outer : DO j = 1, store%n_subs
+      DO i = 1, dest_section%length
+        IF (i > dest_section%length) EXIT
+        ! Check if current particle is live and not already in right place
+        IF (dest_section%store(i)%live > 0) THEN
+          original => original%next
+        ELSE
+          place_into => dest_section%store(i)
+          CALL copy_particle(original, place_into)
+          original%live = 0
+          original => original%next
+        END IF
+        IF (.NOT. ASSOCIATED(original)) THEN
+          IF (dest_section%store(i)%live == 1) THEN
+            dest_section%first_free_element = i+1
+          ELSE
+            dest_section%first_free_element = i
+          END IF
+          EXIT outer
+        END IF
+      END DO
+      dest_section%first_free_element = dest_section%length + 1
+      dest_section => dest_section%next
+    END DO outer
+
+    !Set first_free for any remaining destination sections
+    IF(ASSOCIATED(dest_section)) THEN
+      DO WHILE(ASSOCIATED(dest_section))
+        dest_section => dest_section%next
+        IF(ASSOCIATED(dest_section)) dest_section%first_free_element = 1
+      END DO
+    END IF
+
+    CALL remove_empty_subs(list)
+    CALL set_next_slot(list)
+
+    !TODO do this on the fly? Does it help at all?
+    CALL relink_partlist(list, .FALSE.)
+
+  END SUBROUTINE alt_compact_backing_store
+
+
+
   !The following goes through the backing store as an array, packing
   ! particles into a contiguous chunk. This is done by wrapping
   ! particles from the tail of the list into empty spaces.
   ! THIS DOES NOT preserve list ordering!
   ! However, for various reasons it DOES preserve the tail particle
-  ! As for the regular compact, any empty substores are skipped
-  ! over and then removed. In some cases this can save some copying
 
   SUBROUTINE fold_compact_backing_store(store, list)
 
@@ -1918,7 +1876,6 @@ CONTAINS
     offset = 0
     d_count = 0
     outer: DO WHILE (offset <= list%count)
-      dest_section%head => dest_section%store(1)
       DO i = 1, dest_section%length
         ! At worst we copy every particle
         ! offset tracks the total of either live, or filled by copying
@@ -1927,7 +1884,6 @@ CONTAINS
         offset = offset + 1
         IF (offset >= list%count) THEN
           dest_section%first_free_element = i+1
-          dest_section%head => dest_section%store(1)
           place_into => dest_section%store(i)
           CALL copy_particle(list%tail, place_into)
           list%tail%live = 0
@@ -1944,7 +1900,6 @@ CONTAINS
       END DO
       ! For all except the last filled segment, below is correct
       dest_section%first_free_element = dest_section%length+1
-      dest_section%head => dest_section%store(1)
       dest_section => dest_section%next
     END DO outer
 
@@ -1953,7 +1908,6 @@ CONTAINS
       ! hence exited from WHILE cond, not EXIT outer
       ! That cannot have been the last segment
       dest_section => dest_section%next
-      dest_section%head => dest_section%store(1)
       place_into => dest_section%store(1)
       CALL copy_particle(list%tail, place_into)
       list%tail%live = 0
@@ -1965,7 +1919,6 @@ CONTAINS
       dest_section => dest_section%next
       IF(ASSOCIATED(dest_section)) THEN
         dest_section%first_free_element = 1
-        dest_section%head => dest_section%store(1)
       END IF
     END DO
 
