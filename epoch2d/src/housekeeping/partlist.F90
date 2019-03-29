@@ -205,27 +205,24 @@ CONTAINS
     ! At slot number actual_elements, which is in either
     ! last substore, or at the very end of the one before that
     ! If we didn't, no elements are filled
-    !TODO why do we establish this link already? Last filled
-    ! does not have corresponding link. Is it just for the tail?
-    IF(partlist%store%tail%first_free_element > 1) THEN
-      partlist%store%next_slot%prev &
-          => partlist%store%tail%store(partlist%store%tail%first_free_element-1)
-    ELSE IF(link_el .AND. ASSOCIATED(partlist%store%tail%prev)) THEN
-      partlist%store%next_slot%prev &
-          => partlist%store%tail%prev%store(&
-            partlist%store%tail%prev%first_free_element-1)
-    ELSE
-      NULLIFY(partlist%store%next_slot%prev)
-    END IF
-
-    IF (link_el) THEN
-      ! Now we can guarantee that the next_slot%prev is associated and
-      ! is the last linked element of the list
-      partlist%tail => partlist%store%next_slot%prev
+    IF(link_el) THEN
       partlist%head => partlist%store%head%store(1)
+      IF(partlist%store%tail%first_free_element > 1) THEN
+        partlist%tail &
+            => partlist%store%tail%store(&
+              partlist%store%tail%first_free_element-1)
+      ELSE IF(ASSOCIATED(partlist%store%tail%prev)) THEN
+        partlist%tail &
+            => partlist%store%tail%prev%store(&
+              partlist%store%tail%prev%first_free_element-1)
+      ELSE
+        !This should never happen
+        NULLIFY(partlist%tail)
+      END IF
     ELSE
       NULLIFY(partlist%head, partlist%tail)
     END IF
+
 
   END SUBROUTINE create_particle_store
 
@@ -988,11 +985,6 @@ CONTAINS
         IF (store_debug .AND. .NOT. (ASSOCIATED(current) &
             .AND. ASSOCIATED(next))) THEN
           CALL abort_with_trace(18)
-        END IF
-        IF (.NOT. ASSOCIATED(list%head)) THEN
-          !List was empty, so hook up the head
-          !TODO remove
-          CALL abort_with_trace(19)
         END IF
 
         CALL copy_particle(current, next)
