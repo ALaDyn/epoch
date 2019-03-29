@@ -370,6 +370,7 @@ CONTAINS
     IF(ASSOCIATED(store%tail)) THEN
       !Now link substore into store
       tmp1 => store%tail
+      !TODO tmp2 was a diagnostic that is now redundant
       tmp2 => store%tail%next
       store%tail%next => substore
       tmp2 => store%tail%next
@@ -399,7 +400,8 @@ CONTAINS
     section => store%head
     IF (.NOT. ASSOCIATED(section)) RETURN
     DO WHILE(ASSOCIATED(section))
-      DEALLOCATE(section%store)
+   !TODO how could store ever not be allocated??
+      IF (ASSOCIATED(section%store)) DEALLOCATE(section%store)
       section => section%next
     END DO
     NULLIFY(store%head, store%tail)
@@ -801,12 +803,13 @@ CONTAINS
   !to make list a valid linked list again
   !If particles were 'removed' without removing from store
   ! recount will restore the correct count
+  ! TODO do we ever use recount?
   SUBROUTINE relink_partlist(list, recount)
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle), POINTER :: current, previous
     TYPE(particle_sub_store), POINTER :: sub
-    INTEGER(i8) ::cnt, icurr
+    INTEGER(i8) :: cnt, icurr
     LOGICAL, INTENT(IN) :: recount
 
     NULLIFY(previous)
@@ -836,7 +839,7 @@ CONTAINS
     ELSE
       ! Can only happen if there is nothing in list
       NULLIFY(list%tail)
-      IF (store_debug) PRINT*, "ERROR, empty list"
+      IF (store_debug) PRINT*, "ERROR, empty list ", cnt
     END IF
     list%store%head%head => list%head
 
@@ -857,7 +860,7 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
 
-    IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
+    IF(list%store%tail%first_free_element >= list%store%tail%length) THEN
       ! Any path here will leave first_free_element incremented
       !First resort: compact store
       IF(list%count > 0 .AND..NOT. list%locked_store .AND. &
@@ -868,8 +871,8 @@ CONTAINS
           CALL compact_backing_store(list%store, list)
         END IF
       END IF
-      IF(list%store%tail%first_free_element >= list%store%tail%length - 1) THEN
-        !Compacting insufficient, must grow
+      IF(list%store%tail%first_free_element >= list%store%tail%length) THEN
+        !Compacting not possible or insufficient - have to add subs
         CALL create_empty_substore(list%store, sublist_size)
       END IF
     ELSE
@@ -878,6 +881,7 @@ CONTAINS
           list%store%tail%first_free_element + 1
     END IF
     !Do this always, as if we grew, we have a nice empty, valid substore
+    ! TODO are we doing this twice, here and in compact??
     list%store%next_slot => &
         list%store%tail%store(list%store%tail%first_free_element)
 
@@ -1074,15 +1078,20 @@ CONTAINS
     current => newlist%head
     NULLIFY(next)
 
-    IF (.NOT. ASSOCIATED(list%head)) THEN
-      !List was empty, so hook up the head
-      list%head => list%store%next_slot
-    END IF
-
     DO WHILE(ASSOCIATED(current))
       !Only consider live particles, unless overrriding
       IF (override_live .OR. current%live == 1) THEN
         CALL create_particle_in_list(next, list, .TRUE.)
+        IF (store_debug .AND. .NOT. (ASSOCIATED(current) &
+            .AND. ASSOCIATED(next))) THEN
+          CALL abort_with_trace(18)
+        END IF
+        IF (.NOT. ASSOCIATED(list%head)) THEN
+          !List was empty, so hook up the head
+          !TODO remove
+          CALL abort_with_trace(19)
+        END IF
+
         CALL copy_particle(current, next)
         next%live = 1 ! Required if over-riding, does nothing else
       END IF
@@ -1163,7 +1172,7 @@ CONTAINS
     IF (ASSOCIATED(partlist%head, TARGET=a_particle)) THEN
       partlist%head => a_particle%next
       IF (partlist%use_store) &
-          partlist%store%head%head => a_particle%next
+          partlist%store%head%head => partlist%head
     END IF
 
     IF (ASSOCIATED(partlist%tail, TARGET=a_particle)) THEN
@@ -1459,13 +1468,17 @@ CONTAINS
       IF(ASSOCIATED(new_particle%prev)) THEN
         new_particle%prev%next => new_particle
       ELSE
-        IF (.NOT. ASSOCIATED(list%head, TARGET=new_particle)) THEN
-          IF (store_debug) PRINT*, 'Error creating in list - bad head'
+        IF (list%count == 0) THEN
+          list%head => new_particle
+        ELSE IF (.NOT. ASSOCIATED(list%head, TARGET=new_particle)) THEN
+          IF (store_debug) PRINT*, &
+               rank, 'Error creating in list - bad prev or head'
         END IF
       END IF
       list%count = list%count + 1
 
       CALL increment_next_free_element(list)
+      ! TODO only call increment here, so maybe do it before creation??
       ! If compact occured on line above, our slot can have moved, so reset
       new_particle => list%tail
     ELSE
@@ -1477,6 +1490,7 @@ CONTAINS
       list%count = list%count + 1
 
     END IF
+    ! TODO does this make the list%count == 0 above redundant??
     IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
 
   END SUBROUTINE create_particle_in_list
@@ -1801,7 +1815,7 @@ CONTAINS
     next_place_index = 1
 
     place_into => store%head%store(1)
-    DO j = 1, store%n_subs
+    outer : DO j = 1, store%n_subs
       DO i = 1, src_section%first_free_element
         IF (i > src_section%length) EXIT
         ! Check if current particle is live and not already in right place
@@ -1828,12 +1842,12 @@ CONTAINS
         IF (ASSOCIATED(dest_section)) THEN
           place_into => dest_section%store(next_place_index)
         ELSE
-          EXIT
+          EXIT outer
         END IF
       END DO
       src_section%head => src_section%store(1)
       src_section => src_section%next
-    END DO
+    END DO outer
 
     !Set first_free for any remaining destination sections
     IF(ASSOCIATED(dest_section)) THEN
@@ -1879,17 +1893,31 @@ CONTAINS
     dest_section => store%head
 
     ! List can only have no tail if empty or corrupt
-    IF (.NOT. ASSOCIATED(list%tail)) RETURN
+    IF (.NOT. ASSOCIATED(list%tail) .AND. store_debug) THEN
+      PRINT*, "Error - list has no tail, cannot fold"
+    END IF
+
     ! Below means only one element left in list, the head/tail
     ! Folding makes no sense in that case
-    IF (.NOT. ASSOCIATED(list%tail%prev)) &
-      CALL compact_backing_store(store, list)
+    ! But that element may be in unhelpful position
+    ! So we do want to move it back to the first slot
+    IF (.NOT. ASSOCIATED(list%tail%prev)) THEN
+      place_into => store%head%store(1)
+      CALL copy_particle(list%tail, place_into)
+      list%tail%live = 0
+      NULLIFY(place_into%prev, place_into%next)
+      list%head => place_into
+      list%tail => list%head
+      store%head%first_free_element = 2
+      store%next_slot => store%head%store(2)
+      RETURN
+    END IF
 
     patched_tail = .FALSE.
     original => list%tail%prev
     offset = 0
     d_count = 0
-    outer: DO WHILE (offset < list%count .AND. ASSOCIATED(dest_section))
+    outer: DO WHILE (offset <= list%count)
       dest_section%head => dest_section%store(1)
       DO i = 1, dest_section%length
         ! At worst we copy every particle
@@ -1899,6 +1927,7 @@ CONTAINS
         offset = offset + 1
         IF (offset >= list%count) THEN
           dest_section%first_free_element = i+1
+          dest_section%head => dest_section%store(1)
           place_into => dest_section%store(i)
           CALL copy_particle(list%tail, place_into)
           list%tail%live = 0
@@ -1915,6 +1944,7 @@ CONTAINS
       END DO
       ! For all except the last filled segment, below is correct
       dest_section%first_free_element = dest_section%length+1
+      dest_section%head => dest_section%store(1)
       dest_section => dest_section%next
     END DO outer
 
@@ -1923,6 +1953,7 @@ CONTAINS
       ! hence exited from WHILE cond, not EXIT outer
       ! That cannot have been the last segment
       dest_section => dest_section%next
+      dest_section%head => dest_section%store(1)
       place_into => dest_section%store(1)
       CALL copy_particle(list%tail, place_into)
       list%tail%live = 0
@@ -1930,15 +1961,13 @@ CONTAINS
     END IF
 
     !Set first_free for any remaining sections
-    IF(ASSOCIATED(dest_section)) THEN
-      DO WHILE(ASSOCIATED(dest_section))
-        dest_section => dest_section%next
-        IF(ASSOCIATED(dest_section)) THEN
-          dest_section%first_free_element = 1
-          dest_section%head => dest_section%store(1)
-        END IF
-      END DO
-    END IF
+    DO WHILE(ASSOCIATED(dest_section))
+      dest_section => dest_section%next
+      IF(ASSOCIATED(dest_section)) THEN
+        dest_section%first_free_element = 1
+        dest_section%head => dest_section%store(1)
+      END IF
+    END DO
 
     CALL remove_empty_subs(list)
     CALL set_next_slot(list)
@@ -1962,7 +1991,7 @@ CONTAINS
     !Do nothing if only one sub
     IF (.NOT. ASSOCIATED(current%next)) RETURN
 
-    DO WHILE(ASSOCIATED(current))
+    DO WHILE(ASSOCIATED(current) .AND. list%store%n_subs > 1)
       next => current%next
       IF(current%first_free_element == 1) THEN
         !Delete empty segments
@@ -2001,6 +2030,38 @@ CONTAINS
   END SUBROUTINE remove_empty_subs
 
 
+  ! Update indices of first free element in each sub
+  SUBROUTINE update_first_frees(list)
+
+    TYPE(particle_list), INTENT(INOUT) :: list
+    TYPE(particle_sub_store), POINTER :: current
+    INTEGER(i8) :: i, st, old
+
+    current => list%store%head
+    st = 0
+    DO WHILE(ASSOCIATED(current))
+      st = st + 1
+      old = current%first_free_element
+      IF (current%first_free_element > 1) THEN
+        current%first_free_element = 1
+        DO i = current%length, 1, -1
+          IF (current%store(i)%live == 1) THEN
+            current%first_free_element = i+1
+            EXIT
+          END IF
+        END DO
+        IF (store_debug) THEN
+          IF (current%first_free_element == 1) PRINT*, &
+              'Store ', st, ' is now empty'
+        END IF
+      END IF
+      current => current%next
+    END DO
+
+  END SUBROUTINE update_first_frees
+
+
+
 
   FUNCTION count_live(sub_store)
 
@@ -2020,7 +2081,7 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
 
-    IF(list%store%tail%first_free_element < list%store%tail%length) THEN
+    IF(list%store%tail%first_free_element <= list%store%tail%length) THEN
       list%store%next_slot => &
           list%store%tail%store(list%store%tail%first_free_element)
     ELSE

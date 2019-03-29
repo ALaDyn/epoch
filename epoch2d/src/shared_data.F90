@@ -372,7 +372,7 @@ MODULE shared_data
   !Backing store control
   ! TODO set most suitable defaults here
   INTEGER(i8) :: sublist_size = 1000 !Size of a sublist. Grow ops allocate a new sublist of this size
-  REAL(num) :: fill_factor = 0.5  !Minimum fill level of list - will compact if lower
+  REAL(num) :: fill_factor = 0.9  !Minimum fill level of list - will compact if lower
   LOGICAL :: use_store_default = .TRUE.  !Default to using stores for lists; deck can override
   LOGICAL :: store_debug = .FALSE.
   LOGICAL :: fold_compact =.FALSE. !Use alternative compaction which does not maintain list ordering
@@ -383,7 +383,8 @@ MODULE shared_data
     INTEGER(i8) :: length
     INTEGER(i8) :: first_free_element
     TYPE(particle_sub_store), POINTER :: prev, next
-    TYPE(particle), POINTER :: head !First live particle in chunk, i.e. head of list
+    TYPE(particle), POINTER :: head !First live particle in chunk, i.e. head of list 
+  !TODO what is above used for? REMOVE IT
     TYPE(particle), DIMENSION(:), POINTER :: store => NULL() !Actual memory
   END TYPE particle_sub_store
 
@@ -393,7 +394,8 @@ MODULE shared_data
   TYPE particle_store
     INTEGER(i8) :: total_length !Sum of sublist lengths, for convenience, ==number of potential slots
     INTEGER(i8) :: n_subs ! n_subs stored for convenience
-    TYPE(particle), POINTER :: next_slot  !Next place to insert a new particle
+    TYPE(particle), POINTER :: next_slot  !Next place to insert a new particle.
+    !Note next_slot is NOT necessarily the same as tail%store(first_free_element)
     TYPE(particle_sub_store), POINTER :: head => NULL(), tail => NULL()
   END TYPE particle_store
 
