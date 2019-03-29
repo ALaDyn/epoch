@@ -338,7 +338,7 @@ CONTAINS
   SUBROUTINE create_empty_substore(store, total_size)
 
     TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: substore, tmp1, tmp2
+    TYPE(particle_sub_store), POINTER :: substore, tmp1
     INTEGER(i8), INTENT(IN) :: total_size
     INTEGER(i8) :: i_part
 
@@ -366,16 +366,9 @@ CONTAINS
     IF(ASSOCIATED(store%tail)) THEN
       !Now link substore into store
       tmp1 => store%tail
-      !TODO tmp2 was a diagnostic that is now redundant
-      tmp2 => store%tail%next
       store%tail%next => substore
-      tmp2 => store%tail%next
-
       substore%prev => store%tail
-      tmp2 => substore%prev
-
       store%tail => substore
-      tmp2 => store%tail
       NULLIFY(substore%next)
     ELSE
       store%tail => substore
