@@ -21,7 +21,6 @@ MODULE partlist
 #ifdef PHOTONS
   USE random_generator
 #endif
-  USE utilities
 
   IMPLICIT NONE
 
@@ -392,7 +391,7 @@ CONTAINS
 
 
 
-  SUBROUTINE test_store(list, skip_tail)
+  FUNCTION test_store(list, skip_tail)
 
     TYPE(particle_list), INTENT(IN) :: list
     TYPE(particle), POINTER :: current, prev
@@ -401,8 +400,14 @@ CONTAINS
     REAL(num) :: part_x, part_y
     LOGICAL, INTENT(IN), OPTIONAL :: skip_tail ! Ignore position of tail particle - use if calling during compact
     LOGICAL :: stop_check
+    INTEGER(i8) :: test_store
 
-    IF(.NOT. list%use_store) RETURN
+    test_store = 0
+    IF(.NOT. list%use_store) THEN
+      !Is not a store, probably an error
+      test_store = 1
+      RETURN
+    END IF
     !First check general integrity
     counta = 0
     countb = 0
@@ -425,7 +430,7 @@ CONTAINS
     IF (list%use_store) THEN
       IF(list%store%n_subs .GT. 0 .AND. &
           counta /= list%store%n_subs) &
-          CALL abort_with_trace(7)
+          test_store = test_store + 2
     END IF
 
     sub => list%store%head
@@ -502,7 +507,7 @@ CONTAINS
           .NOT. ASSOCIATED(current%prev, TARGET=prev)) THEN
         WRITE(100+rank, *) "Bad prev in walk at ", i
         FLUSH(100+rank)
-        CALL abort_with_trace(12)
+        test_store = test_store + 4
       END IF
       prev => current
       current => current%next
@@ -542,58 +547,24 @@ CONTAINS
     FLUSH(100+rank)
     IF (list%use_store) THEN
       IF(counta /= countb .OR. countb /= countc) THEN
-        CALL abort_with_trace(1)
+        test_store = test_store + 8
       END IF
       IF(counta /= list%count) &
-        CALL abort_with_trace(2)
+          test_store = test_store + 16
       IF(countc > 0 .AND. countb /= a_count+1) THEN
-          CALL abort_with_trace(3)
+        test_store = test_store + 32
       END IF
     ELSE
       IF(counta /= countb .OR. countb /= list%count) &
-          CALL abort_with_trace(4)
+          test_store = test_store + 64
     END IF
 
     IF(countd /= 0) &
-        CALL abort_with_trace(5)
+        test_store = test_store + 128
 
     FLUSH(100+rank)
 
-  END SUBROUTINE test_store
-
-
-  SUBROUTINE test_list_positions(list, inside_is_err)
-
-   TYPE(particle_list), INTENT(IN) :: list
-   TYPE(particle), POINTER :: current
-   INTEGER(i8) :: countd
-   LOGICAL, INTENT(IN) :: inside_is_err
-   REAL(num) :: part_x, part_y
-
-   countd = 0
-   current => list%head
-
-   DO WHILE (ASSOCIATED(current))
-      countd = countd + 1
-      part_x  = current%part_pos(1)
-      part_y  = current%part_pos(2)
-      WRITE(100+rank, *) 'Particle ',countd, ' at ', part_x, part_y
-      IF(inside_is_err .AND. part_x < x_max_local  .AND. part_x > x_min_local &
-          .AND. part_y < y_max_local .AND. part_y > y_min_local) THEN
-          WRITE(100+rank, *) 'Error, particle in domain', countd, current%live
-          WRITE(100+rank, *) part_x, part_y
-      ELSE IF(.NOT. inside_is_err .AND. &
-          (part_x >= x_max_local  .OR. part_x <= x_min_local &
-          .AND. part_y >= y_max_local .OR. part_y <= y_min_local)) THEN
-          WRITE(100+rank, *) 'Error, particle in domain', countd, current%live
-          WRITE(100+rank, *) part_x, part_y
-      END IF
-      current => current%next
-   END DO
-   WRITE(100+rank, *) "Positions Done"
-
-  END SUBROUTINE test_list_positions
-
+  END FUNCTION test_store
 
 
 
@@ -789,18 +760,6 @@ CONTAINS
 
 
 
-  !Update the next free element, e.g. after store gets compacted
-  SUBROUTINE update_store_endpoint(list, last_full_slot)
-
-    TYPE(particle_list), INTENT(INOUT) :: list
-    INTEGER(i8) :: last_full_slot
-
-    list%store%tail%first_free_element = last_full_slot + 1
-    list%store%next_slot => list%store%tail%store(last_full_slot + 1)
-
-  END SUBROUTINE
-
-
 
   SUBROUTINE create_filled_partlist(partlist, data_in, n_elements, holds_copies)
 
@@ -982,10 +941,6 @@ CONTAINS
       !Only consider live particles, unless overrriding
       IF (override_live .OR. current%live == 1) THEN
         CALL create_particle_in_list(next, list, .TRUE.)
-        IF (store_debug .AND. .NOT. (ASSOCIATED(current) &
-            .AND. ASSOCIATED(next))) THEN
-          CALL abort_with_trace(18)
-        END IF
 
         CALL copy_particle(current, next)
         next%live = 1 ! Required if over-riding, does nothing else
@@ -1765,7 +1720,7 @@ CONTAINS
 
 
   !This does the same as above, but in a slightly simpler way
-  ! However, this one can't skip empty sections
+  ! However, this one can't be adapted to skip empty sections
   SUBROUTINE alt_compact_backing_store(store, list)
 
     TYPE(particle_store), INTENT(INOUT) :: store
@@ -1948,8 +1903,8 @@ CONTAINS
         IF (store_debug) THEN
           !Check store is truly empty!
           IF (count_live(current) > 0) THEN
-            PRINT*, 'Error on', rank, st, current%first_free_element
-            CALL abort_with_trace(17)
+            PRINT*, 'Severe error in particle stores on rank ', rank, &
+              ' segment ', st, ' is not empty'
           END IF
         END IF
 
@@ -2011,7 +1966,6 @@ CONTAINS
 
 
 
-
   FUNCTION count_live(sub_store)
 
     INTEGER(KIND=i8) :: count_live, i
@@ -2022,7 +1976,7 @@ CONTAINS
       IF (sub_store%store(i)%live == 1) count_live = count_live + 1
     END DO
 
-  END FUNCTION
+  END FUNCTION count_live
 
 
 
@@ -2041,23 +1995,5 @@ CONTAINS
 
   END SUBROUTINE set_next_slot
 
-
-  !Completely relink all particle lists
-  !Slow, for test purposes
-  SUBROUTINE relink_partlists
-
-    INTEGER(i8) :: ispecies
-    TYPE(particle_list), POINTER :: list
-
-    DO ispecies = 1, n_species
-
-      list => species_list(ispecies)%attached_list
-
-      CALL relink_partlist(list, .TRUE.)
-
-    END DO
-
-
-  END SUBROUTINE
 
 END MODULE partlist

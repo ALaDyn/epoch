@@ -207,7 +207,7 @@ DEFINES := $(DEFINE)
 
 # Include a unique global particle ID. The first flag defines the ID using
 # an 8-byte integer, the second uses 4-bytes.
-DEFINES += $(D)PARTICLE_ID
+#DEFINES += $(D)PARTICLE_ID
 #DEFINES += $(D)PARTICLE_ID4
 
 # Include QED routines
@@ -238,7 +238,7 @@ DEFINES += $(D)PARTICLE_ID
 # Perform checks on evaluated deck expressions.
 # This slows down the code but may be required if floating point exceptions
 # are enabled.
-DEFINES += $(D)PARSER_CHECKING
+#DEFINES += $(D)PARSER_CHECKING
 
 # Disable the use of isatty C call to enable coloured welcome banner
 #DEFINES += $(D)NO_USE_ISATTY
@@ -515,8 +515,7 @@ particle_pointer_advance.o: particle_pointer_advance.f90 shared_data.o
 particle_temperature.o: particle_temperature.F90 evaluate.o random_generator.o \
   shared_data.o
 particles.o: particles.F90 boundary.o partlist.o prefetch.o
-partlist.o: partlist.F90 particle_id_hash.o random_generator.o shared_data.o \
-  utilities.o
+partlist.o: partlist.F90 particle_id_hash.o random_generator.o shared_data.o
 photons.o: photons.F90 partlist.o
 prefetch.o: prefetch.F90 shared_data.o
 probes.o: probes.F90 partlist.o $(SDFMOD)
