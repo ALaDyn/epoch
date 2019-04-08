@@ -1986,19 +1986,18 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle_sub_store), POINTER :: current
-    INTEGER(i8) :: i, st, old
+    INTEGER(i8) :: i, old, start
 
     current => list%store%head
-    st = 0
     !Don't touch tail-most store
     DO WHILE(ASSOCIATED(current) .AND. ASSOCIATED(current%next))
-      st = st + 1
       old = current%first_free_element
       IF (current%first_free_element > 1) THEN
         current%first_free_element = 1
         ! Check if we can move it down: start at old value, hunt
         ! for last actual live particle
-        DO i = old, 1, -1
+        start = MIN(old, current%length)
+        DO i = start, 1, -1
           IF (current%store(i)%live == 1) THEN
             current%first_free_element = i+1
             EXIT
