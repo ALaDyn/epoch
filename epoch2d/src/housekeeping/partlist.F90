@@ -238,7 +238,7 @@ CONTAINS
   SUBROUTINE create_linked_substore(store, total_size, link_upto_in)
 
     TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: substore, tmp1, tmp2
+    TYPE(particle_sub_store), POINTER :: substore
     INTEGER(i8), INTENT(IN) :: total_size, link_upto_in
     INTEGER(i8) :: link_upto
     TYPE(particle), POINTER :: current, prev
@@ -301,13 +301,8 @@ CONTAINS
 
     IF(ASSOCIATED(store%tail)) THEN
       !Now link substore into store
-      tmp1 => store%tail
-      tmp2 => store%tail%next
       store%tail%next => substore
-      tmp2 => store%tail%next
-
       substore%prev => store%tail
-      tmp2 => substore%prev
 
       !And create link in partlist between prior last particle
       !and first particle of new sub
@@ -323,7 +318,6 @@ CONTAINS
         current%prev => prev
       END IF
       store%tail => substore
-      tmp2 => store%tail
       NULLIFY(substore%next)
     ELSE
       store%tail => substore
@@ -338,7 +332,7 @@ CONTAINS
   SUBROUTINE create_empty_substore(store, total_size)
 
     TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: substore, tmp1
+    TYPE(particle_sub_store), POINTER :: substore
     INTEGER(i8), INTENT(IN) :: total_size
     INTEGER(i8) :: i_part
 
@@ -365,7 +359,6 @@ CONTAINS
 
     IF(ASSOCIATED(store%tail)) THEN
       !Now link substore into store
-      tmp1 => store%tail
       store%tail%next => substore
       substore%prev => store%tail
       store%tail => substore
