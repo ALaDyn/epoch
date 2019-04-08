@@ -966,8 +966,8 @@ CONTAINS
       ALLOCATE(current%current_integral_phase(1-ng:nx_new+ng))
       current%current_integral_phase = temp_slice
 
-      CALL remap_field_slice(c_dir_x, current%k(:,1), temp_k_slice(:,1))
-      CALL remap_field_slice(c_dir_x, current%k(:,2), temp_k_slice(:,2))
+      CALL remap_field_slice(c_dir_y, current%k(:,1), temp_k_slice(:,1))
+      CALL remap_field_slice(c_dir_y, current%k(:,2), temp_k_slice(:,2))
       DEALLOCATE(current%k)
       ALLOCATE(current%k(1-ng:nx_new+ng, c_ndims))
       current%k = temp_k_slice
@@ -1000,8 +1000,8 @@ CONTAINS
       ALLOCATE(current%current_integral_phase(1-ng:nx_new+ng))
       current%current_integral_phase = temp_slice
 
-      CALL remap_field_slice(c_dir_x, current%k(:,1), temp_k_slice(:,1))
-      CALL remap_field_slice(c_dir_x, current%k(:,2), temp_k_slice(:,2))
+      CALL remap_field_slice(c_dir_y, current%k(:,1), temp_k_slice(:,1))
+      CALL remap_field_slice(c_dir_y, current%k(:,2), temp_k_slice(:,2))
       DEALLOCATE(current%k)
       ALLOCATE(current%k(1-ng:nx_new+ng, c_ndims))
       current%k = temp_k_slice
