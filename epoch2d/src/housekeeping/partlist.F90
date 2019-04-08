@@ -248,7 +248,7 @@ CONTAINS
     IF(total_size <= 0) RETURN
 
     link_upto = link_upto_in
-    IF(link_upto_in > total_size) link_upto = total_size
+    IF(link_upto > total_size) link_upto = total_size
 
     !Allocate substore object
     ALLOCATE(substore)
@@ -291,12 +291,8 @@ CONTAINS
     ! Correct links for 0th and n_elements-th particles
     IF(link_upto > 1) THEN
       substore%store(1)%next => substore%store(2)
-      !TODO what is following trying to do?
-      IF(total_size > 1 .AND. link_upto >= total_size) THEN
-        substore%store(total_size)%prev => substore%store(total_size-1)
-      ELSE IF(link_upto > 1) THEN
-        substore%store(link_upto)%prev => substore%store(link_upto-1)
-      END IF
+      ! Link_upto was capped to at most total_size
+      substore%store(link_upto)%prev => substore%store(link_upto-1)
     END IF
 
     IF(ASSOCIATED(store%tail)) THEN
@@ -395,13 +391,15 @@ CONTAINS
 
 
 
-  SUBROUTINE test_store(list)
+  SUBROUTINE test_store(list, skip_tail)
 
     TYPE(particle_list), INTENT(IN) :: list
     TYPE(particle), POINTER :: current, prev
     TYPE(particle_sub_store), POINTER :: sub
     INTEGER(i8) :: counta, countb, countc, i, a_count, countd, j, b_pos
     REAL(num) :: part_x, part_y
+    LOGICAL, INTENT(IN), OPTIONAL :: skip_tail ! Ignore position of tail particle - use if calling during compact
+    LOGICAL :: stop_check
 
     IF(.NOT. list%use_store) RETURN
     !First check general integrity
@@ -517,7 +515,13 @@ CONTAINS
 
     countd = 0
     b_pos = 1
+    IF(PRESENT(skip_tail)) THEN
+      stop_check = skip_tail
+    ELSE
+      stop_check = .FALSE.
+    END IF
     DO WHILE (ASSOCIATED(current))
+      IF (stop_check .AND. ASSOCIATED(current, TARGET=list%tail)) EXIT
       part_x  = current%part_pos(1)
       part_y  = current%part_pos(2)
       IF( part_x .GT. x_max_local  .OR. part_x .LT. x_min_local) THEN
@@ -1681,7 +1685,7 @@ CONTAINS
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: src_section, dest_section
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), POINTER :: original, place_into
+    TYPE(particle), POINTER :: original, place_into, prev_placed
     INTEGER(i8) :: i, next_place_index, j
 
     IF (store_debug) THEN
@@ -1693,19 +1697,23 @@ CONTAINS
     next_place_index = 1
 
     place_into => store%head%store(1)
+    NULLIFY(prev_placed)
     outer : DO j = 1, store%n_subs
       DO i = 1, src_section%first_free_element
         IF (i > src_section%length) EXIT
         ! Check if current particle is live and not already in right place
+        place_into%prev => prev_placed
         IF (src_section%store(i)%live > 0 .AND. &
             .NOT. ASSOCIATED(place_into, TARGET=src_section%store(i))) THEN
           original => src_section%store(i)
           CALL copy_particle(original, place_into)
           original%live = 0
           next_place_index = next_place_index + 1
+          prev_placed => place_into
         ELSE IF (src_section%store(i)%live > 0) THEN
-         !Otherwise we're leaving it where it is
-         next_place_index = i + 1
+          !Otherwise we're leaving it where it is
+          next_place_index = i + 1
+          prev_placed => place_into
         END IF
         IF (next_place_index > dest_section%length) THEN
           !Move dest_section to next, before advancing place_into
@@ -1722,6 +1730,7 @@ CONTAINS
         ELSE
           EXIT outer
         END IF
+        IF(ASSOCIATED(prev_placed)) prev_placed%next => place_into
       END DO
       src_section => src_section%next
     END DO outer
@@ -1738,8 +1747,10 @@ CONTAINS
     CALL remove_empty_subs(list)
     CALL set_next_slot(list)
 
-    !TODO do this on the fly? Does it help at all?
-    CALL relink_partlist(list, .FALSE.)
+    list%head => store%head%store(1)
+    list%tail => prev_placed
+    NULLIFY(list%head%prev, list%tail%next)
+
 
   END SUBROUTINE compact_backing_store
 
@@ -1798,7 +1809,6 @@ CONTAINS
     CALL remove_empty_subs(list)
     CALL set_next_slot(list)
 
-    !TODO do this on the fly? Does it help at all?
     CALL relink_partlist(list, .FALSE.)
 
   END SUBROUTINE alt_compact_backing_store
@@ -1903,7 +1913,6 @@ CONTAINS
     CALL remove_empty_subs(list)
     CALL set_next_slot(list)
 
-    !TODO do this on the fly? Does it help at all?
     CALL relink_partlist(list, .FALSE.)
 
   END SUBROUTINE fold_compact_backing_store
