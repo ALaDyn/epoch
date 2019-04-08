@@ -156,6 +156,9 @@ CONTAINS
 #ifdef NO_MPI3
     found = .TRUE.
 #endif
+#ifdef BOOSTED_FRAME
+    found = .TRUE.
+#endif
 
     IF (.NOT.found) THEN
       WRITE(*,*) '*************************************************************'
