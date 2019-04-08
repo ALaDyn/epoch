@@ -756,10 +756,17 @@ CONTAINS
       !First resort: compact store
       IF(list%count > 0 .AND..NOT. list%locked_store .AND. &
           REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
-        IF (fold_compact) THEN
-          CALL fold_compact_backing_store(list%store, list)
-        ELSE
-          CALL compact_backing_store(list%store, list)
+        ! Remove empty space. Mostly this does very little
+        ! but it doesn't cost much and helps if chunks are small
+        CALL update_first_frees(list)
+        CALL remove_empty_subs(list)
+        ! If that wasn't enough, compact completely
+        IF (REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
+          IF (fold_compact) THEN
+            CALL fold_compact_backing_store(list%store, list)
+          ELSE
+            CALL compact_backing_store(list%store, list)
+          END IF
         END IF
       END IF
       IF(list%store%tail%first_free_element >= list%store%tail%length) THEN
@@ -1924,20 +1931,23 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle_sub_store), POINTER :: current, next
-    INTEGER(i8) :: length
+    INTEGER(i8) :: length, st
 
     current => list%store%head
     length = 0
+    st = 0
     !Do nothing if only one sub
     IF (.NOT. ASSOCIATED(current%next)) RETURN
 
     DO WHILE(ASSOCIATED(current) .AND. list%store%n_subs > 1)
       next => current%next
+      st = st + 1
       IF(current%first_free_element == 1) THEN
         !Delete empty segments
         IF (store_debug) THEN
           !Check store is truly empty!
           IF (count_live(current) > 0) THEN
+            PRINT*, 'Error on', rank, st, current%first_free_element
             CALL abort_with_trace(17)
           END IF
         END IF
@@ -1979,21 +1989,20 @@ CONTAINS
 
     current => list%store%head
     st = 0
-    DO WHILE(ASSOCIATED(current))
+    !Don't touch tail-most store
+    DO WHILE(ASSOCIATED(current) .AND. ASSOCIATED(current%next))
       st = st + 1
       old = current%first_free_element
       IF (current%first_free_element > 1) THEN
         current%first_free_element = 1
-        DO i = current%length, 1, -1
+        ! Check if we can move it down: start at old value, hunt
+        ! for last actual live particle
+        DO i = old, 1, -1
           IF (current%store(i)%live == 1) THEN
             current%first_free_element = i+1
             EXIT
           END IF
         END DO
-        IF (store_debug) THEN
-          IF (current%first_free_element == 1) PRINT*, &
-              'Store ', st, ' is now empty'
-        END IF
       END IF
       current => current%next
     END DO
