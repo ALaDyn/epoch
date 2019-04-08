@@ -431,9 +431,9 @@ CONTAINS
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
             'laser_x_max_phase', ny, ny_global_min, .NOT. x_max_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_min, laser_y_min, &
-            'laser_y_min_phase', ny, ny_global_min, .NOT. y_min_boundary)
+            'laser_y_min_phase', nx, nx_global_min, .NOT. y_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_max, laser_y_max, &
-            'laser_y_max_phase', ny, ny_global_min, .NOT. y_max_boundary)
+            'laser_y_max_phase', nx, nx_global_min, .NOT. y_max_boundary)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
