@@ -185,11 +185,13 @@ DEFINES := $(DEFINE)
 # real particles.
 #DEFINES += $(D)PER_SPECIES_WEIGHT
 
-# Don't enable support for tracer particles (in order to make the particle
-# push slightly faster).
-# Tracer particles which behave like normal particles but do not affect
+# Enable support for zero-current particles (this will make the particle push
+# slightly slower).
+# Zero-current particles which behave like normal particles but do not affect
 # the field, current or each other.
-#DEFINES += $(D)NO_TRACER_PARTICLES
+# WARNING: These particles may not behave in the way you might expect. See the
+# documentation for further details.
+#DEFINES += $(D)ZERO_CURRENT_PARTICLES
 
 # Don't enable support for particle probes (in order to make the particle
 # push slightly faster).

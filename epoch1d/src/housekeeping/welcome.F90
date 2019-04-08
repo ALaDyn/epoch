@@ -105,7 +105,7 @@ CONTAINS
 #ifdef PER_SPECIES_WEIGHT
     found = .TRUE.
 #endif
-#ifdef NO_TRACER_PARTICLES
+#ifdef ZERO_CURRENT_PARTICLES
     found = .TRUE.
 #endif
 #ifdef NO_PARTICLE_PROBES
@@ -187,14 +187,12 @@ CONTAINS
     WRITE(*,*) 'Top-hat particle shape -DPARTICLE_SHAPE_TOPHAT'
 #endif
 #ifdef PER_SPECIES_WEIGHT
-    WRITE(*,*) 'Per species weighting -DPER_SPECIES_WEIGHT'
-#else
     defines = IOR(defines, c_def_per_particle_weight)
+    WRITE(*,*) 'Per species weighting -DPER_SPECIES_WEIGHT'
 #endif
-#ifdef NO_TRACER_PARTICLES
-    WRITE(*,*) 'No tracer particle support -DNO_TRACER_PARTICLES'
-#else
-    defines = IOR(defines, c_def_tracer_particles)
+#ifdef ZERO_CURRENT_PARTICLES
+    defines = IOR(defines, c_def_zero_current_particles)
+    WRITE(*,*) 'Zero-current particle support -DZERO_CURRENT_PARTICLES'
 #endif
 #ifdef NO_PARTICLE_PROBES
     WRITE(*,*) 'No particle probe support -DNO_PARTICLE_PROBES'

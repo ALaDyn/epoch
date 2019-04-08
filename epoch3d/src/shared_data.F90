@@ -419,8 +419,8 @@ MODULE shared_data
     TYPE(primitive_stack) :: dist_fn
     TYPE(primitive_stack) :: dist_fn_range(3)
 
-#ifndef NO_TRACER_PARTICLES
-    LOGICAL :: tracer
+#ifdef ZERO_CURRENT_PARTICLES
+    LOGICAL :: zero_current
 #endif
 
     ! ID code which identifies if a species is of a special type
@@ -546,16 +546,19 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_temperature_x     = 59
   INTEGER, PARAMETER :: c_dump_temperature_y     = 60
   INTEGER, PARAMETER :: c_dump_temperature_z     = 61
+  INTEGER, PARAMETER :: c_dump_average_px        = 62
+  INTEGER, PARAMETER :: c_dump_average_py        = 63
+  INTEGER, PARAMETER :: c_dump_average_pz        = 64
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 62
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 63
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 64
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 65
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 66
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 67
-  INTEGER, PARAMETER :: num_vars_to_dump         = 67
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 65
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 66
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 67
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 68
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 69
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 70
+  INTEGER, PARAMETER :: num_vars_to_dump         = 70
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 61
+  INTEGER, PARAMETER :: num_vars_to_dump         = 64
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -853,6 +856,7 @@ MODULE shared_data
   REAL(num), ALLOCATABLE, DIMENSION(:,:) :: coll_pairs
   REAL(num) :: coulomb_log
   LOGICAL :: coulomb_log_auto, use_collisions
+  LOGICAL :: use_nanbu = .TRUE.
 
   LOGICAL :: use_field_ionisation, use_collisional_ionisation
   LOGICAL :: use_multiphoton, use_bsi

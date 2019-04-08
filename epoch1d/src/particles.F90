@@ -115,8 +115,8 @@ CONTAINS
     LOGICAL :: probes_for_species
     REAL(num) :: gamma_rel_m1
 #endif
-#ifndef NO_TRACER_PARTICLES
-    LOGICAL :: not_tracer_species
+#ifdef ZERO_CURRENT_PARTICLES
+    LOGICAL :: not_zero_current_species
 #endif
     ! Particle weighting multiplication factor
 #ifdef PARTICLE_SHAPE_BSPLINE3
@@ -168,8 +168,8 @@ CONTAINS
       current_probe => species_list(ispecies)%attached_probes
       probes_for_species = ASSOCIATED(current_probe)
 #endif
-#ifndef NO_TRACER_PARTICLES
-      not_tracer_species = .NOT. species_list(ispecies)%tracer
+#ifdef ZERO_CURRENT_PARTICLES
+      not_zero_current_species = .NOT. species_list(ispecies)%zero_current
 #endif
 
 #ifdef PER_SPECIES_WEIGHT
@@ -382,10 +382,10 @@ CONTAINS
         ! Original code calculates densities of electrons, ions and neutrals
         ! here. This has been removed to reduce memory footprint
 
-        ! If the code is compiled with tracer particle support then put in an
-        ! IF statement so that the current is not calculated for this species
-#ifndef NO_TRACER_PARTICLES
-        IF (not_tracer_species) THEN
+        ! If the code is compiled with zero-current particle support then put in
+        ! an IF statement so that the current is not calculated for this species
+#ifdef ZERO_CURRENT_PARTICLES
+        IF (not_zero_current_species) THEN
 #endif
           ! Now advance to t+1.5dt to calculate current. This is detailed in
           ! the manual between pages 37 and 41. The version coded up looks
@@ -452,7 +452,7 @@ CONTAINS
             jy(cx) = jy(cx) + jyh
             jz(cx) = jz(cx) + jzh
           END DO
-#ifndef NO_TRACER_PARTICLES
+#ifdef ZERO_CURRENT_PARTICLES
         END IF
 #endif
 #ifndef NO_PARTICLE_PROBES
