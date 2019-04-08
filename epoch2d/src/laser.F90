@@ -606,7 +606,7 @@ CONTAINS
             base = t_env * current%profile(i) &
               * SIN(current%current_integral_phase(i) + current%phase(i) &
               - current%k(i, 1) * (x(laserpos-1)-current%initial_pos(1)) &
-              - current%k(i, 2) * (y(i)-current%initial_pos(2) * 0))
+              - current%k(i, 2) * (y(i)-current%initial_pos(2)))
             source1(i) = source1(i) + base * COS(current%pol_angle)
             source2(i) = source2(i) + base * SIN(current%pol_angle)
           END DO
