@@ -370,7 +370,6 @@ MODULE shared_data
   !Type representing a single sublist of partlist
 
   !Backing store control
-  ! TODO set most suitable defaults here
   INTEGER(i8) :: sublist_size = 1000 !Size of a sublist. Grow ops allocate a new sublist of this size
   REAL(num) :: fill_factor = 0.9  !Minimum fill level of list - will compact if lower
   LOGICAL :: use_store_default = .TRUE.  !Default to using stores for lists; deck can override

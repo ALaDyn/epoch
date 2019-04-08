@@ -227,19 +227,19 @@ CONTAINS
   END SUBROUTINE create_particle_store
 
 
-  !Create and a new store segment object
-  !in given store
-  !Takes total_size, link_upto
+  ! Create and a new store segment object in given store
+  ! Takes total_size of new chunk, and how many 'live'
+  ! linked particles it should contain
+  ! Optionally, if using to add a new linked chunk to an existing
+  ! store, supply link_to_particle - the particle the new chunk
+  ! should link onto (usually list%tail)
 
-  !Called in two circumstances
-  !Creating a list at first
-  !And adding a chunk to a list
-  !In former case can already set all the links and init the particles
-  SUBROUTINE create_linked_substore(store, total_size, link_upto_in)
+  SUBROUTINE create_linked_substore(store, total_size, link_upto_in, link_to_particle)
 
     TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: substore
+    TYPE(particle_sub_store), POINTER :: substore, tmp_substore
     INTEGER(i8), INTENT(IN) :: total_size, link_upto_in
+    TYPE(particle), POINTER, INTENT(IN), OPTIONAL :: link_to_particle
     INTEGER(i8) :: link_upto
     TYPE(particle), POINTER :: current, prev
     INTEGER(i8) :: i_part
@@ -307,12 +307,12 @@ CONTAINS
       !And create link in partlist between prior last particle
       !and first particle of new sub
       IF(link_upto > 1) THEN
-        IF(store%tail%first_free_element > 1) THEN
+        IF(PRESENT(link_to_particle)) THEN
+          prev => link_to_particle
+        ELSE IF(store%tail%first_free_element > 1) THEN
+          ! Assume previous store is contiguously filled
           prev => store%tail%store(store%tail%first_free_element-1)
-        ELSE
-          !TODO Have a completely empty sub before this one
-          !Probably means it's been compacted out? Anything to do?
-       END IF
+        END IF
         current => substore%store(1)
         prev%next => current
         current%prev => prev

@@ -351,10 +351,8 @@ CONTAINS
 
     npart_this_species = species%count
     IF (npart_this_species <= 0) THEN
-      IF (use_store_default) THEN
-        CALL create_empty_partlist(species%attached_list, use_store_in=.TRUE.)
-      END IF
-        !TODO is there definitely nothing to do without store?
+      CALL create_empty_partlist(species%attached_list, &
+          use_store_in=use_store_default)
       RETURN
     END IF
 
@@ -609,25 +607,22 @@ CONTAINS
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
-    ! Remove any particles from list that weren't placed
-    !TODO this must also update the count for stores if there are any unplaced
-    IF(partlist%use_store) THEN
-      !We just have to fix the last actual particle and the list tail
-      IF(ASSOCIATED(current)) THEN
-        IF(ASSOCIATED(current%prev)) THEN
-          !This means current is meant to be a valid particle
-          NULLIFY(current%prev%next)
-          partlist%tail => current%prev
-        END IF
-      END IF
-    ELSE
+    IF (ASSOCIATED(current)) THEN
       !Destroy any unplaced particles
       DO WHILE(ASSOCIATED(current))
         next => current%next
-        CALL remove_particle_from_partlist(partlist, current)
-        CALL destroy_particle(current)
+        IF (partlist%use_store) THEN
+          current%live = 0
+        ELSE
+          CALL remove_particle_from_partlist(partlist, current)
+          CALL destroy_particle(current)
+        END IF
         current => next
       END DO
+      IF (partlist%use_store) THEN
+        ! Relink and recount
+        CALL relink_partlist(partlist, .TRUE.)
+      END IF
     END IF
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
