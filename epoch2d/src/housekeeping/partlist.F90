@@ -234,10 +234,11 @@ CONTAINS
   ! store, supply link_to_particle - the particle the new chunk
   ! should link onto (usually list%tail)
 
-  SUBROUTINE create_linked_substore(store, total_size, link_upto_in, link_to_particle)
+  SUBROUTINE create_linked_substore(store, total_size, link_upto_in, &
+      link_to_particle)
 
     TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: substore, tmp_substore
+    TYPE(particle_sub_store), POINTER :: substore
     INTEGER(i8), INTENT(IN) :: total_size, link_upto_in
     TYPE(particle), POINTER, INTENT(IN), OPTIONAL :: link_to_particle
     INTEGER(i8) :: link_upto
