@@ -377,14 +377,15 @@ CONTAINS
   SUBROUTINE destroy_store(store)
 
     TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: section
+    TYPE(particle_sub_store), POINTER :: section, prev_section
 
     section => store%head
     IF (.NOT. ASSOCIATED(section)) RETURN
     DO WHILE(ASSOCIATED(section))
-   !TODO how could store ever not be allocated??
-      IF (ASSOCIATED(section%store)) DEALLOCATE(section%store)
+      DEALLOCATE(section%store)
+      prev_section => section
       section => section%next
+      DEALLOCATE(prev_section)
     END DO
     NULLIFY(store%head, store%tail)
     store%n_subs = 0
@@ -758,18 +759,19 @@ CONTAINS
         END IF
       END IF
       IF(list%store%tail%first_free_element >= list%store%tail%length) THEN
-        !Compacting not possible or insufficient - have to add subs
+        ! Compacting not possible or insufficient - have to add subs
         CALL create_empty_substore(list%store, sublist_size)
+        list%store%next_slot => &
+            list%store%tail%store(list%store%tail%first_free_element)
       END IF
     ELSE
       !Do this only if we've not created anything new
       list%store%tail%first_free_element = &
           list%store%tail%first_free_element + 1
-    END IF
-    !Do this always, as if we grew, we have a nice empty, valid substore
-    ! TODO are we doing this twice, here and in compact??
-    list%store%next_slot => &
-        list%store%tail%store(list%store%tail%first_free_element)
+      list%store%next_slot => &
+          list%store%tail%store(list%store%tail%first_free_element)
+
+   END IF
 
   END SUBROUTINE increment_next_free_element
 
@@ -992,11 +994,10 @@ CONTAINS
 
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
+    ! DO NOT USE with store-backed lists
 
     ! if (!particle) return;
     IF (.NOT. ASSOCIATED(new_particle)) RETURN
-    !TODO remove below as unhelpful?
-    IF (partlist%use_store) CALL abort_code(8)
     NULLIFY(new_particle%next, new_particle%prev)
 
     ! Add particle count
@@ -1368,7 +1369,6 @@ CONTAINS
       list%count = list%count + 1
 
     END IF
-    ! TODO does this make the list%count == 0 above redundant??
     IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
 
   END SUBROUTINE create_particle_in_list
