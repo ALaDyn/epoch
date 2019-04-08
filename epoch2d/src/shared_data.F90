@@ -344,8 +344,8 @@ MODULE shared_data
 #endif
 #endif
     INTEGER :: live
-    ! 1 for normal live particle, 0 for dead but existing, 
-    ! -1 for dead and can be compacted out
+    ! 1 for normal live particle, 0 not yet filled,
+    !-1 'other' i.e. partially setup
   END TYPE particle
 
   ! Particle ID generation
@@ -430,7 +430,6 @@ MODULE shared_data
     REAL(num) :: density_back
   END TYPE initial_condition_block
 
-
   ! Object representing a particle species
   TYPE particle_species
     ! Core properties
@@ -445,7 +444,6 @@ MODULE shared_data
     REAL(num) :: weight
     INTEGER(i8) :: count
     TYPE(particle_list) :: attached_list
-    !TYPE(particle_store) :: attached_store
     LOGICAL :: immobile
     LOGICAL :: fill_ghosts
 

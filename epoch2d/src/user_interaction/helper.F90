@@ -305,7 +305,6 @@ CONTAINS
         MPI_SUM, comm, errcode)
 
     species%count = npart_this_species
-
     species%weight = density_total_global * dx * dy / npart_this_species
 
     IF (rank == 0) THEN
@@ -507,7 +506,7 @@ CONTAINS
 
     partlist => species%attached_list
     partstore => species%attached_list%store
-    IF(num_new_particles > 0) THEN
+    IF (num_new_particles > 0) THEN
       CALL &
         create_allocated_partlist(partlist, num_new_particles, &
         use_store_in=use_store_default)
@@ -545,8 +544,8 @@ CONTAINS
           current%part_pos(1) = x(ix) + (random() - 0.5_num) * dx
           current%part_pos(2) = y(iy) + (random() - 0.5_num) * dy
           current%live = 1
-          ipart = ipart + 1
 
+          ipart = ipart + 1
           current => current%next
 
           ! One particle sucessfully placed
@@ -602,6 +601,7 @@ CONTAINS
 
         current => current%next
       END DO
+
       DEALLOCATE(valid_cell_list)
     END IF
 
