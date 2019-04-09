@@ -260,7 +260,13 @@ CONTAINS
     END DO ! iy
 
     CALL destroy_partlist(partlist)
-    CALL create_allocated_partlist(partlist, npart_this_proc_new)
+    IF (npart_this_proc_new > 0) THEN
+      CALL &
+        create_allocated_partlist(partlist, npart_this_proc_new, &
+        use_store_in=use_store_default)
+    ELSE
+      CALL create_empty_partlist(partlist, use_store_in=use_store_default)
+    END IF
 
     ! Randomly place npart_per_cell particles into each valid cell
     current => partlist%head
@@ -285,6 +291,7 @@ CONTAINS
 #endif
         current%part_pos(1) = x(ix) + (random() - 0.5_num) * dx
         current%part_pos(2) = y(iy) + (random() - 0.5_num) * dy
+        current%live = 1
 
         ipart = ipart + 1
         current => current%next
@@ -294,12 +301,23 @@ CONTAINS
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
-    DO WHILE(ASSOCIATED(current))
-      next => current%next
-      CALL remove_particle_from_partlist(partlist, current)
-      CALL destroy_particle(current)
-      current => next
-    END DO
+    IF (ASSOCIATED(current)) THEN
+      !Destroy any unplaced particles
+      DO WHILE(ASSOCIATED(current))
+        next => current%next
+        IF (partlist%use_store) THEN
+          current%live = 0
+        ELSE
+          CALL remove_particle_from_partlist(partlist, current)
+          CALL destroy_particle(current)
+        END IF
+        current => next
+      END DO
+      IF (partlist%use_store) THEN
+        ! Relink and recount
+        CALL relink_partlist(partlist, .TRUE.)
+      END IF
+    END IF
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
