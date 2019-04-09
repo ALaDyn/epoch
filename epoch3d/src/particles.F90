@@ -19,6 +19,7 @@ MODULE particles
 
   USE boundary
   USE partlist
+  USE boosted_frame
 #ifdef PREFETCH
   USE prefetch
 #endif
@@ -62,9 +63,14 @@ CONTAINS
     REAL(num) :: beta_x, beta_y, beta_z, beta2, beta_dot_u, alpha, sigma
 #endif
 
+    ! Used for probes and boosted frame IO
+#if !defined NO_PARTICLE_PROBES || defined BOOSTED_FRAME
+    REAL(num) :: init_part_x
+#endif
+
     ! Used for particle probes (to see of probe conditions are satisfied)
 #ifndef NO_PARTICLE_PROBES
-    REAL(num) :: init_part_x, final_part_x
+    REAL(num) :: final_part_x
     REAL(num) :: init_part_y, final_part_y
     REAL(num) :: init_part_z, final_part_z
     TYPE(particle_probe), POINTER :: current_probe
@@ -215,8 +221,10 @@ CONTAINS
         fcy = idtxz * part_weight
         fcz = idtxy * part_weight
 #endif
-#ifndef NO_PARTICLE_PROBES
+#if !defined NO_PARTICLE_PROBES || defined BOOSTED_FRAME
         init_part_x = current%part_pos(1)
+#endif
+#ifndef NO_PARTICLE_PROBES
         init_part_y = current%part_pos(2)
         init_part_z = current%part_pos(3)
 #endif
@@ -430,6 +438,11 @@ CONTAINS
 #endif
         ! Original code calculates densities of electrons, ions and neutrals
         ! here. This has been removed to reduce memory footprint
+
+#ifdef BOOSTED_FRAME
+        IF (in_boosted_frame) &
+            CALL record_particle(current, init_part_x, final_part_x, ispecies)
+#endif
 
         ! If the code is compiled with tracer particle support then put in an
         ! IF statement so that the current is not calculated for this species

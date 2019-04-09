@@ -126,6 +126,7 @@ CONTAINS
     LOGICAL, SAVE :: first_flag = .TRUE.
     LOGICAL :: first_message, restarting, full_check, attempt_balance
     LOGICAL :: use_redistribute_domain, use_redistribute_particles
+    INTEGER :: iprefix, irec
 #ifdef PARTICLE_DEBUG
     TYPE(particle), POINTER :: current
     INTEGER :: ispecies
@@ -276,7 +277,20 @@ CONTAINS
     END IF
 
     ! Redistribute the particles onto their new processors
-    IF (use_redistribute_particles) CALL distribute_particles
+    IF (use_redistribute_particles) THEN
+      CALL distribute_particles(species_list)
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame) THEN
+        DO iprefix = 1, SIZE(file_prefixes)
+          IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
+          DO irec = 1, prefix_boosts(iprefix)%n_recorders
+            CALL distribute_particles(prefix_boosts(iprefix)%&
+                particle_recorders(irec)%particle_lists)
+          END DO
+        END DO
+      END IF
+#endif
+    END IF
 
     ! If running with particle debugging then set the t = 0 processor if
     ! over_ride = true
@@ -523,13 +537,16 @@ CONTAINS
     INTEGER, DIMENSION(c_ndims,2), INTENT(IN) :: new_domain
     REAL(num), DIMENSION(:,:,:,:), ALLOCATABLE :: temp_sum
     REAL(r4), DIMENSION(:,:,:,:), ALLOCATABLE :: r4temp_sum
-    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: temp, temp2
+    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: temp, temp2, temp_k_slice
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: temp_slice
     TYPE(laser_block), POINTER :: current
     TYPE(injector_block), POINTER :: injector_current
     TYPE(particle_species_migration), POINTER :: mg
     TYPE(initial_condition_block), POINTER :: ic
-    INTEGER :: i, ispecies, io, id, nspec_local, mask
+    INTEGER :: i, ispecies, io, id, nspec_local, mask, iprefix, ifield, irec
+#ifdef BOOSTED_FRAME
+    REAL(num), DIMENSION(:,:,:,:,:), ALLOCATABLE :: field_balance
+#endif
 
     nx_new = new_domain(1,2) - new_domain(1,1) + 1
     ny_new = new_domain(2,2) - new_domain(2,1) + 1
@@ -613,6 +630,24 @@ CONTAINS
     DEALLOCATE(bz)
     ALLOCATE(bz(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
     bz = temp
+
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame) THEN
+        DO iprefix = 1, SIZE(file_prefixes)
+          IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
+          ALLOCATE(field_balance(1-ng:nx_new+ng, 1-ng:ny_new+ng, &
+              1-ng:nz_new+ng, 6, prefix_boosts(iprefix)%n_recorders))
+          DO ifield = 1, 6
+            DO irec = 1, prefix_boosts(iprefix)%n_recorders
+              CALL remap_field(prefix_boosts(iprefix)%field_lists(:,:,:, &
+                  ifield, irec), field_balance(:,:,:, ifield, irec))
+            END DO
+          END DO
+          DEALLOCATE(prefix_boosts(iprefix)%field_lists)
+          CALL MOVE_ALLOC(field_balance, prefix_boosts(iprefix)%field_lists)
+        END DO
+      END IF
+#endif
 
     IF (pre_loading) THEN
       IF (ALLOCATED(global_species_density)) DEALLOCATE(global_species_density)
@@ -809,6 +844,7 @@ CONTAINS
     ! Slice in X-direction
 
     ALLOCATE(temp_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+    ALLOCATE(temp_k_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng, c_ndims))
 
     max_boundary = .FALSE.
 
@@ -823,6 +859,24 @@ CONTAINS
       DEALLOCATE(current%phase)
       ALLOCATE(current%phase(1-ng:ny_new+ng, 1-ng:nz_new+ng))
       current%phase = temp_slice
+
+      CALL remap_field_slice(c_dir_x, current%omega, temp_slice)
+      DEALLOCATE(current%omega)
+      ALLOCATE(current%omega(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      current%omega = temp_slice
+
+      CALL remap_field_slice(c_dir_x, current%current_integral_phase, &
+          temp_slice)
+      DEALLOCATE(current%current_integral_phase)
+      ALLOCATE(current%current_integral_phase(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      current%current_integral_phase = temp_slice
+
+      CALL remap_field_slice(c_dir_x, current%k(:,:,1), temp_k_slice(:,:,1))
+      CALL remap_field_slice(c_dir_x, current%k(:,:,2), temp_k_slice(:,:,2))
+      CALL remap_field_slice(c_dir_x, current%k(:,:,3), temp_k_slice(:,:,3))
+      DEALLOCATE(current%k)
+      ALLOCATE(current%k(1-ng:ny_new+ng, 1-ng:nz_new+ng, c_ndims))
+      current%k = temp_k_slice
 
       current => current%next
     END DO
@@ -840,6 +894,24 @@ CONTAINS
       DEALLOCATE(current%phase)
       ALLOCATE(current%phase(1-ng:ny_new+ng, 1-ng:nz_new+ng))
       current%phase = temp_slice
+
+      CALL remap_field_slice(c_dir_x, current%omega, temp_slice)
+      DEALLOCATE(current%omega)
+      ALLOCATE(current%omega(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      current%omega = temp_slice
+
+      CALL remap_field_slice(c_dir_x, current%current_integral_phase, &
+          temp_slice)
+      DEALLOCATE(current%current_integral_phase)
+      ALLOCATE(current%current_integral_phase(1-ng:ny_new+ng,1-ng:nz_new+ng))
+      current%current_integral_phase = temp_slice
+
+      CALL remap_field_slice(c_dir_x, current%k(:,:,1), temp_k_slice(:,:,1))
+      CALL remap_field_slice(c_dir_x, current%k(:,:,2), temp_k_slice(:,:,2))
+      CALL remap_field_slice(c_dir_x, current%k(:,:,3), temp_k_slice(:,:,3))
+      DEALLOCATE(current%k)
+      ALLOCATE(current%k(1-ng:ny_new+ng, 1-ng:nz_new+ng, c_ndims))
+      current%k = temp_k_slice
 
       current => current%next
     END DO
@@ -943,10 +1015,12 @@ CONTAINS
     bz_x_max = temp_slice
 
     DEALLOCATE(temp_slice)
+    DEALLOCATE(temp_k_slice)
 
     ! Slice in Y-direction
 
     ALLOCATE(temp_slice(1-ng:nx_new+ng, 1-ng:nz_new+ng))
+    ALLOCATE(temp_k_slice(1-ng:nx_new+ng, 1-ng:nz_new+ng, c_ndims))
 
     max_boundary = .FALSE.
 
@@ -961,6 +1035,24 @@ CONTAINS
       DEALLOCATE(current%phase)
       ALLOCATE(current%phase(1-ng:nx_new+ng, 1-ng:nz_new+ng))
       current%phase = temp_slice
+
+      CALL remap_field_slice(c_dir_y, current%omega, temp_slice)
+      DEALLOCATE(current%omega)
+      ALLOCATE(current%omega(1-ng:nx_new+ng, 1-ng:nz_new+ng))
+      current%omega = temp_slice
+
+      CALL remap_field_slice(c_dir_y, current%current_integral_phase, &
+          temp_slice)
+      DEALLOCATE(current%current_integral_phase)
+      ALLOCATE(current%current_integral_phase(1-ng:nx_new+ng, 1-ng:nz_new+ng))
+      current%current_integral_phase = temp_slice
+
+      CALL remap_field_slice(c_dir_y, current%k(:,:,1), temp_k_slice(:,:,1))
+      CALL remap_field_slice(c_dir_y, current%k(:,:,2), temp_k_slice(:,:,2))
+      CALL remap_field_slice(c_dir_y, current%k(:,:,3), temp_k_slice(:,:,3))
+      DEALLOCATE(current%k)
+      ALLOCATE(current%k(1-ng:nx_new+ng, 1-ng:nz_new+ng, c_ndims))
+      current%k = temp_k_slice
 
       current => current%next
     END DO
@@ -978,6 +1070,24 @@ CONTAINS
       DEALLOCATE(current%phase)
       ALLOCATE(current%phase(1-ng:nx_new+ng, 1-ng:nz_new+ng))
       current%phase = temp_slice
+
+      CALL remap_field_slice(c_dir_y, current%omega, temp_slice)
+      DEALLOCATE(current%omega)
+      ALLOCATE(current%omega(1-ng:nx_new+ng, 1-ng:nz_new+ng))
+      current%omega = temp_slice
+
+      CALL remap_field_slice(c_dir_y, current%current_integral_phase, &
+          temp_slice)
+      DEALLOCATE(current%current_integral_phase)
+      ALLOCATE(current%current_integral_phase(1-ng:nx_new+ng, 1-ng:nz_new+ng))
+      current%current_integral_phase = temp_slice
+
+      CALL remap_field_slice(c_dir_y, current%k(:,:,1), temp_k_slice(:,:,1))
+      CALL remap_field_slice(c_dir_y, current%k(:,:,2), temp_k_slice(:,:,2))
+      CALL remap_field_slice(c_dir_y, current%k(:,:,3), temp_k_slice(:,:,3))
+      DEALLOCATE(current%k)
+      ALLOCATE(current%k(1-ng:nx_new+ng, 1-ng:nz_new+ng, c_ndims))
+      current%k = temp_k_slice
 
       current => current%next
     END DO
@@ -1081,10 +1191,12 @@ CONTAINS
     bz_y_max = temp_slice
 
     DEALLOCATE(temp_slice)
+    DEALLOCATE(temp_k_slice)
 
     ! Slice in Z-direction
 
     ALLOCATE(temp_slice(1-ng:nx_new+ng, 1-ng:ny_new+ng))
+    ALLOCATE(temp_k_slice(1-ng:nx_new+ng, 1-ng:ny_new+ng, c_ndims))
 
     max_boundary = .FALSE.
 
@@ -1099,6 +1211,24 @@ CONTAINS
       DEALLOCATE(current%phase)
       ALLOCATE(current%phase(1-ng:nx_new+ng, 1-ng:ny_new+ng))
       current%phase = temp_slice
+
+      CALL remap_field_slice(c_dir_z, current%omega, temp_slice)
+      DEALLOCATE(current%omega)
+      ALLOCATE(current%omega(1-ng:nx_new+ng, 1-ng:ny_new+ng))
+      current%omega = temp_slice
+
+      CALL remap_field_slice(c_dir_z, current%current_integral_phase, &
+          temp_slice)
+      DEALLOCATE(current%current_integral_phase)
+      ALLOCATE(current%current_integral_phase(1-ng:nx_new+ng, 1-ng:ny_new+ng))
+      current%current_integral_phase = temp_slice
+
+      CALL remap_field_slice(c_dir_z, current%k(:,:,1), temp_k_slice(:,:,1))
+      CALL remap_field_slice(c_dir_z, current%k(:,:,2), temp_k_slice(:,:,2))
+      CALL remap_field_slice(c_dir_z, current%k(:,:,3), temp_k_slice(:,:,3))
+      DEALLOCATE(current%k)
+      ALLOCATE(current%k(1-ng:nx_new+ng, 1-ng:ny_new+ng, c_ndims))
+      current%k = temp_k_slice
 
       current => current%next
     END DO
@@ -1116,6 +1246,24 @@ CONTAINS
       DEALLOCATE(current%phase)
       ALLOCATE(current%phase(1-ng:nx_new+ng, 1-ng:ny_new+ng))
       current%phase = temp_slice
+
+      CALL remap_field_slice(c_dir_z, current%omega, temp_slice)
+      DEALLOCATE(current%omega)
+      ALLOCATE(current%omega(1-ng:nx_new+ng, 1-ng:ny_new+ng))
+      current%omega = temp_slice
+
+      CALL remap_field_slice(c_dir_z, current%current_integral_phase, &
+          temp_slice)
+      DEALLOCATE(current%current_integral_phase)
+      ALLOCATE(current%current_integral_phase(1-ng:nx_new+ng, 1-ng:ny_new+ng))
+      current%current_integral_phase = temp_slice
+
+      CALL remap_field_slice(c_dir_z, current%k(:,:,1), temp_k_slice(:,:,1))
+      CALL remap_field_slice(c_dir_z, current%k(:,:,2), temp_k_slice(:,:,2))
+      CALL remap_field_slice(c_dir_z, current%k(:,:,3), temp_k_slice(:,:,3))
+      DEALLOCATE(current%k)
+      ALLOCATE(current%k(1-ng:nx_new+ng, 1-ng:ny_new+ng, c_ndims))
+      current%k = temp_k_slice
 
       current => current%next
     END DO
@@ -2802,11 +2950,12 @@ CONTAINS
 
 
   ! This subroutine is used to rearrange particles over processors
-  SUBROUTINE distribute_particles
+  SUBROUTINE distribute_particles(species_list)
 
     ! This subroutine moves particles which are on the wrong processor
     ! to the correct processor.
 
+    TYPE(particle_species), DIMENSION(:), INTENT(INOUT) :: species_list
     TYPE(particle_list), DIMENSION(:), ALLOCATABLE :: pointers_send
     TYPE(particle_list), DIMENSION(:), ALLOCATABLE :: pointers_recv
     TYPE(particle), POINTER :: current, next

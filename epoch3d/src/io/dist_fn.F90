@@ -19,6 +19,7 @@ MODULE dist_fn
   USE mpi_subtype_control
   USE particles, ONLY: f0
   USE sdf
+  USE lorentz
 
   IMPLICIT NONE
 
@@ -82,10 +83,10 @@ CONTAINS
 
 
 
-  SUBROUTINE write_dist_fns(sdf_handle, code, mask)
+  SUBROUTINE write_dist_fns(sdf_handle, code, mask, iprefix)
 
     TYPE(sdf_file_handle) :: sdf_handle
-    INTEGER, INTENT(IN) :: code, mask
+    INTEGER, INTENT(IN) :: code, mask, iprefix
 
     INTEGER :: ispecies, errcode
     TYPE(distribution_function_block), POINTER :: current
@@ -103,7 +104,7 @@ CONTAINS
           CALL general_dist_fn(sdf_handle, current%name, current%directions, &
               current%ranges, current%resolution, ispecies, &
               current%restrictions, current%use_restrictions, current%ndims, &
-              current%output_deltaf, convert, errcode)
+              current%output_deltaf, convert, iprefix, errcode)
 
           ! If there was an error writing the dist_fn then ignore it in future
           IF (errcode /= 0) current%dumpmask = c_io_never
@@ -118,7 +119,7 @@ CONTAINS
 
   SUBROUTINE general_dist_fn(sdf_handle, name, direction, ranges_in, &
       resolution_in, species, restrictions, use_restrictions, curdims, &
-      output_deltaf, convert, errcode)
+      output_deltaf, convert, iprefix, errcode)
 
     TYPE(sdf_file_handle) :: sdf_handle
     CHARACTER(LEN=*), INTENT(IN) :: name
@@ -131,6 +132,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: curdims
     LOGICAL, INTENT(IN) :: output_deltaf
     LOGICAL, INTENT(IN) :: convert
+    INTEGER, INTENT(IN) :: iprefix
     INTEGER, INTENT(OUT) :: errcode
 
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: array, array_tmp
@@ -658,12 +660,35 @@ CONTAINS
       grid1(idir) = start + (idir - 1) * dgrid(1)
     END DO
 
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame .AND. prefix_boosts(iprefix)%frame == c_frame_lab &
+        .AND. direction(1) == c_dir_x) THEN
+      DO idir = 1, global_resolution(1)
+        grid1(idir) = transform_position_at_prime(global_boost_info,&
+            grid1(idir), time_val = prefix_boosts(iprefix)% &
+            next_dump(prefix_boosts(iprefix)%current_recorder), &
+            inverse = .TRUE.)
+      END DO
+    END IF
+#endif
+
     IF (curdims >= 2) THEN
       ALLOCATE(grid2(global_resolution(2)))
       start = ranges(1,2) + 0.5_num * dgrid(2)
       DO idir = 1, global_resolution(2)
         grid2(idir) = start + (idir - 1) * dgrid(2)
       END DO
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame .AND. prefix_boosts(iprefix)%frame == c_frame_lab &
+          .AND. direction(2) == c_dir_x) THEN
+        DO idir = 1, global_resolution(2)
+            grid2(idir) = transform_position_at_prime(global_boost_info,&
+                grid2(idir), time_val = prefix_boosts(iprefix)% &
+                next_dump(prefix_boosts(iprefix)%current_recorder), &
+                inverse = .TRUE.)
+        END DO
+      END IF
+#endif
     END IF
 
     IF (curdims >= 3) THEN
@@ -672,6 +697,17 @@ CONTAINS
       DO idir = 1, global_resolution(3)
         grid3(idir) = start + (idir - 1) * dgrid(3)
       END DO
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame .AND. prefix_boosts(iprefix)%frame == c_frame_lab &
+          .AND. direction(3) == c_dir_x) THEN
+        DO idir = 1, global_resolution(3)
+          grid3(idir) = transform_position_at_prime(global_boost_info,&
+              grid3(idir), time_val = prefix_boosts(iprefix)%&
+              next_dump(prefix_boosts(iprefix)%current_recorder), &
+              inverse = .TRUE.)
+        END DO
+      END IF
+#endif
     END IF
 
     var_name = TRIM(name) // '/' // TRIM(io_list(species)%name)

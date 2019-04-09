@@ -65,14 +65,15 @@ CONTAINS
 
       IF (ASSOCIATED(laser_x_min)) THEN
         current_laser => laser_x_min
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
+        IF (laser_set .AND. ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) &
+            THEN
           err_laser = 1
         ELSE
-          omega = current_laser%omega
+          omega = MAXVAL(current_laser%omega)
           laser_set = .TRUE.
         END IF
         DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
+          IF (ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) THEN
             err_laser = 1
             EXIT
           END IF
@@ -82,14 +83,15 @@ CONTAINS
 
       IF (ASSOCIATED(laser_x_max)) THEN
         current_laser => laser_x_max
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
+        IF (laser_set .AND. ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) &
+            THEN
           err_laser = 1
         ELSE
-          omega = current_laser%omega
+          omega = MAXVAL(current_laser%omega)
           laser_set = .TRUE.
         END IF
         DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
+          IF (ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) THEN
             err_laser = 1
             EXIT
           END IF
@@ -99,14 +101,15 @@ CONTAINS
 
       IF (ASSOCIATED(laser_y_min)) THEN
         current_laser => laser_y_min
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
+        IF (laser_set .AND. ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) &
+            THEN
           err_laser = 1
         ELSE
-          omega = current_laser%omega
+          omega = MAXVAL(current_laser%omega)
           laser_set = .TRUE.
         END IF
         DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
+          IF (ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) THEN
             err_laser = 1
             EXIT
           END IF
@@ -116,14 +119,15 @@ CONTAINS
 
       IF (ASSOCIATED(laser_y_max)) THEN
         current_laser => laser_y_max
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
+        IF (laser_set .AND. ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) &
+            THEN
           err_laser = 1
         ELSE
-          omega = current_laser%omega
+          omega = MAxVAL(current_laser%omega)
           laser_set = .TRUE.
         END IF
         DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
+          IF (ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) THEN
             err_laser = 1
             EXIT
           END IF
@@ -133,14 +137,15 @@ CONTAINS
 
       IF (ASSOCIATED(laser_z_min)) THEN
         current_laser => laser_z_min
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
+        IF (laser_set .AND. ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) &
+            THEN
           err_laser = 1
         ELSE
-          omega = current_laser%omega
+          omega = MAXVAL(current_laser%omega)
           laser_set = .TRUE.
         END IF
         DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
+          IF (ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) THEN
             err_laser = 1
             EXIT
           END IF
@@ -150,14 +155,15 @@ CONTAINS
 
       IF (ASSOCIATED(laser_z_max)) THEN
         current_laser => laser_z_max
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
+        IF (laser_set .AND. ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) &
+            THEN
           err_laser = 1
         ELSE
-          omega = current_laser%omega
+          omega = MAXVAL(current_laser%omega)
           laser_set = .TRUE.
         END IF
         DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
+          IF (ABS(MAXVAL(current_laser%omega) - omega) > c_tiny) THEN
             err_laser = 1
             EXIT
           END IF

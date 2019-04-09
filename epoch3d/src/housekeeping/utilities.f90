@@ -24,8 +24,14 @@ MODULE utilities
                      grow_real_array2d, grow_integer_array2d
   END INTERFACE grow_array
 
+  INTERFACE get_optional
+    MODULE PROCEDURE get_optional_logical
+    MODULE PROCEDURE get_optional_r_num
+  END INTERFACE get_optional
+
   PRIVATE :: grow_real_array, grow_integer_array, grow_string_array
   PRIVATE :: grow_real_array2d, grow_integer_array2d
+  PRIVATE :: get_optional_logical, get_optional_r_num
 
 CONTAINS
 
@@ -246,5 +252,37 @@ CONTAINS
     CALL MPI_ABORT(MPI_COMM_WORLD, newcode, ierr)
 
   END SUBROUTINE abort_code
+
+
+
+  FUNCTION get_optional_logical(default_val, optional_val) RESULT(retval)
+
+    LOGICAL, INTENT(IN) :: default_val
+    LOGICAL, INTENT(IN), OPTIONAL :: optional_val
+    LOGICAL :: retval
+
+    IF (PRESENT(optional_val)) THEN
+      retval = optional_val
+    ELSE
+      retval = default_val
+    END IF
+
+  END FUNCTION get_optional_logical
+
+
+
+  FUNCTION get_optional_r_num(default_val, optional_val) RESULT(retval)
+
+    REAL(num), INTENT(IN) :: default_val
+    REAL(num), INTENT(IN), OPTIONAL :: optional_val
+    REAL(num) :: retval
+
+    IF (PRESENT(optional_val)) THEN
+      retval = optional_val
+    ELSE
+      retval = default_val
+    END IF
+
+  END FUNCTION get_optional_r_num
 
 END MODULE utilities

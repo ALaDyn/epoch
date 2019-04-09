@@ -214,7 +214,7 @@ CONTAINS
     REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
     REAL(num) :: gamma_mass, v_inject, density, vol
     REAL(num) :: npart_ideal, itemp, v_inject_s
-    REAL(num), DIMENSION(3) :: temperature, drift
+    REAL(num), DIMENSION(3) :: temperature, drift, drift_t
     INTEGER :: parts_this_time, ipart, idir, dir_index, ii, jj
     INTEGER, DIMENSION(c_ndims-1) :: perp_dir_index, nel
     REAL(num), DIMENSION(c_ndims-1) :: perp_cell_size, cur_cell
@@ -353,10 +353,33 @@ CONTAINS
         ! Assume agressive maximum thermal momentum, all components
         ! like hottest component
         p_therm = SQRT(mass * kb * MAXVAL(temperature))
-        p_inject_drift = drift(dir_index)
-        gamma_mass = SQRT((p_therm + p_inject_drift)**2 + typical_mc2) / c
+#ifdef BOOSTED_FRAME
+        IF (in_boosted_frame) THEN
+          !First get gamma factor including thermal correction
+          drift_t = drift
+          drift_t(dir_index) = drift_t(dir_index)
+          drift_t = transform_momentum(global_boost_info, drift_t, &
+                mass = mass)
+          p_inject_drift = drift_t(dir_index)
+          gamma_mass = SQRT(p_inject_drift**2 + typical_mc2) / c
+
+          !Then get just COM drift
+          drift_t = transform_momentum(global_boost_info, drift, &
+                 mass = mass)
+          p_inject_drift = drift_t(dir_index)
+    ELSE
+#endif
+          p_inject_drift = drift(dir_index)
+          gamma_mass = SQRT((p_therm + p_inject_drift)**2 + typical_mc2) / c
+#ifdef BOOSTED_FRAME
+        END IF
+#endif
         v_inject_s = p_inject_drift / gamma_mass
         v_inject = ABS(v_inject_s)
+
+#ifdef BOOSTED_FRAME
+        IF (in_boosted_frame) parameters%v_prop = v_inject_s
+#endif
 
         injector%dt_inject(ii,jj) = ABS(bdy_space) &
             / MAX(injector%npart_per_cell * v_inject, c_tiny)
@@ -407,6 +430,14 @@ CONTAINS
 #ifndef PER_SPECIES_WEIGHT
           new%weight = vol * density / REAL(injector%npart_per_cell, num)
 #endif
+#ifdef BOOSTED_FRAME
+          IF (in_boosted_frame) THEN
+            !No transform of position because it is always through the boundary
+            !of the simulation domain
+            new%part_p = transform_momentum(global_boost_info, new%part_p, &
+                mass = mass)
+          END IF
+#endif
           CALL add_particle_to_partlist(plist, new)
         END DO
       END DO
@@ -431,7 +462,14 @@ CONTAINS
     density = MAX(evaluate_with_parameters(injector%density_function, &
         parameters, errcode), 0.0_num)
 
+#ifdef BOOSTED_FRAME
+    IF (in_boosted_frame) density = transform_density(global_boost_info, &
+        density)
+#endif
+
     ! Stack can only be time varying if valid. Change if this isn't true
+    ! No Lorentz transform of temperature or drift since this is done per
+    ! particle
     DO i = 1, 3
       IF (injector%temperature_function(i)%init) THEN
         temperature(i) = &

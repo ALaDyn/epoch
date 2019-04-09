@@ -73,6 +73,10 @@ MODULE diagnostics
     INTEGER :: count
   END TYPE string_list
 
+  !This will usually be the actual particle list but will be the particle
+  !copies at constant lab time for a boosted frame
+  TYPE(particle_species), DIMENSION(:), POINTER :: species_list_corrected
+
   TYPE(string_list), POINTER :: file_list(:)
 
   INTERFACE write_particle_variable
@@ -212,10 +216,11 @@ CONTAINS
     CHARACTER(LEN=c_max_string_length) :: dump_type, temp_name
     CHARACTER(LEN=c_id_length) :: temp_block_id
     REAL(num) :: eta_time, dr, r0
-    REAL(num), DIMENSION(:), ALLOCATABLE :: x_reduced, y_reduced, z_reduced
+    REAL(num), DIMENSION(:), ALLOCATABLE :: x_reduced, y_reduced, z_reduced, &
+        xb_transform
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: array
     INTEGER, DIMENSION(2,c_ndims) :: ranges
-    INTEGER :: code, i, io, ispecies, iprefix, mask, rn, dir, dumped, nval
+    INTEGER :: code, i, io, ispecies, iprefix, mask, rn, dir, dumped, nval, ix
     INTEGER :: random_state(4)
     INTEGER, ALLOCATABLE :: random_states_per_proc(:)
     INTEGER, DIMENSION(c_ndims) :: dims
@@ -230,6 +235,9 @@ CONTAINS
         (/'x_max', 'y_max', 'z_max', 'x_min', 'y_min', 'z_min'/)
     INTEGER, DIMENSION(6) :: fluxdir = &
         (/c_dir_x, c_dir_y, c_dir_z, -c_dir_x, -c_dir_y, -c_dir_z/)
+#ifdef BOOSTED_FRAME
+    INTEGER :: current_rec
+#endif
 
     ! Clean-up any cached RNG state
     CALL random_flush_cache
@@ -320,6 +328,10 @@ CONTAINS
       CALL io_test(iprefix, step, print_arrays, force, prefix_first_call)
 
       IF (.NOT.print_arrays) CYCLE
+      current_prefix = iprefix
+#ifdef BOOSTED_FRAME
+      current_rec = prefix_boosts(iprefix)%current_recorder
+#endif
 
       IF (.NOT.any_written) THEN
         ALLOCATE(array(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
@@ -378,8 +390,18 @@ CONTAINS
       ! open the file
       CALL sdf_open(sdf_handle, full_filename, comm, c_sdf_write)
       CALL sdf_set_string_length(sdf_handle, c_max_string_length)
-      CALL sdf_write_header(sdf_handle, 'Epoch3d', 1, step, time, &
-          restart_flag, jobid)
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame .AND. &
+          prefix_boosts(iprefix)%frame == c_frame_lab) THEN
+        CALL sdf_write_header(sdf_handle, 'Epoch3d', 1, step, &
+            prefix_boosts(iprefix)%next_dump(current_rec), restart_flag, jobid)
+      ELSE
+#endif
+        CALL sdf_write_header(sdf_handle, 'Epoch3d', 1, step, time, &
+            restart_flag, jobid)
+#ifdef BOOSTED_FRAME
+      END IF
+#endif
       CALL sdf_write_run_info(sdf_handle, c_version, c_revision, c_minor_rev, &
           c_commit_id, epoch_bytes_checksum, c_compile_machine, &
           c_compile_flags, defines, c_compile_date, run_date)
@@ -393,6 +415,7 @@ CONTAINS
       file_numbers(iprefix) = file_numbers(iprefix) + 1
 
       IF (restart_flag) THEN
+        species_list_corrected => species_list
         CALL sdf_write_srl(sdf_handle, 'dt', 'Time increment', dt)
         CALL sdf_write_srl(sdf_handle, 'dt_plasma_frequency', &
             'Plasma frequency timestep restriction', dt_plasma_frequency)
@@ -404,17 +427,23 @@ CONTAINS
             'Minimum grid position', x_grid_min)
 
         CALL write_laser_phases(sdf_handle, n_laser_x_min, laser_x_min, &
-            'laser_x_min_phase')
+            'laser_x_min_phase', [ny,nz], [ny_global_min, nz_global_min], &
+            .NOT. x_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
-            'laser_x_max_phase')
+            'laser_x_max_phase', [ny,nz], [ny_global_min, nz_global_min], & 
+            .NOT. x_max_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_min, laser_y_min, &
-            'laser_y_min_phase')
+            'laser_y_min_phase', [nx,nz], [nx_global_min, nz_global_min], & 
+            .NOT. y_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_max, laser_y_max, &
-            'laser_y_max_phase')
+            'laser_y_max_phase', [nx,nz], [nx_global_min, nz_global_min], & 
+            .NOT. y_max_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_z_min, laser_z_min, &
-            'laser_z_min_phase')
+            'laser_z_min_phase', [nx,ny], [nx_global_min, ny_global_min], &
+            .NOT. z_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_z_max, laser_z_max, &
-            'laser_z_max_phase')
+            'laser_z_max_phase', [nx,ny], [nx_global_min, ny_global_min], &
+            .NOT. z_max_boundary)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
@@ -457,26 +486,58 @@ CONTAINS
 
       iomask = iodumpmask(1,:)
 
-      CALL write_field(c_dump_ex, code, 'ex', 'Electric Field/Ex', 'V/m', &
-          c_stagger_ex, ex)
-      CALL write_field(c_dump_ey, code, 'ey', 'Electric Field/Ey', 'V/m', &
-          c_stagger_ey, ey)
-      CALL write_field(c_dump_ez, code, 'ez', 'Electric Field/Ez', 'V/m', &
-          c_stagger_ez, ez)
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame &
+          .AND. prefix_boosts(iprefix)%frame == c_frame_lab) THEN
+        species_list_corrected => prefix_boosts(iprefix)%&
+          particle_recorders(current_rec)%particle_lists
+        CALL write_field(c_dump_ex, code, 'ex', 'Electric Field/Ex', 'V/m', &
+            c_stagger_ex, prefix_boosts(iprefix)%field_lists(:, :, :, 1, &
+            current_rec))
+        CALL write_field(c_dump_ey, code, 'ey', 'Electric Field/Ey', 'V/m', &
+            c_stagger_ey, prefix_boosts(iprefix)%field_lists(:, :, :, 2, &
+            current_rec))
+        CALL write_field(c_dump_ez, code, 'ez', 'Electric Field/Ez', 'V/m', &
+            c_stagger_ez, prefix_boosts(iprefix)%field_lists(:, :, :, 3, &
+            current_rec))
 
-      CALL write_field(c_dump_bx, code, 'bx', 'Magnetic Field/Bx', 'T', &
-          c_stagger_bx, bx)
-      CALL write_field(c_dump_by, code, 'by', 'Magnetic Field/By', 'T', &
-          c_stagger_by, by)
-      CALL write_field(c_dump_bz, code, 'bz', 'Magnetic Field/Bz', 'T', &
-          c_stagger_bz, bz)
+        CALL write_field(c_dump_bx, code, 'bx', 'Magnetic Field/Bx', 'T', &
+            c_stagger_bx, prefix_boosts(iprefix)%field_lists(:, :, :, 4, &
+            current_rec))
+        CALL write_field(c_dump_by, code, 'by', 'Magnetic Field/By', 'T', &
+            c_stagger_by, prefix_boosts(iprefix)%field_lists(:, :, :, 5, &
+            current_rec))
+        CALL write_field(c_dump_bz, code, 'bz', 'Magnetic Field/Bz', 'T', &
+            c_stagger_bz, prefix_boosts(iprefix)%field_lists(:, :, :, 6, &
+            current_rec))
 
-      CALL write_field(c_dump_jx, code, 'jx', 'Current/Jx', 'A/m^2', &
-          c_stagger_jx, jx)
-      CALL write_field(c_dump_jy, code, 'jy', 'Current/Jy', 'A/m^2', &
-          c_stagger_jy, jy)
-      CALL write_field(c_dump_jz, code, 'jz', 'Current/Jz', 'A/m^2', &
-          c_stagger_jz, jz)
+        prefix_boosts(iprefix)%field_lists(:,:,:,:,current_rec) = 0.0_num
+      ELSE
+#endif
+        species_list_corrected => species_list
+        CALL write_field(c_dump_ex, code, 'ex', 'Electric Field/Ex', 'V/m', &
+            c_stagger_ex, ex)
+        CALL write_field(c_dump_ey, code, 'ey', 'Electric Field/Ey', 'V/m', &
+            c_stagger_ey, ey)
+        CALL write_field(c_dump_ez, code, 'ez', 'Electric Field/Ez', 'V/m', &
+            c_stagger_ez, ez)
+
+        CALL write_field(c_dump_bx, code, 'bx', 'Magnetic Field/Bx', 'T', &
+            c_stagger_bx, bx)
+        CALL write_field(c_dump_by, code, 'by', 'Magnetic Field/By', 'T', &
+            c_stagger_by, by)
+        CALL write_field(c_dump_bz, code, 'bz', 'Magnetic Field/Bz', 'T', &
+            c_stagger_bz, bz)
+
+        CALL write_field(c_dump_jx, code, 'jx', 'Current/Jx', 'A/m^2', &
+            c_stagger_jx, jx)
+        CALL write_field(c_dump_jy, code, 'jy', 'Current/Jy', 'A/m^2', &
+            c_stagger_jy, jy)
+        CALL write_field(c_dump_jz, code, 'jz', 'Current/Jz', 'A/m^2', &
+            c_stagger_jz, jz)
+#ifdef BOOSTED_FRAME
+      END IF
+#endif
 
       IF (cpml_boundaries) THEN
         CALL sdf_write_srl(sdf_handle, 'boundary_thickness', &
@@ -700,7 +761,7 @@ CONTAINS
 
         IF (isubset /= 1) THEN
           DO i = 1, n_species
-            CALL append_partlist(species_list(i)%attached_list, &
+            CALL append_partlist(species_list_corrected(i)%attached_list, &
                 io_list(i)%attached_list)
           END DO
           DO i = 1, n_species
@@ -709,7 +770,7 @@ CONTAINS
         END IF
       END DO
 
-      io_list => species_list
+      io_list => species_list_corrected
       iomask = iodumpmask(1,:)
       mask = iomask(c_dump_grid)
       restart_id = IAND(IAND(code, mask), c_io_restartable) /= 0
@@ -722,9 +783,28 @@ CONTAINS
 
       IF (dump_field_grid) THEN
         IF (.NOT. use_offset_grid) THEN
-          CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid', 'Grid/Grid', &
-              xb_global(1:nx_global+1), yb_global(1:ny_global+1), &
-              zb_global(1:nz_global+1), convert)
+#ifdef BOOSTED_FRAME
+          IF (in_boosted_frame &
+              .AND. prefix_boosts(iprefix)%frame == c_frame_lab) THEN
+            ALLOCATE(xb_transform(1:nx_global+1))
+            DO ix = 1, nx_global + 1
+              xb_transform(ix) = transform_position_at_prime(global_boost_info,&
+                  xb_global(ix), time_val = prefix_boosts(iprefix)% &
+                  next_dump(current_rec), inverse = .TRUE.)
+            END DO
+            CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid', 'Grid/Grid', &
+                xb_transform, yb_global(1:ny_global+1), convert)
+            CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid_boost', &
+                'Grid/Grid_Boost', xb_global(1:nx_global+1), &
+                yb_global(1:ny_global+1), convert)
+            DEALLOCATE(xb_transform)
+          ELSE
+#endif
+            CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid', 'Grid/Grid', &
+                xb_global(1:nx_global+1), yb_global(1:ny_global+1), convert)
+#ifdef BOOSTED_FRAME
+          END IF
+#endif
         ELSE
           CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid', 'Grid/Grid', &
               xb_offset_global(1:nx_global+1), &
@@ -869,7 +949,7 @@ CONTAINS
       END DO
 
       IF (IAND(iomask(c_dump_dist_fns), code) /= 0) THEN
-        CALL write_dist_fns(sdf_handle, code, iomask(c_dump_dist_fns))
+        CALL write_dist_fns(sdf_handle, code, iomask(c_dump_dist_fns), iprefix)
       END IF
 
 #ifndef NO_PARTICLE_PROBES
@@ -926,11 +1006,44 @@ CONTAINS
           CALL append_filename(dump_type, filename, n_io_blocks+2)
         END IF
         IF (iprefix > 1) dump_type = TRIM(file_prefixes(iprefix))
-        WRITE(stat_unit, '(''Wrote '', a7, '' dump number'', i5, '' at time'', &
-          & g20.12, '' and iteration'', i7)') dump_type, &
-          file_numbers(iprefix)-1, time, step
+#ifdef BOOSTED_FRAME
+        IF (in_boosted_frame &
+            .AND. prefix_boosts(iprefix)%frame == c_frame_lab) THEN
+          WRITE(stat_unit, '(''Wrote '', a7, '' dump number'', i5, & 
+            &'' at lab time'', g20.12, '' and iteration'', i7)') &
+            dump_type, file_numbers(iprefix)-1, &
+            prefix_boosts(iprefix)%next_dump(current_rec), step
+        ELSE
+#endif
+          WRITE(stat_unit, '(''Wrote '', a7, '' dump number'', i5, & 
+            &'' at time'', g20.12, '' and iteration'', i7)') dump_type, &
+            file_numbers(iprefix)-1, time, step
+#ifdef BOOSTED_FRAME
+        END IF
+#endif
+
         CALL flush_stat_file()
       END IF
+
+#ifdef BOOSTED_FRAME
+      IF (in_boosted_frame &
+          .AND. prefix_boosts(iprefix)%frame == c_frame_lab) THEN
+        DO ispecies = 1, n_species
+          CALL destroy_partlist(prefix_boosts(iprefix)% &
+              particle_recorders(current_rec)%particle_lists(ispecies)% &
+              attached_list)
+        END DO
+        prefix_boosts(iprefix)%next_dump(current_rec) &
+            = prefix_boosts(iprefix)%next_dump(current_rec) &
+            + prefix_boosts(iprefix)%dt_snapshot_lab &
+            * REAL(prefix_boosts(iprefix)%n_recorders, num)
+        prefix_boosts(iprefix)%current_recorder &
+            = prefix_boosts(iprefix)%current_recorder + 1
+        IF (prefix_boosts(iprefix)%current_recorder &
+            > prefix_boosts(iprefix)%n_recorders) &
+            prefix_boosts(iprefix)%current_recorder = 1
+      END IF
+#endif
 
       IF (force) EXIT
     END DO
@@ -957,29 +1070,33 @@ CONTAINS
 
 
   SUBROUTINE write_laser_phases(sdf_handle, laser_count, laser_base_pointer, &
-      block_name)
+      block_name, n_global, starts, null_write)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
     INTEGER, INTENT(IN) :: laser_count
     TYPE(laser_block), POINTER :: laser_base_pointer
     CHARACTER(LEN=*), INTENT(IN) :: block_name
-    REAL(num), DIMENSION(:), ALLOCATABLE :: laser_phases
+    INTEGER, DIMENSION(2), INTENT(IN) :: n_global, starts
+    LOGICAL, INTENT(IN) :: null_write
+    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: laser_phases
     INTEGER :: ilas
     TYPE(laser_block), POINTER :: current_laser
 
     IF (laser_count > 0) THEN
-      ALLOCATE(laser_phases(laser_count))
+      ALLOCATE(laser_phases(n_global(1), n_global(2), laser_count))
       ilas = 1
       current_laser => laser_base_pointer
 
       DO WHILE(ASSOCIATED(current_laser))
-        laser_phases(ilas) = current_laser%current_integral_phase
+        laser_phases(:, :, ilas) = current_laser%current_integral_phase
         ilas = ilas + 1
         current_laser => current_laser%next
       END DO
 
-      CALL sdf_write_srl(sdf_handle, TRIM(block_name), TRIM(block_name), &
-          laser_count, laser_phases, 0)
+      CALL sdf_write_array(sdf_handle, TRIM(block_name), TRIM(block_name), &
+          laser_phases, [n_global(1), n_global(2), laser_count], &
+          [starts(1), starts(2), 1], local_ghosts = [ng,ng,0,ng,ng,0], &
+          null_proc = null_write)
       DEALLOCATE(laser_phases)
     END IF
 
@@ -2342,7 +2459,7 @@ CONTAINS
     done_subset_init = .TRUE.
 
     IF (isubset == 1) THEN
-      io_list => species_list
+      io_list => species_list_corrected
       RETURN
     END IF
 
@@ -2352,10 +2469,10 @@ CONTAINS
     sub => subset_list(l)
     current_hash => id_registry%get_existing_hash(sub%name)
     DO i = 1, n_species
-      io_list(i) = species_list(i)
+      io_list(i) = species_list_corrected(i)
       io_list(i)%count = 0
       io_list(i)%name = 'subset_' // TRIM(sub%name) // '/' &
-          // TRIM(species_list(i)%name)
+          // TRIM(species_list_corrected(i)%name)
       CALL create_empty_partlist(io_list(i)%attached_list)
 
       IF (.NOT. sub%use_species(i)) THEN
@@ -2374,9 +2491,9 @@ CONTAINS
       IF (sub%persistent) any_persistent_subset = .TRUE.
       io_list(i)%dumpmask = sub%mask
 
-      part_mc = c * species_list(i)%mass
+      part_mc = c * species_list_corrected(i)%mass
 
-      current => species_list(i)%attached_list%head
+      current => species_list_corrected(i)%attached_list%head
       DO WHILE (ASSOCIATED(current))
         next => current%next
         use_particle = .TRUE.
@@ -2392,8 +2509,8 @@ CONTAINS
 
         IF (use_particle) THEN
           ! Move particle to io_list
-          CALL remove_particle_from_partlist(species_list(i)%attached_list, &
-              current)
+          CALL remove_particle_from_partlist(&
+              species_list_corrected(i)%attached_list, current)
           CALL add_particle_to_partlist(io_list(i)%attached_list, current)
         END IF
         current => next
@@ -2431,11 +2548,11 @@ CONTAINS
         IF (.NOT. sub%use_species(ispec)) THEN
           CYCLE
         END IF
-        CALL generate_particle_ids(species_list(ispec)%attached_list)
+        CALL generate_particle_ids(species_list_corrected(ispec)%attached_list)
 
-        part_mc = c * species_list(ispec)%mass
+        part_mc = c * species_list_corrected(ispec)%mass
 
-        current => species_list(ispec)%attached_list%head
+        current => species_list_corrected(ispec)%attached_list%head
         DO WHILE (ASSOCIATED(current))
           next => current%next
 #ifdef PER_PARTICLE_CHARGE_MASS

@@ -156,6 +156,9 @@ CONTAINS
 #ifdef NO_MPI3
     found = .TRUE.
 #endif
+#ifdef BOOSTED_FRAME
+    found = .TRUE.
+#endif
 
     IF (.NOT.found) THEN
       WRITE(*,*) '*************************************************************'
@@ -264,6 +267,10 @@ CONTAINS
     WRITE(*,*) 'Disable MPI3 features -DNO_MPI3'
 #else
     defines = IOR(defines, c_def_use_mpi3)
+#endif
+#ifdef BOOSTED_FRAME
+    WRITE(*,*) 'Boosted frame support -DBOOSTED_FRAME'
+    defines = IOR(defines, c_def_use_boost)
 #endif
     WRITE(*,*) '*************************************************************'
 

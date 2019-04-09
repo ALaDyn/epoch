@@ -19,6 +19,7 @@ MODULE iterators
   USE particle_pointer_advance
   USE partlist
   USE particle_id_hash_mod
+  USE lorentz
 
   IMPLICIT NONE
 
@@ -50,6 +51,16 @@ CONTAINS
       DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
         part_count = part_count + 1
         array(part_count) = cur%part_pos(direction) - window_shift(direction)
+#ifdef BOOSTED_FRAME
+        IF (in_boosted_frame .AND. prefix_boosts(current_prefix)%frame &
+            == c_frame_lab .AND. direction == 1) THEN
+          array(part_count) = transform_position_at_prime(global_boost_info, &
+              array(part_count), time_val = &
+              prefix_boosts(current_prefix)% &
+              next_dump(prefix_boosts(current_prefix)%current_recorder), &
+              inverse = .TRUE.)
+        END IF
+#endif
         cur => cur%next
       END DO
       ! If the current partlist is exhausted, switch to the next one

@@ -328,10 +328,12 @@ MODULE boosted_frame
         END IF
       END DO
 
+      PRINT *,MAXVAL(laser%omega)
+
       laser%t_start = transform_interval_in_prime(global_boost_info, &
-          laser%t_start)
+          laser%t_start) + time
       laser%t_end = transform_interval_in_prime(global_boost_info, &
-          laser%t_end)
+          laser%t_end) + time
 
       IF (pi / MAXVAL(laser%omega) < dt) THEN
         dt = pi / MAXVAL(laser%omega)
@@ -585,6 +587,7 @@ MODULE boosted_frame
               CALL transform_em_fields(global_boost_info, fields_in, &
                   fields_out, inverse = .TRUE.)
               prefix_boosts(iprefix)%field_lists(ix, iy, :, irec) = fields_out
+              prefix_boosts(iprefix)%field_lists(ix, iy, 6, irec) = 1.0_num
             END DO
           END IF
         END DO

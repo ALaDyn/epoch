@@ -1078,7 +1078,7 @@ CONTAINS
 
     DEALLOCATE(custom_loaders_list)
 
-    CALL distribute_particles
+    CALL distribute_particles(species_list)
 
   END SUBROUTINE custom_particle_load
 

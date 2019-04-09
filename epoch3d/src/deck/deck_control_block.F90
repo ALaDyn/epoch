@@ -191,7 +191,7 @@ CONTAINS
 
     CHARACTER(*), INTENT(IN) :: element, value
     CHARACTER(LEN=string_length) :: str_tmp
-    CHARACTER(LEN=1) :: c
+    CHARACTER(LEN=1) :: ch
     INTEGER :: errcode
     INTEGER :: field_order, ierr, io, iu, i
     LOGICAL :: isnum
@@ -282,8 +282,8 @@ CONTAINS
       isnum = .TRUE.
       str_tmp = TRIM(ADJUSTL(value))
       DO i = 1,LEN_TRIM(str_tmp)
-        c = str_tmp(i:i)
-        IF (c < '0' .OR. c > '9') THEN
+        ch = str_tmp(i:i)
+        IF (ch < '0' .OR. ch > '9') THEN
           isnum = .FALSE.
           EXIT
         END IF
@@ -441,6 +441,36 @@ CONTAINS
 
     ELSE IF (str_cmp(element, 'use_more_setup_memory')) THEN
       use_more_setup_memory = as_logical_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'boost_vx')) THEN
+#ifdef BOOSTED_FRAME
+      use_boosted_frame = .TRUE.
+      global_boost_info%vx = as_real_print(value, element, errcode)
+      global_boost_info%beta = global_boost_info%vx / c
+      global_boost_info%lorentz_gamma = 1.0_num/SQRT(1.0_num &
+          - global_boost_info%beta**2)
+      IF (global_boost_info%vx > c) THEN
+        errcode = IOR(errcode, c_err_bad_value)
+      END IF
+#else
+      extended_error_string = '-DBOOSTED_FRAME'
+      errcode = IOR(errcode, c_err_pp_options_missing)
+#endif
+    ELSE IF (str_cmp(element, 'boost_gamma')) THEN
+#ifdef BOOSTED_FRAME
+      use_boosted_frame = .TRUE.
+      global_boost_info%lorentz_gamma = as_real_print(value, element, errcode)
+      global_boost_info%beta = SQRT(1.0_num &
+          - 1.0_num/global_boost_info%lorentz_gamma**2)
+      global_boost_info%vx = global_boost_info%beta * c
+
+      IF (global_boost_info%lorentz_gamma < 1.0_num) THEN
+        errcode = IOR(errcode, c_err_bad_value)
+      END IF
+#else
+      extended_error_string = '-DBOOSTED_FRAME'
+      errcode = IOR(errcode, c_err_pp_options_missing)
+#endif
 
     ELSE
       errcode = c_err_unknown_element
