@@ -305,18 +305,9 @@ CONTAINS
       !Destroy any unplaced particles
       DO WHILE(ASSOCIATED(current))
         next => current%next
-        IF (partlist%use_store) THEN
-          current%live = 0
-        ELSE
-          CALL remove_particle_from_partlist(partlist, current)
-          CALL destroy_particle(current)
-        END IF
+        CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
         current => next
       END DO
-      IF (partlist%use_store) THEN
-        ! Relink and recount
-        CALL relink_partlist(partlist, .TRUE.)
-      END IF
     END IF
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
@@ -629,18 +620,9 @@ CONTAINS
       !Destroy any unplaced particles
       DO WHILE(ASSOCIATED(current))
         next => current%next
-        IF (partlist%use_store) THEN
-          current%live = 0
-        ELSE
-          CALL remove_particle_from_partlist(partlist, current)
-          CALL destroy_particle(current)
-        END IF
+        CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
         current => next
       END DO
-      IF (partlist%use_store) THEN
-        ! Relink and recount
-        CALL relink_partlist(partlist, .TRUE.)
-      END IF
     END IF
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
@@ -814,8 +796,7 @@ CONTAINS
         next => current%next
         IF (current%part_pos(1) < x0 .OR. current%part_pos(1) >= x1 &
             .OR. current%part_pos(2) < y0 .OR. current%part_pos(2) >= y1) THEN
-          CALL remove_particle_from_partlist(partlist, current)
-          CALL destroy_particle(current)
+          CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
         END IF
         current => next
       END DO

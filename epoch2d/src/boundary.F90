@@ -1293,13 +1293,14 @@ CONTAINS
 
         IF (out_of_bounds) THEN
           ! Particle has gone forever
-          CALL remove_particle_from_partlist(&
-              species_list(ispecies)%attached_list, cur)
           IF (track_ejected_particles) THEN
+            CALL remove_particle_from_partlist(&
+                species_list(ispecies)%attached_list, cur)
             CALL add_particle_to_partlist(&
                 ejected_list(ispecies)%attached_list, cur)
           ELSE
-            CALL destroy_particle(cur)
+            CALL remove_particle_from_partlist(&
+                species_list(ispecies)%attached_list, cur, destroy=.TRUE.)
           END IF
         ELSE IF (ABS(xbd) + ABS(ybd) > 0) THEN
           ! Particle has left processor, send it to its neighbour

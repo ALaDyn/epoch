@@ -62,8 +62,8 @@ CONTAINS
         cell_y = FLOOR((current%part_pos(2) - y_grid_min_local) / dy + 1.5_num)
 #endif
 
-        CALL remove_particle_from_partlist(&
-            species_list(ispecies)%attached_list, current, .FALSE.)
+        CALL unlink_particle_from_partlist(&
+            species_list(ispecies)%attached_list, current)
         CALL add_particle_to_partlist(&
             species_list(ispecies)%secondary_list(cell_x,cell_y), current)
         current => next

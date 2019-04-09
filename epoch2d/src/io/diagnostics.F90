@@ -2447,8 +2447,8 @@ CONTAINS
         IF (use_particle) THEN
           ! Move particle to io_list
           species_list(i)%attached_list%locked_store = .TRUE.
-          CALL remove_particle_from_partlist(species_list(i)%attached_list, &
-              current, fromstore_in=.FALSE., nocopy_in=.TRUE.)
+          CALL unlink_particle_from_partlist(species_list(i)%attached_list, &
+              current)
           CALL add_particle_to_partlist(io_list(i)%attached_list, current)
         END IF
         current => next

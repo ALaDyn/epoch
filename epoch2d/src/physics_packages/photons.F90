@@ -998,9 +998,8 @@ CONTAINS
 
     ! Remove photon
     CALL remove_particle_from_partlist(species_list(iphoton)%attached_list, &
-        generating_photon)
+        generating_photon, destroy=.TRUE.)
 
-    DEALLOCATE(generating_photon)
 
   END SUBROUTINE generate_pair
 

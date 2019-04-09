@@ -1003,16 +1003,63 @@ CONTAINS
 
 
 
-
   SUBROUTINE remove_particle_from_partlist(partlist, a_particle, &
-      fromstore_in, nocopy_in)
+      destroy)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     TYPE(particle), POINTER :: a_particle, tmp_particle
-    LOGICAL, INTENT(IN), OPTIONAL :: fromstore_in, nocopy_in
-    LOGICAL :: fromstore, nocopy
-    ! Remove a particle from a partlist. If fromstore is TRUE the
-    ! particle is also removed from the store, otherwise it remains
+    LOGICAL, INTENT(IN), OPTIONAL :: destroy
+    LOGICAL :: destroy_in
+    ! Remove a particle from a partlist completely. If the list is store-
+    ! backed, then a copy will be returned in place of a_particle - unless
+    ! destroy_particle is true, when the particle is completely deleted and
+    ! NULL pointer returned
+
+    ! Note that this will work even if you are using an unsafe particle list
+    ! BE CAREFUL if doing so, it can cause unexpected behaviour
+    IF( .NOT. ASSOCIATED(a_particle)) RETURN
+    IF( a_particle%live /= 1) RETURN
+
+    IF (PRESENT(destroy)) THEN
+      destroy_in=destroy
+    ELSE
+      destroy_in = .FALSE.
+    END IF
+
+    CALL unlink_particle_from_partlist(partlist, a_particle)
+
+    IF (partlist%use_store) THEN
+      ! Setting live effectively removes particle from store -
+      ! it will be overwritten on next compact etc
+      a_particle%live = 0
+    END IF
+
+    IF (partlist%use_store .AND. .NOT. destroy_in) THEN
+      !If a_particle is in a store, make a copy
+      !Then what comes back is a valid, FREE particle
+      CALL create_particle(tmp_particle, .TRUE.)
+      CALL copy_particle(a_particle, tmp_particle)
+      !Return a live particle
+      tmp_particle%live = 1
+      a_particle => tmp_particle
+    ELSE IF (partlist%use_store) THEN
+      !Don't need to actually destroy, just hand back NULL
+      NULLIFY(a_particle)
+    ELSE IF (destroy_in) THEN
+      CALL destroy_particle(a_particle)
+      NULLIFY(a_particle)
+    END IF
+
+
+  END SUBROUTINE remove_particle_from_partlist
+
+
+
+  SUBROUTINE unlink_particle_from_partlist(partlist, a_particle)
+
+    TYPE(particle_list), INTENT(INOUT) :: partlist
+    TYPE(particle), POINTER :: a_particle
+    ! Unlink a particle from a partlist. It remains
     ! a valid particle in the store, but not part of the list it backs:
     ! this means a relink will ADD it back!
 
@@ -1020,18 +1067,6 @@ CONTAINS
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
     IF( .NOT. ASSOCIATED(a_particle)) RETURN
     IF( a_particle%live /= 1) RETURN
-
-    IF (PRESENT(fromstore_in)) THEN
-      fromstore = fromstore_in
-    ELSE
-     fromstore = .TRUE.
-    END IF
-    IF (PRESENT(nocopy_in)) THEN
-      nocopy = nocopy_in
-    ELSE
-      nocopy = .FALSE.
-    END IF
-
 
     ! Check whether particle is head or tail of list and unlink
     IF (ASSOCIATED(partlist%head, TARGET=a_particle)) THEN
@@ -1047,26 +1082,12 @@ CONTAINS
     IF (ASSOCIATED(a_particle%prev)) a_particle%prev%next => a_particle%next
 
     NULLIFY(a_particle%next, a_particle%prev)
-    IF (partlist%use_store .AND. fromstore) THEN
-      ! Setting live effectively removes particle from store -
-      ! it will be overwritten on next compact etc
-      a_particle%live = 0
-    END IF
+
     ! Decrement counter
     partlist%count = partlist%count-1
 
-    IF (partlist%use_store .AND. .NOT. nocopy) THEN
-      !If a_particle is in a store, make a copy
-      !Then what comes back is a valid, FREE particle
-      CALL create_particle(tmp_particle, .TRUE.)
-      CALL copy_particle(a_particle, tmp_particle)
-      !Return a live particle
-      tmp_particle%live = 1
-      a_particle => tmp_particle
-    END IF
 
-
-  END SUBROUTINE remove_particle_from_partlist
+  END SUBROUTINE unlink_particle_from_partlist
 
 
 
