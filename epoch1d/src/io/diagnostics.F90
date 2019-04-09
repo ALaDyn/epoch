@@ -234,6 +234,9 @@ CONTAINS
         (/'x_max', 'y_max', 'z_max', 'x_min', 'y_min', 'z_min'/)
     INTEGER, DIMENSION(6) :: fluxdir = &
         (/c_dir_x, c_dir_y, c_dir_z, -c_dir_x, -c_dir_y, -c_dir_z/)
+#ifdef BOOSTED_FRAME
+    INTEGER :: current_rec
+#endif
 
     ! Clean-up any cached RNG state
     CALL random_flush_cache
@@ -372,6 +375,9 @@ CONTAINS
       full_filename = TRIM(filesystem) &
           // TRIM(data_dir) // '/' // TRIM(filename)
 
+      WRITE(100+current_rec, *) 'Writing ', TRIM(filename), ' using ', &
+          current_rec
+
       ! Always dump the variables with the 'Every' attribute
       code = c_io_always
 
@@ -391,6 +397,7 @@ CONTAINS
           prefix_boosts(iprefix)%frame == c_frame_lab) THEN
         CALL sdf_write_header(sdf_handle, 'Epoch1d', 1, step, &
             prefix_boosts(iprefix)%next_dump(current_rec), restart_flag, jobid)
+      ELSE
 #endif
         CALL sdf_write_header(sdf_handle, 'Epoch1d', 1, step, time, &
             restart_flag, jobid)
@@ -470,7 +477,8 @@ CONTAINS
 #ifdef BOOSTED_FRAME
       IF (in_boosted_frame &
           .AND. prefix_boosts(iprefix)%frame == c_frame_lab) THEN
-        species_list_corrected => prefix_boosts(iprefix)%particle_lists
+        species_list_corrected => prefix_boosts(iprefix)%&
+          particle_recorders(current_rec)%particle_lists
         CALL write_field(c_dump_ex, code, 'ex', 'Electric Field/Ex', 'V/m', &
             c_stagger_ex, prefix_boosts(iprefix)%field_lists(:, 1, current_rec))
         CALL write_field(c_dump_ey, code, 'ey', 'Electric Field/Ey', 'V/m', &
@@ -485,7 +493,7 @@ CONTAINS
         CALL write_field(c_dump_bz, code, 'bz', 'Magnetic Field/Bz', 'T', &
             c_stagger_bz, prefix_boosts(iprefix)%field_lists(:, 6, current_rec))
 
-        prefix_boosts(iprefix)%field_lists = 0.0_num
+        prefix_boosts(iprefix)%field_lists(:, :, current_rec) = 0.0_num
       ELSE
 #endif
         species_list_corrected => species_list
@@ -745,8 +753,8 @@ CONTAINS
             ALLOCATE(xb_transform(1:nx_global+1))
             DO ix = 1, nx_global + 1
               xb_transform(ix) = transform_position_at_prime(global_boost_info,&
-                  xb_global(ix), time_val = prefix_boosts(iprefix)%next_dump, &
-                  inverse = .TRUE.)
+                  xb_global(ix), time_val = prefix_boosts(iprefix)% &
+                  next_dump(current_rec), inverse = .TRUE.)
             END DO
             CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid', 'Grid/Grid', &
                 xb_transform, convert)

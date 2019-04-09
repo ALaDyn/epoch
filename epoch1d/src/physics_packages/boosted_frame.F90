@@ -267,8 +267,8 @@ MODULE boosted_frame
 
     current%part_p = transform_momentum(global_boost_info, current%part_p, &
         mass = mass)
-    current%part_pos(1) = transform_position(global_boost_info, &
-        current%part_pos(1))
+    current%part_pos = transform_position(global_boost_info, &
+        current%part_pos)
 
   END FUNCTION transform_particle
 
@@ -302,7 +302,6 @@ MODULE boosted_frame
   FUNCTION transform_laser(laser) RESULT(any_errors)
     TYPE(laser_block), INTENT(INOUT) :: laser
     REAL(num) :: kboost, kx, minkboost
-    INTEGER :: i
     LOGICAL :: any_errors
 
     any_errors = .FALSE.
@@ -313,28 +312,26 @@ MODULE boosted_frame
         .NOT. ANY(laser%use_k_function)) THEN
 
       minkboost = c_largest_number
-      DO i = LBOUND(laser%omega,1), UBOUND(laser%omega,1)
-        IF (laser%omega_func_type == c_of_k) THEN
-          kx = laser%k(i, 1)
-        ELSE
-          kx = laser%omega(i)/c * laser%kx_mult
-        END IF
+      IF (laser%omega_func_type == c_of_k) THEN
+        kx = laser%k(1)
+      ELSE
+        kx = laser%omega/c * laser%kx_mult
+      END IF
 
-        laser%omega(i) = transform_frequency(global_boost_info, &
-            laser%omega(i), kx, k_boost = kboost)
-        IF (kboost < minkboost) minkboost=kboost
-        IF (laser%omega_func_type == c_of_k) THEN
-          laser%k(i, 1) = kboost
-        END IF
-      END DO
+      laser%omega = transform_frequency(global_boost_info, &
+          laser%omega, kx, k_boost = kboost)
+      IF (kboost < minkboost) minkboost=kboost
+      IF (laser%omega_func_type == c_of_k) THEN
+        laser%k(1) = kboost
+      END IF
 
-      laser%t_start = transform_time(global_boost_info, laser%t_start, &
-          laser%initial_pos(1))
-      laser%t_end = transform_time(global_boost_info, laser%t_end, &
-          laser%initial_pos(1))
+      laser%t_start = transform_interval_in_prime(global_boost_info, &
+          laser%t_start) + time
+      laser%t_end = transform_interval_in_prime(global_boost_info, &
+          laser%t_end) + time
 
-      IF (pi / MAXVAL(laser%omega) < dt) THEN
-        dt = pi / MAXVAL(laser%omega)
+      IF (pi / laser%omega < dt) THEN
+        dt = pi / laser%omega
         IF (rank == 0) THEN
           PRINT *,'***WARNING***'
           PRINT *,'Timestep reducing to resolve laser after boost'
@@ -379,6 +376,7 @@ MODULE boosted_frame
     ALLOCATE(prefix_boosts(nprefix))
     ALLOCATE(dt_dump(nprefix))
     max_n_recorders = 0
+    total_recorders = 0
 
     dt_dump = c_largest_number
     any_errors = .FALSE.
@@ -452,12 +450,11 @@ MODULE boosted_frame
     !if this prefix is in the lab frame
     DO iprefix = 1, nprefix
       IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
-      n_recorders = CEILING(dt_domain/dt_dump(iprefix))
-      total_recorders = total_recorders + 1
+      n_recorders = MAX(CEILING(dt_domain/dt_dump(iprefix)), 1)
+      total_recorders = total_recorders + n_recorders
       IF (max_n_recorders < n_recorders) max_n_recorders = n_recorders
       prefix_boosts(iprefix)%n_recorders = n_recorders
-      ALLOCATE(prefix_boosts(iprefix)%field_lists(1-ng:nx+ng, 1-ng:ny+ng, 6, &
-          n_recorders))
+      ALLOCATE(prefix_boosts(iprefix)%field_lists(1-ng:nx+ng, 6, n_recorders))
       ALLOCATE(prefix_boosts(iprefix)%particle_recorders(n_recorders))
       ALLOCATE(prefix_boosts(iprefix)%next_dump(n_recorders))
       prefix_boosts%current_recorder = 1
@@ -495,7 +492,7 @@ MODULE boosted_frame
               max_n_recorders ,' copies of'
           PRINT *, 'fields and particles to be kept and will lead to very high'
           PRINT *, 'memory usage. To avoid this, reduce "dt_snapshot" in '
-          PRINT *, 'lab frame diagnostics to be less then', dt_domain
+          PRINT *, 'lab frame diagnostics to be less then', dt_domain 
         END IF
       END IF
     ELSE
@@ -512,7 +509,7 @@ MODULE boosted_frame
             max_n_recorders ,' copies of'
         PRINT *, 'fields and particles to be kept. To avoid this, reduce '
         PRINT *, '"dt_snapshot" in lab frame diagnostics to be less then', &
-            dt_domain
+            dt_domain 
       END IF
     END IF
 
@@ -546,7 +543,7 @@ MODULE boosted_frame
       DO irec = 1, prefix_boosts(iprefix)%n_recorders
         IF (init_t <= prefix_boosts(iprefix)%next_dump(irec) .AND. final_t &
             >= prefix_boosts(iprefix)%next_dump(irec)) THEN
-          ALLOCATE(new_part, SOURCE = part)
+          ALLOCATE(new_part, source = part)
           !Transform the particle's momentum and energy to lab frame now but
           !keep position in boosted frame. 
           new_part%part_p = transform_momentum(global_boost_info, &
@@ -582,6 +579,7 @@ MODULE boosted_frame
             CALL transform_em_fields(global_boost_info, fields_in, &
                 fields_out, inverse = .TRUE.)
             prefix_boosts(iprefix)%field_lists(ix, :, irec) = fields_out
+            prefix_boosts(iprefix)%field_lists(ix, 6, irec) = 1.0_num
           END IF
         END DO
       END DO

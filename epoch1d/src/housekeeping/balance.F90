@@ -50,7 +50,7 @@ CONTAINS
     LOGICAL, SAVE :: first_flag = .TRUE.
     LOGICAL :: first_message, restarting, full_check, attempt_balance
     LOGICAL :: use_redistribute_domain, use_redistribute_particles
-    INTEGER :: iprefix
+    INTEGER :: iprefix, irec
 #ifdef PARTICLE_DEBUG
     TYPE(particle), POINTER :: current
     INTEGER :: ispecies
@@ -196,8 +196,10 @@ CONTAINS
 #ifdef BOOSTED_FRAME
       IF (in_boosted_frame) THEN
         DO iprefix = 1, SIZE(file_prefixes)
-          IF (prefix_boosts(iprefix)%frame == c_frame_boost) CYCLE
-          CALL distribute_particles(prefix_boosts(iprefix)%particle_lists)
+          DO irec = 1, prefix_boosts(iprefix)%n_recorders
+            CALL distribute_particles(prefix_boosts(iprefix)%&
+                particle_recorders(irec)%particle_lists)
+          END DO
         END DO
       END IF
 #endif
@@ -390,9 +392,9 @@ CONTAINS
     REAL(num), DIMENSION(:), ALLOCATABLE :: temp, temp2
     TYPE(particle_species_migration), POINTER :: mg
     TYPE(initial_condition_block), POINTER :: ic
-    INTEGER :: i, ispecies, io, id, nspec_local, mask
+    INTEGER :: i, ispecies, io, id, nspec_local, mask, ifield, iprefix, irec
 #ifdef BOOSTED_FRAME
-    REAL(num), DIMENSION(:,:,:,:), ALLOCATABLE :: field_balance
+    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: field_balance
 #endif
 
     nx_new = new_domain(1,2) - new_domain(1,1) + 1

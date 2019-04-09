@@ -270,7 +270,7 @@ CONTAINS
     IF (in_boosted_frame) THEN
       laser%omega = transform_frequency(global_boost_info, &
           laser%omega, laser%k(1), k_boost = kboost)
-      IF (laser%k_function(1)%init) laser%k = kboost
+      IF (laser%k_function(1)%init) laser%k(1) = kboost
     END IF
 #endif
 

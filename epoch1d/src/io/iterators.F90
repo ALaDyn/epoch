@@ -53,10 +53,12 @@ CONTAINS
         array(part_count) = cur%part_pos - window_shift
 #ifdef BOOSTED_FRAME
         IF (in_boosted_frame .AND. prefix_boosts(current_prefix)%frame &
-            == c_frame_lab) THEN
+            == c_frame_lab .AND. direction == 1) THEN
           array(part_count) = transform_position_at_prime(global_boost_info, &
               array(part_count), time_val = &
-              prefix_boosts(current_prefix)%next_dump, inverse = .TRUE.)
+              prefix_boosts(current_prefix)% &
+              next_dump(prefix_boosts(current_prefix)%current_recorder), &
+              inverse = .TRUE.)
         END IF
 #endif
         cur => cur%next
