@@ -183,22 +183,22 @@ CONTAINS
       CALL attach_laser_to_list(laser_x_max, laser)
     ELSE IF (boundary == c_bd_y_min) THEN
       n_laser_y_min = n_laser_y_min + 1
-      laser%kx_mult = 1.0_num
+      laser%kx_mult = 0.0_num
       laser%initial_pos = [0.0_num, y_global(1), 0.0_num]
       CALL attach_laser_to_list(laser_y_min, laser)
     ELSE IF (boundary == c_bd_y_max) THEN
       n_laser_y_max = n_laser_y_max + 1
-      laser%kx_mult = 1.0_num
+      laser%kx_mult = 0.0_num
       laser%initial_pos = [0.0_num, y_global(ny_global), 0.0_num]
       CALL attach_laser_to_list(laser_y_max, laser)
     ELSE IF (boundary == c_bd_z_min) THEN
       n_laser_z_min = n_laser_z_min + 1
-      laser%kx_mult = 1.0_num
+      laser%kx_mult = 0.0_num
       laser%initial_pos = [0.0_num, 0.0_num, z_global(1)]
       CALL attach_laser_to_list(laser_z_min, laser)
     ELSE IF (boundary == c_bd_z_max) THEN
       n_laser_z_max = n_laser_z_max + 1
-      laser%kx_mult = 1.0_num
+      laser%kx_mult = 0.0_num
       laser%initial_pos = [0.0_num, 0.0_num, z_global(nz_global)]
       CALL attach_laser_to_list(laser_z_max, laser)
     END IF
@@ -373,8 +373,6 @@ CONTAINS
   SUBROUTINE laser_update_profile(laser)
 
     TYPE(laser_block), POINTER :: laser
-    INTEGER :: i, j, err
-    TYPE(parameter_pack) :: parameters
 
     CALL populate_array_from_stack_2d(laser, laser%profile, &
         laser%profile_function)
@@ -386,8 +384,9 @@ CONTAINS
   SUBROUTINE laser_update_omega(laser)
 
     TYPE(laser_block), POINTER :: laser
-    INTEGER :: err, iy, iz
-    TYPE(parameter_pack) :: parameters
+#ifdef BOOSTED_FRAME
+    INTEGER :: iy, iz
+#endif
 
     CALL populate_array_from_stack_2d(laser, laser%omega, laser%omega_function)
     IF (laser%omega_func_type == c_of_freq) &
@@ -807,12 +806,14 @@ CONTAINS
       END DO
     END IF
 
+#ifdef BOOSTED_FRAME
     IF (use_boosted_frame) THEN
       source1 = source1 * global_boost_info%lorentz_gamma &
           * (1.0_num - global_boost_info%beta)
       source2 = source2 * global_boost_info%lorentz_gamma &
           * (1.0_num + global_boost_info%beta)
     END IF
+#endif
 
     bz(laserpos, 1:ny, 1:nz) = sum * (-4.0_num * source1 &
         - 2.0_num * (ey_x_max(1:ny, 1:nz) - c * bz_x_max(1:ny, 1:nz)) &
@@ -895,10 +896,12 @@ CONTAINS
       END DO
     END IF
 
+#ifdef BOOSTED_FRAME
     IF (use_boosted_frame) THEN
       source2 = source2 * global_boost_info%lorentz_gamma &
           * (1.0_num - global_boost_info%beta)
     END IF
+#endif
 
     bx(1:nx, laserpos-1, 1:nz) = sum * ( 4.0_num * source1 &
         + 2.0_num * (ez_y_min(1:nx, 1:nz) + c * bx_y_min(1:nx, 1:nz)) &
@@ -981,10 +984,12 @@ CONTAINS
       END DO
     END IF
 
+#ifdef BOOSTED_FRAME
     IF (use_boosted_frame) THEN
       source2 = source2 * global_boost_info%lorentz_gamma &
           * (1.0_num - global_boost_info%beta)
     END IF
+#endif
 
     bx(1:nx, laserpos, 1:nz) = sum * (-4.0_num * source1 &
         - 2.0_num * (ez_y_max(1:nx, 1:nz) - c * bx_y_max(1:nx, 1:nz)) &
@@ -1067,10 +1072,12 @@ CONTAINS
       END DO
     END IF
 
+#ifdef BOOSTED_FRAME
     IF (use_boosted_frame) THEN
       source1 = source1 * global_boost_info%lorentz_gamma &
           * (1.0_num + global_boost_info%beta)
     END IF
+#endif
 
     by(1:nx, 1:ny, laserpos-1) = sum * ( 4.0_num * source1 &
         + 2.0_num * (ex_z_min(1:nx, 1:ny) + c * by_z_min(1:nx, 1:ny)) &
@@ -1153,10 +1160,12 @@ CONTAINS
       END DO
     END IF
 
+#ifdef BOOSTED_FRAME
     IF (use_boosted_frame) THEN
       source1 = source1 * global_boost_info%lorentz_gamma &
           * (1.0_num + global_boost_info%beta)
     END IF
+#endif
 
     by(1:nx, 1:ny, laserpos) = sum * (-4.0_num * source1 &
         - 2.0_num * (ex_z_max(1:nx, 1:ny) - c * by_z_max(1:nx, 1:ny)) &

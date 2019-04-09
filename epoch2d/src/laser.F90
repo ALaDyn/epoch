@@ -169,12 +169,12 @@ CONTAINS
       CALL attach_laser_to_list(laser_x_max, laser)
     ELSE IF (boundary == c_bd_y_min) THEN
       n_laser_y_min = n_laser_y_min + 1
-      laser%kx_mult = 1.0_num
+      laser%kx_mult = 0.0_num
       laser%initial_pos = [0.0_num, y_global(1)]
       CALL attach_laser_to_list(laser_y_min, laser)
     ELSE IF (boundary == c_bd_y_max) THEN
       n_laser_y_max = n_laser_y_max + 1
-      laser%kx_mult = 1.0_num
+      laser%kx_mult = 0.0_num
       laser%initial_pos = [0.0_num, y_global(ny_global)]
       CALL attach_laser_to_list(laser_y_max, laser)
     END IF
@@ -313,25 +313,9 @@ CONTAINS
   SUBROUTINE laser_update_profile(laser)
 
     TYPE(laser_block), POINTER :: laser
-    INTEGER :: i, err
-    TYPE(parameter_pack) :: parameters
 
-    err = 0
-    CALL populate_pack_from_laser(laser, parameters)
-    SELECT CASE(laser%boundary)
-      CASE(c_bd_x_min, c_bd_x_max)
-        DO i = 1,ny
-          parameters%pack_iy = i
-          laser%profile(i) = &
-              evaluate_with_parameters(laser%profile_function, parameters, err)
-        END DO
-      CASE(c_bd_y_min, c_bd_y_max)
-        DO i = 1,nx
-          parameters%pack_ix = i
-          laser%profile(i) = &
-              evaluate_with_parameters(laser%profile_function, parameters, err)
-        END DO
-    END SELECT
+    CALL populate_array_from_stack_1d(laser, laser%profile, &
+        laser%profile_function)
 
   END SUBROUTINE laser_update_profile
 
@@ -340,14 +324,11 @@ CONTAINS
   SUBROUTINE laser_update_omega(laser)
 
     TYPE(laser_block), POINTER :: laser
-    INTEGER :: err, iy
-    TYPE(parameter_pack) :: parameters
+#ifdef BOOSTED_FRAME
+    INTEGER :: iy
+#endif
 
-    err = 0
-    CALL populate_pack_from_laser(laser, parameters)
     CALL populate_array_from_stack_1d(laser, laser%omega, laser%omega_function)
-!    laser%omega = &
-!        evaluate_with_parameters(laser%omega_function, parameters, err)
     IF (laser%omega_func_type == c_of_freq) &
         laser%omega = 2.0_num * pi * laser%omega
     IF (laser%omega_func_type == c_of_lambda) &

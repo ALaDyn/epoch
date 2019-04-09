@@ -50,7 +50,9 @@ CONTAINS
     LOGICAL, SAVE :: first_flag = .TRUE.
     LOGICAL :: first_message, restarting, full_check, attempt_balance
     LOGICAL :: use_redistribute_domain, use_redistribute_particles
+#ifdef BOOSTED_FRAME
     INTEGER :: iprefix, irec
+#endif
 #ifdef PARTICLE_DEBUG
     TYPE(particle), POINTER :: current
     INTEGER :: ispecies
@@ -392,8 +394,9 @@ CONTAINS
     REAL(num), DIMENSION(:), ALLOCATABLE :: temp, temp2
     TYPE(particle_species_migration), POINTER :: mg
     TYPE(initial_condition_block), POINTER :: ic
-    INTEGER :: i, ispecies, io, id, nspec_local, mask, ifield, iprefix, irec
+    INTEGER :: i, ispecies, io, id, nspec_local, mask
 #ifdef BOOSTED_FRAME
+    INTEGER :: ifield, iprefix, irec
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: field_balance
 #endif
 

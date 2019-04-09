@@ -216,11 +216,10 @@ CONTAINS
     CHARACTER(LEN=c_max_string_length) :: dump_type, temp_name
     CHARACTER(LEN=c_id_length) :: temp_block_id
     REAL(num) :: eta_time, dr, r0
-    REAL(num), DIMENSION(:), ALLOCATABLE :: x_reduced, y_reduced, xb_transform
+    REAL(num), DIMENSION(:), ALLOCATABLE :: x_reduced, y_reduced
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: array
     INTEGER, DIMENSION(2,c_ndims) :: ranges
     INTEGER :: code, i, io, ispecies, iprefix, mask, rn, dir, dumped, nval
-    INTEGER :: ix
     INTEGER :: random_state(4)
     INTEGER, ALLOCATABLE :: random_states_per_proc(:)
     INTEGER, DIMENSION(c_ndims) :: dims
@@ -236,7 +235,8 @@ CONTAINS
     INTEGER, DIMENSION(6) :: fluxdir = &
         (/c_dir_x, c_dir_y, c_dir_z, -c_dir_x, -c_dir_y, -c_dir_z/)
 #ifdef BOOSTED_FRAME
-    INTEGER :: current_rec
+    INTEGER :: current_rec, ix
+    REAL(num), DIMENSION(:), ALLOCATABLE :: xb_transform
 #endif
 
     ! Clean-up any cached RNG state

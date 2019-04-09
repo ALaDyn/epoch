@@ -214,7 +214,10 @@ CONTAINS
     REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
     REAL(num) :: gamma_mass, v_inject, density, vol
     REAL(num) :: npart_ideal, itemp, v_inject_s
-    REAL(num), DIMENSION(3) :: temperature, drift, drift_t
+    REAL(num), DIMENSION(3) :: temperature, drift
+#ifdef BOOSTED_FRAME
+    REAL(num), DIMENSION(3) :: drift_t
+#endif
     INTEGER :: parts_this_time, ipart, idir, dir_index, ii, jj
     INTEGER, DIMENSION(c_ndims-1) :: perp_dir_index, nel
     REAL(num), DIMENSION(c_ndims-1) :: perp_cell_size, cur_cell
@@ -378,7 +381,8 @@ CONTAINS
         v_inject = ABS(v_inject_s)
 
 #ifdef BOOSTED_FRAME
-        IF (in_boosted_frame) parameters%v_prop = v_inject_s
+        IF (in_boosted_frame .AND. dir_index == 1) &
+            parameters%v_prop = v_inject_s
 #endif
 
         injector%dt_inject(ii,jj) = ABS(bdy_space) &
