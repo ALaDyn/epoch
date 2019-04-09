@@ -148,7 +148,7 @@ CONTAINS
     INTEGER(i8) :: i_sub, n_subs, last, link_to
     INTEGER(i8), DIMENSION(:), ALLOCATABLE :: els_to_allocate
     LOGICAL, INTENT(IN), OPTIONAL :: link_el_in, no_pad_store
-    INTEGER(i8), INTENT(IN), OPTIONAL :: live_state
+    INTEGER(i4), INTENT(IN), OPTIONAL :: live_state
     LOGICAL :: link_el
 
     !If sublists, need to deallocate any
@@ -241,8 +241,9 @@ CONTAINS
     TYPE(particle_sub_store), POINTER :: substore
     INTEGER(i8), INTENT(IN) :: total_size, link_upto_in
     TYPE(particle), POINTER, INTENT(IN), OPTIONAL :: link_to_particle
-    INTEGER(i8), INTENT(IN), OPTIONAL :: live_state
-    INTEGER(i8) :: link_upto, live_state_set
+    INTEGER(i4), INTENT(IN), OPTIONAL :: live_state
+    INTEGER(i8) :: link_upto
+    INTEGER(i4) :: live_state_set
     TYPE(particle), POINTER :: current, prev
     INTEGER(i8) :: i_part
 
@@ -641,7 +642,8 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL :: use_store_in, holds_copies, make_live
     LOGICAL :: use_store
     TYPE(particle), POINTER :: new_particle
-    INTEGER(i8) :: ipart, live_state
+    INTEGER(i8) :: ipart
+    INTEGER(i4) :: live_state
 
     IF(.NOT. PRESENT(use_store_in)) THEN
       use_store = .FALSE.
