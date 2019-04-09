@@ -139,7 +139,7 @@ CONTAINS
 
 
   SUBROUTINE create_particle_store(partlist, n_els_min, &
-      link_el_in, no_pad_store)
+      link_el_in, no_pad_store, live_state)
 
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
@@ -148,6 +148,7 @@ CONTAINS
     INTEGER(i8) :: i_sub, n_subs, last, link_to
     INTEGER(i8), DIMENSION(:), ALLOCATABLE :: els_to_allocate
     LOGICAL, INTENT(IN), OPTIONAL :: link_el_in, no_pad_store
+    INTEGER(i8), INTENT(IN), OPTIONAL :: live_state
     LOGICAL :: link_el
 
     !If sublists, need to deallocate any
@@ -187,7 +188,7 @@ CONTAINS
         IF(link_to > 0) link_to = last
       END IF
       CALL create_linked_substore(partlist%store, els_to_allocate(i_sub),&
-          link_to)
+          link_to, live_state=live_state)
     END DO
 
     ! Next slot is the first unlinked element. This is either the
@@ -234,13 +235,14 @@ CONTAINS
   ! should link onto (usually list%tail)
 
   SUBROUTINE create_linked_substore(store, total_size, link_upto_in, &
-      link_to_particle)
+      link_to_particle, live_state)
 
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: substore
     INTEGER(i8), INTENT(IN) :: total_size, link_upto_in
     TYPE(particle), POINTER, INTENT(IN), OPTIONAL :: link_to_particle
-    INTEGER(i8) :: link_upto
+    INTEGER(i8), INTENT(IN), OPTIONAL :: live_state
+    INTEGER(i8) :: link_upto, live_state_set
     TYPE(particle), POINTER :: current, prev
     INTEGER(i8) :: i_part
 
@@ -249,6 +251,12 @@ CONTAINS
 
     link_upto = link_upto_in
     IF(link_upto > total_size) link_upto = total_size
+
+    ! Default to pseudo-live - allocated but not populated. Can override
+    live_state_set = -1
+    IF(PRESENT(live_state)) THEN
+      live_state_set = live_state
+    END IF
 
     !Allocate substore object
     ALLOCATE(substore)
@@ -285,7 +293,7 @@ CONTAINS
             substore%store(i_part)%next)
       END IF
       !Set not-live state
-      substore%store(i_part)%live = -1 ! Pseudo-live but not yet populated
+      substore%store(i_part)%live = live_state_set
     END DO
 
     ! Correct links for 0th and n_elements-th particles
@@ -626,14 +634,14 @@ CONTAINS
 
 
   SUBROUTINE create_allocated_partlist(partlist, n_elements, use_store_in, &
-      holds_copies)
+      holds_copies, make_live)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     INTEGER(i8), INTENT(IN) :: n_elements
-    LOGICAL, INTENT(IN), OPTIONAL :: use_store_in, holds_copies
+    LOGICAL, INTENT(IN), OPTIONAL :: use_store_in, holds_copies, make_live
     LOGICAL :: use_store
     TYPE(particle), POINTER :: new_particle
-    INTEGER(i8) :: ipart
+    INTEGER(i8) :: ipart, live_state
 
     IF(.NOT. PRESENT(use_store_in)) THEN
       use_store = .FALSE.
@@ -641,14 +649,21 @@ CONTAINS
       use_store = use_store_in
     END IF
 
+    ! Default to pseudo-live - allocated but not populated. Can override
+    live_state = -1
+    IF(PRESENT(make_live)) THEN
+      IF (make_live) live_state = 1
+    END IF
+
     IF (use_store) THEN
-      CALL create_particle_store(partlist, n_elements)
+      CALL create_particle_store(partlist, n_elements, live_state=live_state)
       partlist%count = n_elements
     ELSE
       CALL create_empty_partlist(partlist, holds_copies=holds_copies)
 
       DO ipart = 0, n_elements-1
         CALL create_particle(new_particle)
+        new_particle%live = live_state
         CALL add_particle_to_partlist(partlist, new_particle)
         NULLIFY(new_particle)
       END DO
@@ -1003,7 +1018,6 @@ CONTAINS
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
     IF( .NOT. ASSOCIATED(a_particle)) RETURN
     IF( a_particle%live /= 1) RETURN
-
 
     IF (PRESENT(fromstore_in)) THEN
       fromstore = fromstore_in

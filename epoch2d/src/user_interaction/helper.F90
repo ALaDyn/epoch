@@ -511,7 +511,7 @@ CONTAINS
         create_allocated_partlist(partlist, num_new_particles, &
         use_store_in=use_store_default)
     ELSE
-      CALL create_empty_partlist(partlist)
+      CALL create_empty_partlist(partlist, use_store_in=use_store_default)
     END IF
     !Now have a store with at least one chunk of memory allocated
     !And all linking etc is done
@@ -885,7 +885,7 @@ CONTAINS
 
       ! Just to be sure
       CALL destroy_partlist(partlist)
-      CALL create_empty_partlist(partlist)
+      CALL create_empty_partlist(partlist, use_store_in=use_store_default)
 
       ! MPI read files
       part_count = load_1d_real_array(curr_loader%x_data, xbuf, &
