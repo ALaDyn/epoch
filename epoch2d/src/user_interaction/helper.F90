@@ -975,8 +975,7 @@ CONTAINS
 #endif
 
       DO read_count = 1, part_count
-        CALL create_particle(new_particle)
-        CALL add_particle_to_partlist(partlist, new_particle)
+        CALL create_particle_in_list(new_particle, partlist)
 
         ! Insert data to particle
         new_particle%part_pos(1) = xbuf(read_count)
