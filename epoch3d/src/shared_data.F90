@@ -825,11 +825,14 @@ MODULE shared_data
   ! the input deck.
   ! x_grid_min is the location of x(1). Since the grid is cell-centred,
   ! this is usually at x_min + dx/2.
+  ! x_min_deck is the minimum x value that was specified in the deck
+  ! and is not overwritten during restart
   ! If CPML boundaries are used then the whole grid is shifted along by
   ! cpml_thicknes cells and then x(1) (and also x_grid_min) is at
   ! the location x_min + dx*(1/2-cpml_thickness)
   REAL(num) :: length_x, dx, x_grid_min, x_grid_max, x_min, x_max
   REAL(num) :: x_grid_min_local, x_grid_max_local, x_min_local, x_max_local
+  REAL(num) :: x_min_deck
   REAL(num) :: length_y, dy, y_grid_min, y_grid_max, y_min, y_max
   REAL(num) :: y_grid_min_local, y_grid_max_local, y_min_local, y_max_local
   REAL(num) :: length_z, dz, z_grid_min, z_grid_max, z_min, z_max
@@ -893,8 +896,9 @@ MODULE shared_data
     REAL(num) :: lorentz_gamma = 1.0_num
     REAL(num) :: beta = 0.0_num
   END TYPE boost_info_object
+  LOGICAL :: restart_in_boosted_frame = .FALSE., use_boosted_frame = .FALSE.
 #ifdef BOOSTED_FRAME
-  LOGICAL :: use_boosted_frame = .FALSE., in_boosted_frame = .FALSE.
+  LOGICAL :: in_boosted_frame = .FALSE.
   TYPE(boost_info_object), SAVE :: global_boost_info
 #endif
 

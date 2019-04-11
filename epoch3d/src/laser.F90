@@ -41,6 +41,7 @@ CONTAINS
     laser%t_start = 0.0_num
     laser%t_end = t_end
     laser%kx_mult = 0.0_num
+    laser%initial_pos = 0.0_num
 
     NULLIFY(laser%profile)
     NULLIFY(laser%phase)
@@ -69,14 +70,25 @@ CONTAINS
   SUBROUTINE setup_laser_phases(laser_init, phases)
 
     TYPE(laser_block), POINTER :: laser_init
-    REAL(num), DIMENSION(:), INTENT(IN) :: phases
+    REAL(num), DIMENSION(:, :, :), INTENT(IN) :: phases
     TYPE(laser_block), POINTER :: laser
+    INTEGER, DIMENSION(3) :: sizes
+    INTEGER, DIMENSION(2,2) :: array_range, section
     INTEGER :: ilas
 
     ilas = 1
     laser => laser_init
+    sizes = SHAPE(phases)
     DO WHILE(ASSOCIATED(laser))
-      laser%current_integral_phase = phases(ilas)
+      IF (sizes(1) == 1) THEN
+        laser%current_integral_phase = phases(:,:, ilas)
+      ELSE
+        array_range = get_boundary_range(laser%boundary, &
+            global_range = section, ghosts = .FALSE.)
+        laser%current_integral_phase(array_range(1,1):array_range(2,1), &
+            array_range(1,2):array_range(2,2)) = &
+            phases(section(1,1):section(2,1),section(1,2):section(2,2),ilas)
+      END IF
       ilas = ilas + 1
       laser => laser%next
     END DO
@@ -392,7 +404,7 @@ CONTAINS
     IF (laser%omega_func_type == c_of_freq) &
         laser%omega = 2.0_num * pi * laser%omega
     IF (laser%omega_func_type == c_of_lambda) &
-        laser%omega = 2.0_num * pi * c / laser%omega
+        laser%omega = 2.0_num * pi * c / MAX(laser%omega, c_tiny* 1e4)
 
     laser%k = 0.0_num
 
@@ -573,17 +585,34 @@ CONTAINS
 
 
 
-  FUNCTION get_boundary_range(boundary)
+  FUNCTION get_boundary_range(boundary, global_range, ghosts)
     INTEGER, INTENT(IN) :: boundary
+    INTEGER, DIMENSION(2,2), INTENT(OUT), OPTIONAL :: global_range
+    LOGICAL, INTENT(IN), OPTIONAL :: ghosts
     INTEGER, DIMENSION(2,2) :: get_boundary_range
+    INTEGER :: ngl
+
+    ngl = ng
+    IF (PRESENT(ghosts)) THEN
+      IF (.NOT. ghosts) ngl = 0
+    END IF
  
-     IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
-      get_boundary_range = RESHAPE([1-ng, ny+ng, 1-ng, nz+ng],[2,2])
-     ELSE IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
-      get_boundary_range = RESHAPE([1-ng, nx+ng, 1-ng, nz+ng],[2,2])
-     ELSE IF (boundary == c_bd_z_min .OR. boundary == c_bd_z_max) THEN
-      get_boundary_range = RESHAPE([1-ng, ny+ng, 1-ng, nz+ng],[2,2])
-     END IF
+    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
+      get_boundary_range = RESHAPE([1-ngl, ny+ngl, 1-ngl, nz+ngl],[2,2])
+      IF (PRESENT(global_range)) &
+          global_range = RESHAPE([ny_global_min-ngl, ny_global_max+ngl, &
+          nz_global_min-ngl, nz_global_max+ngl],[2,2])
+    ELSE IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
+      get_boundary_range = RESHAPE([1-ngl, nx+ngl, 1-ngl, nz+ngl],[2,2])
+      IF (PRESENT(global_range)) &
+          global_range = RESHAPE([nx_global_min-ngl, nx_global_max+ngl, &
+          nz_global_min-ngl, nz_global_max+ngl],[2,2])
+    ELSE IF (boundary == c_bd_z_min .OR. boundary == c_bd_z_max) THEN
+      get_boundary_range = RESHAPE([1-ngl, ny+ngl, 1-ngl, nz+ngl],[2,2])
+      IF (PRESENT(global_range)) &
+          global_range = RESHAPE([nx_global_min-ngl, nx_global_max+ngl, &
+          ny_global_min-ngl, ny_global_max+ngl],[2,2])
+    END IF
  
   END FUNCTION get_boundary_range
 
@@ -703,10 +732,10 @@ CONTAINS
           DO j = 1,nz
           DO i = 1,ny
             base = t_env * current%profile(i,j) &
-                * SIN(current%current_integral_phase(i,j) + current%phase(i,j) &
-                - current%k(i, j, 1) * (x(laserpos-1)-current%initial_pos(1)) &
-                - current%k(i, j, 2) * (y(i)-current%initial_pos(2)) &
-                - current%k(i, j, 3) * (z(j)-current%initial_pos(3)))
+                * SIN(current%current_integral_phase(i,j) + current%phase(i,j))! &
+!                - current%k(i, j, 1) * (x(laserpos-1)-current%initial_pos(1)) &
+!                - current%k(i, j, 2) * (y(i)-current%initial_pos(2)))! &
+!                - current%k(i, j, 3) * (z(j)-current%initial_pos(3)))
             source1(i,j) = source1(i,j) + base * COS(current%pol_angle)
             source2(i,j) = source2(i,j) + base * SIN(current%pol_angle)
           END DO

@@ -89,7 +89,8 @@ ifeq ($(strip $(COMPILER)),gfortran)
     FFLAGS = -O0 -g -std=f2003 -Wall -Wextra -pedantic -Wno-unused-parameter \
              -Wno-unused-dummy-argument -Wno-integer-division \
              -ffree-line-length-80 -fcheck=all -fbacktrace -Werror \
-             -ffpe-trap=invalid,zero,overflow -fbounds-check
+             -fbounds-check
+#             -ffpe-trap=invalid,zero,overflow -fbounds-check
     #FFLAGS += -ffpe-trap=underflow,denormal
 
     # gfortran-4.3
@@ -258,7 +259,7 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)NO_MPI3
 
 #Enable boosted frame
-DEFINES += $(D)BOOSTED_FRAME
+#DEFINES += $(D)BOOSTED_FRAME
 
 # If you are having trouble compiling the encoded_source module or
 # don't want embedded source code in restart dumps, uncomment the

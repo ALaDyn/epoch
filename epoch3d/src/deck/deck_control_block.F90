@@ -213,6 +213,7 @@ CONTAINS
     ELSE IF (str_cmp(element, 'x_min') &
         .OR. str_cmp(element, 'x_start')) THEN
       x_min = as_real_print(value, element, errcode)
+      x_min_deck = x_min
       got_grid(1) = .TRUE.
 
     ELSE IF (str_cmp(element, 'x_max') &

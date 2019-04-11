@@ -258,7 +258,7 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)NO_MPI3
 
 #Enable boosted frame
-DEFINES += $(D)BOOSTED_FRAME
+#DEFINES += $(D)BOOSTED_FRAME
 
 # If you are having trouble compiling the encoded_source module or
 # don't want embedded source code in restart dumps, uncomment the

@@ -1029,6 +1029,29 @@ CONTAINS
         ELSE IF (str_cmp(block_id, 'x_grid_min')) THEN
           got_x_grid_min = .TRUE.
           CALL sdf_read_srl(sdf_handle, x_grid_min_val)
+        ELSE IF (str_cmp(block_id, 'in_boosted_frame')) THEN
+          CALL sdf_read_srl(sdf_handle, restart_in_boosted_frame)
+          IF (use_boosted_frame) THEN
+            IF (.NOT. restart_in_boosted_frame) THEN
+              IF (rank == 0) THEN
+                PRINT *, '*** WARNING ***'
+                PRINT *, 'Code is running in boosted frame mode but restart'
+                PRINT *, 'snapshot is not from a boosted frame simulation'
+                PRINT *, 'Restart will be frame transformed to boosted frame'
+                PRINT *, 'but this might be an error. Check restart file'
+              END IF
+            END IF
+          ELSE
+            IF (restart_in_boosted_frame) THEN
+              IF (rank == 0) THEN
+                PRINT *, '*** WARNING ***'
+                PRINT *, 'Code is not running in boosted frame mode but'
+                PRINT *, 'snapshot is from a boosted frame simulation'
+                PRINT *, 'Restart will be continued as a normal simulation'
+                PRINT *, 'but this might be an error. Check restart file'
+              END IF
+            END IF
+          END IF
         ELSE IF (block_id(1:7) == 'weight/') THEN
           CALL find_species_by_blockid(block_id, ispecies)
           IF (ispecies == 0) CYClE

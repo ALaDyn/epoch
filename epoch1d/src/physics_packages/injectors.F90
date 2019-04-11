@@ -38,6 +38,7 @@ CONTAINS
     injector%has_t_end = .FALSE.
     injector%density_min = 0.0_num
     injector%use_flux_injector = .FALSE.
+    injector%replenish = .FALSE.
 
     injector%depth = 1.0_num
     injector%dt_inject = -1.0_num

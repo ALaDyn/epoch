@@ -1205,6 +1205,29 @@ CONTAINS
         ELSE IF (str_cmp(block_id, 'z_grid_min')) THEN
           got_z_grid_min = .TRUE.
           CALL sdf_read_srl(sdf_handle, z_grid_min_val)
+        ELSE IF (str_cmp(block_id, 'in_boosted_frame')) THEN
+          CALL sdf_read_srl(sdf_handle, restart_in_boosted_frame)
+          IF (use_boosted_frame) THEN
+            IF (.NOT. restart_in_boosted_frame) THEN
+              IF (rank == 0) THEN
+                PRINT *, '*** WARNING ***'
+                PRINT *, 'Code is running in boosted frame mode but restart'
+                PRINT *, 'snapshot is not from a boosted frame simulation'
+                PRINT *, 'Restart will be frame transformed to boosted frame'
+                PRINT *, 'but this might be an error. Check restart file'
+              END IF
+            END IF
+          ELSE
+            IF (restart_in_boosted_frame) THEN
+              IF (rank == 0) THEN
+                PRINT *, '*** WARNING ***'
+                PRINT *, 'Code is not running in boosted frame mode but'
+                PRINT *, 'snapshot is from a boosted frame simulation'
+                PRINT *, 'Restart will be continued as a normal simulation'
+                PRINT *, 'but this might be an error. Check restart file'
+              END IF
+            END IF
+          END IF
         ELSE IF (block_id(1:7) == 'weight/') THEN
           CALL find_species_by_blockid(block_id, ispecies)
           IF (ispecies == 0) CYClE
@@ -1576,13 +1599,31 @@ CONTAINS
     INTEGER, INTENT(IN) :: ndims
     CHARACTER(LEN=*), INTENT(IN) :: block_id_compare
     CHARACTER(LEN=*), INTENT(IN) :: direction_name
-    REAL(num), DIMENSION(:), ALLOCATABLE :: laser_phases
+    REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: laser_phases
     INTEGER, DIMENSION(4) :: dims
+    LOGICAL :: mismatch
 
     IF (str_cmp(block_id_in, block_id_compare)) THEN
       CALL sdf_read_array_info(sdf_handle, dims)
 
-      IF (ndims /= 1 .OR. dims(1) /= laser_count) THEN
+      mismatch = .FALSE.
+      IF (ndims == 1) THEN
+        IF(dims(1) /= laser_count) THEN
+          mismatch = .TRUE.
+        END IF
+        ALLOCATE(laser_phases(1, 1, dims(1)))
+      ELSE IF (ndims == 3) THEN
+        IF(dims(3) /= laser_count) THEN
+          mismatch = .TRUE.
+        END IF
+        ALLOCATE(laser_phases(dims(1), dims(2), dims(3)))
+      ELSE IF (rank == 0) THEN
+        PRINT *,'*** ERROR ***'
+        PRINT *,'Laser phases cannot be interpreted'
+        CALL abort_code(c_err_io_error)
+      END IF
+
+      IF (mismatch .AND. rank == 0) THEN
         PRINT*, '*** WARNING ***'
         PRINT*, 'Number of laser phases on ', TRIM(direction_name), &
             ' does not match number of lasers.'
@@ -1590,7 +1631,6 @@ CONTAINS
             'is not guaranteed'
       END IF
 
-      ALLOCATE(laser_phases(dims(1)))
       CALL sdf_read_srl(sdf_handle, laser_phases)
       CALL setup_laser_phases(laser_base_pointer, laser_phases)
       DEALLOCATE(laser_phases)

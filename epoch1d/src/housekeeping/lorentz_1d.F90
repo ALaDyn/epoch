@@ -260,7 +260,8 @@ MODULE lorentz
     TYPE(boost_info_object), INTENT(IN) :: boost_info
     REAL(num), DIMENSION(3), INTENT(IN) :: p
     LOGICAL, INTENT(IN), OPTIONAL :: inverse
-    REAL(num), INTENT(IN), OPTIONAL :: energy, mass
+    REAL(num), INTENT(IN), OPTIONAL :: mass
+    REAL(num), INTENT(INOUT), OPTIONAL :: energy
     REAL(num), DIMENSION(3) :: transform_momentum
     REAL(num), DIMENSION(2) :: four_p
     REAL(num) :: energy_c
@@ -279,6 +280,8 @@ MODULE lorentz
     four_p = transform_four_vector(boost_info, four_p, inverse)
 
     transform_momentum = [four_p(2), p(2), p(3)]
+
+    IF (PRESENT(energy)) energy = four_p(1) * c
 
   END FUNCTION transform_momentum
 

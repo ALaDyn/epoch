@@ -196,6 +196,11 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'replenish')) THEN
+      working_injector%replenish = as_logical_print(value, element, errcode)
+      RETURN
+    END IF
+
     errcode = c_err_unknown_element
 
   END FUNCTION injector_block_handle_element
@@ -206,7 +211,7 @@ CONTAINS
 
     INTEGER :: errcode
     TYPE(injector_block), POINTER :: current
-    INTEGER :: error, io, iu
+    INTEGER :: error, io, iu, idir
 
     use_injectors = .FALSE.
 
@@ -215,7 +220,20 @@ CONTAINS
     current => injector_x_min
     DO WHILE(ASSOCIATED(current))
       IF (current%species == -1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error, 2)
+      IF (error == 0 .AND. current%replenish) THEN
+        CALL copy_stack(species_list(current%species)%density_function, &
+            current%density_function)
+        DO idir = 1, 3
+          CALL copy_stack(&
+              species_list(current%species)%temperature_function(idir), &
+              current%temperature_function(idir))
+          CALL copy_stack(&
+              species_list(current%species)%drift_function(idir), &
+              current%drift_function(idir))
+        END DO
+      END IF
+      IF (.NOT. current%density_function%init) &
+          error = IOR(error, 2)
       IF (error == 0) use_injectors = .TRUE.
       current => current%next
     END DO
@@ -223,7 +241,20 @@ CONTAINS
     current => injector_x_max
     DO WHILE(ASSOCIATED(current))
       IF (current%species == -1) error = IOR(error, 1)
-      IF (.NOT. current%density_function%init) error = IOR(error, 2)
+      IF (error == 0 .AND. current%replenish) THEN
+        CALL copy_stack(species_list(current%species)%density_function, &
+            current%density_function)
+        DO idir = 1, 3
+          CALL copy_stack(&
+              species_list(current%species)%temperature_function(idir), &
+              current%temperature_function(idir))
+          CALL copy_stack(&
+              species_list(current%species)%drift_function(idir), &
+              current%drift_function(idir))
+        END DO
+      END IF
+      IF (.NOT. current%density_function%init) &
+          error = IOR(error, 2)
       IF (error == 0) use_injectors = .TRUE.
       current => current%next
     END DO

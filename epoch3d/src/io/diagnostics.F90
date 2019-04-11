@@ -426,24 +426,34 @@ CONTAINS
         CALL sdf_write_srl(sdf_handle, 'x_grid_min', &
             'Minimum grid position', x_grid_min)
 
+#ifdef BOOSTED_FRAME
+        CALL sdf_write_srl(sdf_handle, 'run_boosted_frame', &
+            'Output from run in boosted frame?', in_boosted_frame)
+
+        CALL sdf_write_srl(sdf_handle, 'in_boosted_frame', &
+            'Output in boosted frame?', &
+            in_boosted_frame .AND. prefix_boosts(iprefix)%frame &
+            == c_frame_boost)
+#endif
+
         CALL write_laser_phases(sdf_handle, n_laser_x_min, laser_x_min, &
-            'laser_x_min_phase', [ny,nz], [ny_global_min, nz_global_min], &
-            .NOT. x_min_boundary)
+            'laser_x_min_phase', [ny_global,nz_global], &
+            [ny_global_min, nz_global_min], .NOT. x_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
-            'laser_x_max_phase', [ny,nz], [ny_global_min, nz_global_min], & 
-            .NOT. x_max_boundary)
+            'laser_x_max_phase', [ny_global,nz_global], &
+            [ny_global_min, nz_global_min], .NOT. x_max_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_min, laser_y_min, &
-            'laser_y_min_phase', [nx,nz], [nx_global_min, nz_global_min], & 
-            .NOT. y_min_boundary)
+            'laser_y_min_phase', [nx_global,nz_global], &
+            [nx_global_min, nz_global_min], .NOT. y_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_y_max, laser_y_max, &
-            'laser_y_max_phase', [nx,nz], [nx_global_min, nz_global_min], & 
-            .NOT. y_max_boundary)
+            'laser_y_max_phase', [nx_global,nz_global], &
+            [nx_global_min, nz_global_min], .NOT. y_max_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_z_min, laser_z_min, &
-            'laser_z_min_phase', [nx,ny], [nx_global_min, ny_global_min], &
-            .NOT. z_min_boundary)
+            'laser_z_min_phase', [nx_global,ny_global], &
+            [nx_global_min, ny_global_min], .NOT. z_min_boundary)
         CALL write_laser_phases(sdf_handle, n_laser_z_max, laser_z_max, &
-            'laser_z_max_phase', [nx,ny], [nx_global_min, ny_global_min], &
-            .NOT. z_max_boundary)
+            'laser_z_max_phase', [nx_global,ny_global], &
+            [nx_global_min, ny_global_min], .NOT. z_max_boundary)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
@@ -793,15 +803,17 @@ CONTAINS
                   next_dump(current_rec), inverse = .TRUE.)
             END DO
             CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid', 'Grid/Grid', &
-                xb_transform, yb_global(1:ny_global+1), convert)
+                xb_transform, yb_global(1:ny_global+1), &
+                zb_global(1:nz_global+1), convert)
             CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid_boost', &
                 'Grid/Grid_Boost', xb_global(1:nx_global+1), &
-                yb_global(1:ny_global+1), convert)
+                yb_global(1:ny_global+1), zb_global(1:nz_global+1), convert)
             DEALLOCATE(xb_transform)
           ELSE
 #endif
             CALL sdf_write_srl_plain_mesh(sdf_handle, 'grid', 'Grid/Grid', &
-                xb_global(1:nx_global+1), yb_global(1:ny_global+1), convert)
+                xb_global(1:nx_global+1), yb_global(1:ny_global+1), &
+                zb_global(1:nz_global+1), convert)
 #ifdef BOOSTED_FRAME
           END IF
 #endif
@@ -1080,10 +1092,12 @@ CONTAINS
     LOGICAL, INTENT(IN) :: null_write
     REAL(num), DIMENSION(:,:,:), ALLOCATABLE :: laser_phases
     INTEGER :: ilas
+    INTEGER, DIMENSION(2) :: sz
     TYPE(laser_block), POINTER :: current_laser
 
     IF (laser_count > 0) THEN
-      ALLOCATE(laser_phases(n_global(1), n_global(2), laser_count))
+      sz = SHAPE(laser_base_pointer%current_integral_phase)
+      ALLOCATE(laser_phases(sz(1), sz(2), laser_count))
       ilas = 1
       current_laser => laser_base_pointer
 

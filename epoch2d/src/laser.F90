@@ -70,14 +70,23 @@ CONTAINS
   SUBROUTINE setup_laser_phases(laser_init, phases)
 
     TYPE(laser_block), POINTER :: laser_init
-    REAL(num), DIMENSION(:), INTENT(IN) :: phases
+    REAL(num), DIMENSION(1-ng:,:), INTENT(IN) :: phases
     TYPE(laser_block), POINTER :: laser
+    INTEGER, DIMENSION(2) :: sizes, array_range, section
     INTEGER :: ilas
 
     ilas = 1
     laser => laser_init
+    sizes = SHAPE(phases)
     DO WHILE(ASSOCIATED(laser))
-      laser%current_integral_phase = phases(ilas)
+      IF (sizes(1) == 1) THEN
+        laser%current_integral_phase = phases(:,ilas)
+      ELSE
+        array_range = get_boundary_range(laser%boundary, &
+            global_range = section, ghosts = .FALSE.)
+        laser%current_integral_phase(array_range(1):array_range(2)) = &
+            phases(section(1):section(2),ilas)
+      END IF
       ilas = ilas + 1
       laser => laser%next
     END DO
@@ -477,17 +486,29 @@ CONTAINS
 
 
 
-  FUNCTION get_boundary_range(boundary)
+  FUNCTION get_boundary_range(boundary, global_range, ghosts)
     INTEGER, INTENT(IN) :: boundary
+    INTEGER, DIMENSION(2), INTENT(OUT), OPTIONAL :: global_range
+    LOGICAL, INTENT(IN), OPTIONAL :: ghosts
     INTEGER, DIMENSION(2) :: get_boundary_range
+    INTEGER :: ngl
 
-    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
-      get_boundary_range = [1-ng, ny+ng]
-    ELSE IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
-      get_boundary_range = [1-ng, nx+ng]
+    ngl = ng
+    IF (PRESENT(ghosts)) THEN
+      IF (.NOT. ghosts) ngl = 0
     END IF
 
-  END FUNCTION
+    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
+      get_boundary_range = [1-ngl, ny+ngl]
+      IF (PRESENT(global_range)) &
+          global_range = [ny_global_min-ngl, ny_global_max+ngl]
+    ELSE IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
+      get_boundary_range = [1-ngl, nx+ngl]
+      IF (PRESENT(global_range)) &
+          global_range = [nx_global_min-ngl, nx_global_max+ngl]
+    END IF
+
+  END FUNCTION get_boundary_range
 
 
 
