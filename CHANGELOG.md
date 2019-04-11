@@ -1,3 +1,14 @@
+## v4.16.0 to v4.17.0
+
+ * Added volume correction sampling Zenitani 2015 DOI 10.1063/1.4919383
+
+ * Added diagnostic for the average particle momentum per cell. This adds
+   the flags "average_p{x,y,z}" to the output block.
+
+ * Added low temperature correction to the Nanbu collision algorithm
+   (Pérez 2012 DOI 10.1063/1.4742167)
+
+
 ## v4.15.0 to v4.16.0
 
  * Replaced USE_ISATTY compiler flag with NO_USE_ISATTY
@@ -25,6 +36,10 @@
      - number_density_min for density_min
      - number_density_max for density_max
      - number_density_back for density_back
+
+ * Added a "zero_current" alias for "tracer" in the species blocks. The use of
+   "tracer" has now been deprecated and will be removed in version 5.0.
+   At that time, the compiler flag will also be renamed.
 
 
 ## v4.14.0 to v4.15.0 (2019-01-15)

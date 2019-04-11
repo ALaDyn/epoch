@@ -636,6 +636,15 @@ CONTAINS
     ELSE IF (str_cmp(element, 'average_weight')) THEN
       elementselected = c_dump_average_weight
 
+    ELSE IF (str_cmp(element, 'average_px')) THEN
+      elementselected = c_dump_average_px
+
+    ELSE IF (str_cmp(element, 'average_py')) THEN
+      elementselected = c_dump_average_py
+
+    ELSE IF (str_cmp(element, 'average_pz')) THEN
+      elementselected = c_dump_average_pz
+
     ELSE IF (str_cmp(element, 'temperature')) THEN
       elementselected = c_dump_temperature
 
@@ -795,6 +804,9 @@ CONTAINS
         IF (mask_element == c_dump_number_density) bad = .FALSE.
         IF (mask_element == c_dump_ppc) bad = .FALSE.
         IF (mask_element == c_dump_average_weight) bad = .FALSE.
+        IF (mask_element == c_dump_average_px) bad = .FALSE.
+        IF (mask_element == c_dump_average_py) bad = .FALSE.
+        IF (mask_element == c_dump_average_pz) bad = .FALSE.
         IF (mask_element == c_dump_temperature) bad = .FALSE.
         IF (mask_element == c_dump_temperature_x) bad = .FALSE.
         IF (mask_element == c_dump_temperature_y) bad = .FALSE.
@@ -814,6 +826,8 @@ CONTAINS
           END IF
           mask = IAND(mask, NOT(c_io_species))
           mask = IOR(mask, c_io_no_sum)
+          IF (mask_element == c_dump_poynt_flux) &
+              mask = IAND(mask, NOT(c_io_no_sum))
         END IF
       END IF
 
@@ -840,6 +854,9 @@ CONTAINS
         IF (mask_element == c_dump_number_density) bad = .FALSE.
         IF (mask_element == c_dump_ppc) bad = .FALSE.
         IF (mask_element == c_dump_average_weight) bad = .FALSE.
+        IF (mask_element == c_dump_average_px) bad = .FALSE.
+        IF (mask_element == c_dump_average_py) bad = .FALSE.
+        IF (mask_element == c_dump_average_pz) bad = .FALSE.
         IF (mask_element == c_dump_temperature) bad = .FALSE.
         IF (mask_element == c_dump_temperature_x) bad = .FALSE.
         IF (mask_element == c_dump_temperature_y) bad = .FALSE.
