@@ -1034,6 +1034,23 @@ CONTAINS
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
+#ifdef BOOSTED_FRAME
+                IF (in_boosted_frame) THEN
+#ifdef PHOTONS
+                  IF (species_list(ispecies)%species_type &
+                      /= c_species_id_photon) THEN
+#endif
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, mass = species_list(ispecies)%mass)
+#ifdef PHOTONS
+                  ELSE
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, energy = cur%energy)
+                  END IF
+#endif
+                END IF
+#endif
+
                 cur%part_pos(1) = 2.0_num * x_min_outer - part_pos
 
               ELSE
@@ -1110,6 +1127,23 @@ CONTAINS
                 i = 3
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
+
+#ifdef BOOSTED_FRAME
+                IF (in_boosted_frame) THEN
+#ifdef PHOTONS
+                  IF (species_list(ispecies)%species_type &
+                      /= c_species_id_photon) THEN
+#endif
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, mass = species_list(ispecies)%mass)
+#ifdef PHOTONS
+                  ELSE
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, energy = cur%energy)
+                  END IF
+#endif
+                END IF
+#endif
 
                 cur%part_pos(1) = 2.0_num * x_max_outer - part_pos
 
@@ -1189,6 +1223,23 @@ CONTAINS
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
 
+#ifdef BOOSTED_FRAME
+                IF (in_boosted_frame) THEN
+#ifdef PHOTONS
+                  IF (species_list(ispecies)%species_type &
+                      /= c_species_id_photon) THEN
+#endif
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, mass = species_list(ispecies)%mass)
+#ifdef PHOTONS
+                  ELSE
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, energy = cur%energy)
+                  END IF
+#endif
+                END IF
+#endif
+
                 cur%part_pos(2) = 2.0_num * y_min_outer - part_pos
 
               ELSE
@@ -1265,6 +1316,23 @@ CONTAINS
                 i = 3
                 cur%part_p(i) = momentum_from_temperature(&
                     species_list(ispecies)%mass, temp(i), 0.0_num)
+
+#ifdef BOOSTED_FRAME
+                IF (in_boosted_frame) THEN
+#ifdef PHOTONS
+                  IF (species_list(ispecies)%species_type &
+                      /= c_species_id_photon) THEN
+#endif
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, mass = species_list(ispecies)%mass)
+#ifdef PHOTONS
+                  ELSE
+                    cur%part_p = transform_momentum(global_boost_info, &
+                        cur%part_p, energy = cur%energy)
+                  END IF
+#endif
+                END IF
+#endif
 
                 cur%part_pos(2) = 2.0_num * y_max_outer - part_pos
 
