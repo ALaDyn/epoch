@@ -38,7 +38,7 @@ CONTAINS
     injector%has_t_end = .FALSE.
     injector%density_min = 0.0_num
     injector%use_flux_injector = .FALSE.
-    injector%replenish = .FALSE.
+    injector%user_specified = .TRUE.
 
     injector%depth = 1.0_num
     injector%dt_inject = -1.0_num
@@ -71,6 +71,8 @@ CONTAINS
     TYPE(injector_block), POINTER :: list
     TYPE(injector_block), POINTER :: injector
     TYPE(injector_block), POINTER :: current
+
+    NULLIFY(injector%next)
 
     IF (ASSOCIATED(list)) THEN
       current => list
@@ -282,8 +284,15 @@ CONTAINS
 
       DO idir = 1, 3
         IF (flux_fn) THEN
-          new%part_p(idir) = flux_momentum_from_temperature(mass, &
-              temperature(idir), drift(idir)) * dir_mult(idir)
+          IF (ABS(drift(idir)) > c_tiny) THEN
+            ! Drift is signed - we divide by dir_mult to get the inwards
+            ! drift and multiply final mom to be inwards too
+            new%part_p(idir) = drifting_flux_momentum_from_temperature(&
+                mass, temperature(idir), drift(idir))
+          ELSE
+            new%part_p(idir) = flux_momentum_from_temperature(mass, &
+                temperature(idir), drift(idir)) * dir_mult(idir)
+          END IF
         ELSE
           new%part_p(idir) = momentum_from_temperature(mass, &
               temperature(idir), drift(idir))
