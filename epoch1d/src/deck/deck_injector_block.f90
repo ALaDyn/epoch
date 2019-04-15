@@ -206,7 +206,7 @@ CONTAINS
 
     INTEGER :: errcode
     TYPE(injector_block), POINTER :: current
-    INTEGER :: error, io, iu, idir
+    INTEGER :: error, io, iu
 
     use_injectors = .FALSE.
 
