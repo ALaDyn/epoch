@@ -1924,10 +1924,9 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle_sub_store), POINTER :: current, next
-    INTEGER(i8) :: length, st
+    INTEGER(i8) :: st
 
     current => list%store%head
-    length = 0
     st = 0
     !Do nothing if only one sub
     IF (.NOT. ASSOCIATED(current%next)) RETURN
@@ -1958,17 +1957,12 @@ CONTAINS
           !Is tail of list
           list%store%tail => current%prev
         END IF
-
+        list%store%total_length = list%store%total_length - current%length
         DEALLOCATE(current)
         list%store%n_subs = list%store%n_subs - 1
-      ELSE
-        length = length + current%length
       END IF
       current => next
     END DO
-
-    !Set total_length to sum of remaining stores
-    list%store%total_length = length
 
   END SUBROUTINE remove_empty_subs
 
