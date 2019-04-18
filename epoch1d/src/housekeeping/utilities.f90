@@ -25,7 +25,7 @@ MODULE utilities
   END INTERFACE grow_array
 
   PRIVATE
-  PUBLIC :: abort_code, grow_array
+  PUBLIC :: abort_code, abort_with_trace, grow_array
 
 CONTAINS
 
@@ -275,5 +275,20 @@ CONTAINS
     CALL MPI_ABORT(MPI_COMM_WORLD, newcode, ierr)
 
   END SUBROUTINE abort_code
+
+
+
+  SUBROUTINE abort_with_trace(errcode)
+
+    USE mpi
+
+    INTEGER, INTENT(IN) :: errcode
+    INTEGER :: newcode, ierr
+
+    PRINT*, errcode
+    newcode = INT(SQRT(REAL(-1*errcode)))
+    CALL MPI_ABORT(MPI_COMM_WORLD, errcode, ierr)
+
+  END SUBROUTINE abort_with_trace
 
 END MODULE utilities

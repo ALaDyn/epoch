@@ -159,6 +159,9 @@ CONTAINS
     IF (dlb_maximum_interval < 1) dlb_maximum_interval = HUGE(1)
     IF (dlb_force_interval < 1) dlb_force_interval = HUGE(1)
 
+    IF (fill_factor < 0) fill_factor = 0.0_num
+    IF (fill_factor > 0.999_num) fill_factor = 0.999_num
+
   END SUBROUTINE control_deck_finalise
 
 
@@ -416,6 +419,21 @@ CONTAINS
 
     ELSE IF (str_cmp(element, 'use_more_setup_memory')) THEN
       use_more_setup_memory = as_logical_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'use_backing_stores')) THEN
+      use_store_default = as_logical_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'backing_store_debug')) THEN
+      store_debug = as_logical_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'backing_store_chunk_size')) THEN
+      sublist_size = as_integer_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'backing_store_fill_fac')) THEN
+      fill_factor = as_real_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'backing_store_alt')) THEN
+      fold_compact = as_logical_print(value, element, errcode)
 
     ELSE
       errcode = c_err_unknown_element

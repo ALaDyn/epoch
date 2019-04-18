@@ -1047,7 +1047,8 @@ CONTAINS
       species => species_list(ispecies)
       npart_local = npart_locals(ispecies)
 
-      CALL create_allocated_partlist(species%attached_list, npart_local)
+      CALL create_allocated_partlist(species%attached_list, &
+          npart_local, use_store_in=use_store_default, make_live = .TRUE.)
 
       npart_global = npart_global + nparts(ispecies)
       species%count = nparts(ispecies)
