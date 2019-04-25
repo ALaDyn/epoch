@@ -39,7 +39,7 @@ MODULE diagnostics
 
   PRIVATE
 
-  PUBLIC :: output_routines, create_full_timestring
+  PUBLIC :: output_routines, create_full_timestring, print_timing_breakdown
   PUBLIC :: cleanup_stop_files, check_for_stop_condition
   PUBLIC :: deallocate_file_list, count_n_zeros
   PUBLIC :: build_persistent_subsets
@@ -251,7 +251,7 @@ CONTAINS
       IF (rank == 0 .AND. stdout_frequency > 0 &
           .AND. MOD(step, stdout_frequency) == 0) THEN
         timer_walltime = MPI_WTIME()
-        elapsed_time = timer_walltime - walltime_started
+        elapsed_time = timer_walltime - walltime_core_start
 
         IF (reset_walltime) THEN
           CALL create_timestring(elapsed_time, timestring)
@@ -404,7 +404,7 @@ CONTAINS
           cell_x_max)
 
       timer_walltime = MPI_WTIME()
-      elapsed_time = old_elapsed_time + timer_walltime - walltime_started
+      elapsed_time = old_elapsed_time + timer_walltime - walltime_core_start
       CALL sdf_write_srl(sdf_handle, 'elapsed_time', 'Wall-time', elapsed_time)
 
       file_numbers(iprefix) = file_numbers(iprefix) + 1
@@ -3075,6 +3075,41 @@ CONTAINS
 
 
 
+  SUBROUTINE print_timing_breakdown(t_init, t_fsolve, t_ppush, t_io, t_core, &
+      t_total)
+    REAL(num), INTENT(IN) :: t_init, t_fsolve, t_ppush, t_io, t_core, t_total
+    REAL(num) :: t_other
+    CHARACTER(LEN=48) :: s_init, s_fsolve, s_ppush, s_io, s_core, s_total, &
+      s_other
+
+    t_other = t_total - (t_init + t_fsolve + t_ppush + t_io)
+    CALL create_timestring(t_init  , s_init)
+    CALL create_timestring(t_fsolve, s_fsolve)
+    CALL create_timestring(t_ppush , s_ppush)
+    CALL create_timestring(t_io    , s_io)
+    CALL create_timestring(t_other , s_other)
+    CALL create_timestring(t_core  , s_core)
+    CALL create_full_timestring(t_total , s_total)
+
+    WRITE(*,*) 'Core execution complete. Timing breakdown:'
+    WRITE(*, '(''   Initialisation  : '',a , ''  ('', F7.3, ''%) '')') &
+          TRIM(ADJUSTL(s_init)),   t_init/t_total*100.0_num
+    WRITE(*, '(''     Field solve   : '',a , ''  ('', F7.3, ''%) '')') &
+          TRIM(ADJUSTL(s_fsolve)), t_fsolve/t_total*100.0_num
+    WRITE(*, '(''     Particle push : '',a , ''  ('', F7.3, ''%) '')') &
+          TRIM(ADJUSTL(s_ppush)),  t_ppush/t_total*100.0_num
+    WRITE(*, '(''     I/O           : '',a , ''  ('', F7.3, ''%) '')') &
+          TRIM(ADJUSTL(s_io)),     t_io/t_total*100.0_num
+    WRITE(*, '(''     Misc.         : '',a , ''  ('', F7.3, ''%) '')') &
+          TRIM(ADJUSTL(s_other)),  t_other/t_total*100.0_num
+    WRITE(*, '(''   Total core      : '',a , ''  ('', F7.3, ''%) '')') &
+          TRIM(ADJUSTL(s_core)),   t_core/t_total*100.0_num
+    WRITE(*,*) 'Final runtime of code = ' // TRIM(s_total)
+
+  END SUBROUTINE print_timing_breakdown
+
+
+
   SUBROUTINE cleanup_stop_files()
 
     INTEGER :: ierr
@@ -3130,7 +3165,7 @@ CONTAINS
       ! walltime as well
       IF (check_walltime) THEN
         IF (walltime < 0.0_num) walltime = MPI_WTIME()
-        IF (walltime - real_walltime_start >= stop_at_walltime) THEN
+        IF (walltime - walltime_program_start >= stop_at_walltime) THEN
           got_stop_condition = .TRUE.
           force_dump = .TRUE.
           PRINT*,'Stopping because "stop_at_walltime" has been exceeded.'
@@ -3219,7 +3254,7 @@ CONTAINS
 
     IF (walltime < 0) walltime = MPI_WTIME()
     IF ((walltime + timer_average(c_timer_step) + timer_average(c_timer_io) &
-        + timer_average(c_timer_balance) - real_walltime_start) &
+        + timer_average(c_timer_balance) - walltime_program_start) &
         < frac * stop_at_walltime) RETURN
 
     IF (rank == 0) THEN

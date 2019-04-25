@@ -976,12 +976,13 @@ MODULE shared_data
   INTEGER(i4) :: run_date
   INTEGER(i8) :: defines
 
-  REAL(num) :: walltime_started, real_walltime_start
+  REAL(num) :: walltime_core_start, walltime_program_start
   REAL(num) :: stop_at_walltime
   REAL(num) :: elapsed_time = 0.0_num
   REAL(num) :: old_elapsed_time = 0.0_num
   INTEGER :: stdout_frequency, check_stop_frequency
   LOGICAL :: check_walltime, print_eta_string, reset_walltime
+  LOGICAL :: print_detailed_timings
 
   LOGICAL, DIMENSION(c_dir_x:c_dir_z,0:c_stagger_max) :: stagger
   INTEGER(i8) :: push_per_field = 5

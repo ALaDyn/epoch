@@ -64,10 +64,18 @@ PROGRAM pic
   CHARACTER(LEN=64) :: deck_file = 'input.deck'
   CHARACTER(LEN=*), PARAMETER :: data_dir_file = 'USE_DATA_DIRECTORY'
   CHARACTER(LEN=64) :: timestring
-  REAL(num) :: runtime, dt_store
+  REAL(num) :: dt_store
+  REAL(num) :: t_init, t_fsolve, t_ppush, t_io, t_temp, t_core, &
+               t_total ! Variables to store timings
 
   step = 0
   time = 0.0_num
+
+  t_init   = 0.0_num
+  t_fsolve = 0.0_num
+  t_ppush  = 0.0_num
+  t_io     = 0.0_num
+
 #ifdef COLLISIONS_TEST
   ! used for testing
   CALL test_collisions
@@ -75,7 +83,7 @@ PROGRAM pic
 #endif
 
   CALL mpi_minimal_init ! mpi_routines.f90
-  real_walltime_start = MPI_WTIME()
+  walltime_program_start = MPI_WTIME()
   CALL minimal_init     ! setup.f90
   CALL get_job_id(jobid)
   CALL welcome_message  ! welcome.f90
@@ -173,8 +181,16 @@ PROGRAM pic
   IF (use_qed) CALL setup_qed_module()
 #endif
 
-  walltime_started = MPI_WTIME()
-  IF (.NOT.ic_from_restart) CALL output_routines(step) ! diagnostics.f90
+  t_init = MPI_WTIME() - walltime_program_start
+
+  walltime_core_start = MPI_WTIME()
+
+  IF (.NOT.ic_from_restart) THEN
+    t_temp = MPI_WTIME()
+    CALL output_routines(step) ! diagnostics.f90
+    t_io = t_io + (MPI_WTIME() - t_temp)
+  END IF
+
   IF (use_field_ionisation) CALL initialise_ionisation
 
   IF (timer_collect) CALL timer_start(c_timer_step)
@@ -193,12 +209,19 @@ PROGRAM pic
     END IF
 #endif
 
+    t_temp = MPI_WTIME()
     CALL update_eb_fields_half
+    t_fsolve = t_fsolve + (MPI_WTIME() - t_temp)
+
     IF (push) THEN
       CALL run_injectors
       ! .FALSE. this time to use load balancing threshold
       IF (use_balance) CALL balance_workload(.FALSE.)
+
+      t_temp = MPI_WTIME()
       CALL push_particles
+      t_ppush = t_ppush + (MPI_WTIME() - t_temp)
+
       IF (use_particle_lists) THEN
         ! After this line, the particles can be accessed on a cell by cell basis
         ! Using the particle_species%secondary_list property
@@ -235,26 +258,40 @@ PROGRAM pic
     IF (any_antennae) THEN
       CALL generate_antennae_currents
     END IF
+
+    t_temp = MPI_WTIME()
     CALL output_routines(step)
+    t_io = t_io + (MPI_WTIME() - t_temp)
+
     time = time + dt / 2.0_num
 
+    t_temp = MPI_WTIME()
     CALL update_eb_fields_final
+    t_fsolve = t_fsolve + (MPI_WTIME() - t_temp)
 
     CALL moving_window
   END DO
 
-  IF (rank == 0) runtime = MPI_WTIME() - walltime_started
+  t_temp = MPI_WTIME()
+  CALL output_routines(step, force_dump)
+  t_io = t_io + (MPI_WTIME() - t_temp)
+
+  t_core  = MPI_WTIME() - walltime_core_start
+  t_total = MPI_WTIME() - walltime_program_start
+
+  IF (rank == 0) THEN
+    IF (print_detailed_timings) THEN
+      CALL print_timing_breakdown(t_init, t_fsolve, t_ppush, t_io, t_core, &
+      t_total)
+    ELSE
+      CALL create_full_timestring(t_core, timestring)
+      WRITE(*,*) 'Final runtime of core = ' // TRIM(timestring)
+    END IF
+  END IF
 
 #ifdef PHOTONS
   IF (use_qed) CALL shutdown_qed_module()
 #endif
-
-  CALL output_routines(step, force_dump)
-
-  IF (rank == 0) THEN
-    CALL create_full_timestring(runtime, timestring)
-    WRITE(*,*) 'Final runtime of core = ' // TRIM(timestring)
-  END IF
 
   CALL finalise
 

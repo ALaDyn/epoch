@@ -46,6 +46,7 @@ CONTAINS
     print_deck_constants = .FALSE.
     allow_missing_restart = .FALSE.
     print_eta_string = .TRUE.
+    print_detailed_timings = .FALSE.
     use_current_correction = .FALSE.
     use_particle_count_update = .FALSE.
     use_accurate_n_zeros = .FALSE.
@@ -350,6 +351,9 @@ CONTAINS
 
     ELSE IF (str_cmp(element, 'print_eta_string')) THEN
       print_eta_string = as_logical_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'print_detailed_timings')) THEN
+      print_detailed_timings = as_logical_print(value, element, errcode)
 
     ELSE IF (str_cmp(element, 'n_zeros')) THEN
       n_zeros_control = as_integer_print(value, element, errcode)
