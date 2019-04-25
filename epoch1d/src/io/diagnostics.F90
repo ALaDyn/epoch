@@ -33,6 +33,7 @@ MODULE diagnostics
   USE timer
   USE antennae
   USE particle_id_hash_mod
+  USE random_generator
 
   IMPLICIT NONE
 
