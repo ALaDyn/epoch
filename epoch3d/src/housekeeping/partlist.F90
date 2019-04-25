@@ -1018,7 +1018,6 @@ CONTAINS
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
     IF( .NOT. ASSOCIATED(a_particle)) RETURN
-    IF( a_particle%live /= 1) RETURN
 
     IF (PRESENT(destroy)) THEN
       destroy_in=destroy
@@ -1066,7 +1065,6 @@ CONTAINS
     ! Note that this will work even if you are using an unsafe particle list
     ! BE CAREFUL if doing so, it can cause unexpected behaviour
     IF( .NOT. ASSOCIATED(a_particle)) RETURN
-    IF( a_particle%live /= 1) RETURN
 
     ! Check whether particle is head or tail of list and unlink
     IF (ASSOCIATED(partlist%head, TARGET=a_particle)) THEN
