@@ -2852,8 +2852,8 @@ CONTAINS
       CALL redblack(pointers_send, pointers_recv, sendcounts, recvcounts)
 
       DO iproc = 0, nproc - 1
-        CALL append_partlist(species_list(ispecies)%attached_list, &
-            pointers_recv(iproc))
+        CALL append_partlist(&
+            species_list(ispecies)%attached_list, pointers_recv(iproc), .TRUE.)
       END DO
     END DO
 

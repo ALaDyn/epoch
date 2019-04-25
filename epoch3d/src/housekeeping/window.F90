@@ -387,8 +387,7 @@ CONTAINS
           next => current%next
           IF (current%part_pos(1) < x_min) THEN
             CALL remove_particle_from_partlist(&
-                species_list(ispecies)%attached_list, current)
-            CALL destroy_particle(current)
+                species_list(ispecies)%attached_list, current, destroy=.TRUE.)
           END IF
           current => next
         END DO

@@ -694,14 +694,14 @@ CONTAINS
       IF (k <= e_count) THEN
         next_e => electron%next
         IF (lost_ke(k)) THEN
-          CALL remove_particle_from_partlist(electrons, electron)
+          CALL unlink_particle_from_partlist(electrons, electron)
           CALL add_particle_to_partlist(ionising_e, electron)
         END IF
       END IF
       IF (k <= ion_count) THEN
         next_ion => ion%next
         IF (was_ionised(k)) THEN
-          CALL create_particle(ejected_electron)
+          CALL create_particle_in_list(ejected_electron, ejected_e)
           ejected_electron%weight = ion%weight
           ejected_electron%part_pos = ion%part_pos
           ! Ionise whilst conserving momentum
@@ -717,8 +717,7 @@ CONTAINS
           ejected_electron%processor = rank
           ejected_electron%processor_at_t0 = rank
 #endif
-          CALL add_particle_to_partlist(ejected_e, ejected_electron)
-          CALL remove_particle_from_partlist(ions, ion)
+          CALL unlink_particle_from_partlist(ions, ion)
           CALL add_particle_to_partlist(ionised, ion)
         END IF
       END IF
