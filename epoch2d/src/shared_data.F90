@@ -343,7 +343,7 @@ MODULE shared_data
     REAL(num) :: optical_depth_tri
 #endif
 #endif
-    INTEGER :: live
+    INTEGER(i4) :: live
     ! 1 for normal live particle, 0 not yet filled,
     !-1 'other' i.e. partially setup
   END TYPE particle
@@ -366,8 +366,6 @@ MODULE shared_data
 
   LOGICAL :: use_particle_migration = .FALSE.
   INTEGER :: particle_migration_interval = 1
-
-  !Type representing a single sublist of partlist
 
   !Backing store control
   INTEGER(i8) :: sublist_size = 1000 !Size of a sublist. Grow ops allocate a new sublist of this size

@@ -919,8 +919,6 @@ CONTAINS
       new_photon%particle_energy = photon_energy
       new_photon%weight = generating_electron%weight
 
-      CALL add_particle_to_partlist(species_list(iphoton)%attached_list, &
-          new_photon)
     END IF
 
   END SUBROUTINE generate_photon

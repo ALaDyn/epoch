@@ -1621,7 +1621,6 @@ CONTAINS
     END DO
 
     ! No longer need the sending partlist, so destroy it to save some memory
-    !Sendlist no longer owns the memory
     CALL destroy_partlist(partlist_send)
 
     ! Actual MPI commands

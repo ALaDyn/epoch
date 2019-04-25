@@ -88,10 +88,9 @@ CONTAINS
       ELSE
         CALL relink_partlist(species_list(ispecies)%attached_list, .TRUE.)
       END IF
-        DEALLOCATE(species_list(ispecies)%secondary_list)
+      DEALLOCATE(species_list(ispecies)%secondary_list)
+      species_list(ispecies)%attached_list%locked_store = .FALSE.
     END DO
-    species_list(ispecies)%attached_list%locked_store = .FALSE.
-
     CALL particle_bcs
 
   END SUBROUTINE reattach_particles_to_mainlist
