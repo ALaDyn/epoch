@@ -1674,93 +1674,13 @@ CONTAINS
 
 
   !The following goes through the backing store as an array, packing
-  ! particles into a contiguous chunk. Any empty substores are skipped
-  ! over and then removed. In some cases this can save some copying
-
+  ! particles into a contiguous chunk.
   SUBROUTINE compact_backing_store(store, list)
-
-    TYPE(particle_store), INTENT(INOUT) :: store
-    TYPE(particle_sub_store), POINTER :: src_section, dest_section
-    TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), POINTER :: original, place_into, prev_placed
-    INTEGER(i8) :: i, next_place_index, j
-
-    IF (store_debug) THEN
-      PRINT*, 'Compacting backing store on ',  rank
-    END IF
-
-    src_section => store%head
-    dest_section => store%head
-    next_place_index = 1
-
-    place_into => store%head%store(1)
-    NULLIFY(prev_placed)
-    outer : DO j = 1, store%n_subs
-      DO i = 1, src_section%first_free_element
-        IF (i > src_section%length) EXIT
-        ! Check if current particle is live and not already in right place
-        place_into%prev => prev_placed
-        IF (src_section%store(i)%live > 0 .AND. &
-            .NOT. ASSOCIATED(place_into, TARGET=src_section%store(i))) THEN
-          original => src_section%store(i)
-          CALL copy_particle(original, place_into)
-          original%live = 0
-          next_place_index = next_place_index + 1
-          prev_placed => place_into
-        ELSE IF (src_section%store(i)%live > 0) THEN
-          !Otherwise we're leaving it where it is
-          next_place_index = i + 1
-          prev_placed => place_into
-        END IF
-        IF (next_place_index > dest_section%length) THEN
-          !Move dest_section to next, before advancing place_into
-          !Update dest_section count
-          dest_section%first_free_element = dest_section%length + 1
-
-          !Increment dest_section to next chunk
-          !There must be one if we still have live particles
-          dest_section => dest_section%next
-          next_place_index = 1
-        END IF
-        IF (ASSOCIATED(dest_section)) THEN
-          place_into => dest_section%store(next_place_index)
-        ELSE
-          EXIT outer
-        END IF
-        IF(ASSOCIATED(prev_placed)) prev_placed%next => place_into
-      END DO
-      src_section => src_section%next
-    END DO outer
-
-    !Set first_free for any remaining destination sections
-    IF(ASSOCIATED(dest_section)) THEN
-      dest_section%first_free_element = next_place_index
-      DO WHILE(ASSOCIATED(dest_section))
-        dest_section => dest_section%next
-        IF(ASSOCIATED(dest_section)) dest_section%first_free_element = 1
-      END DO
-    END IF
-
-    CALL remove_empty_subs(list)
-    CALL set_next_slot(list)
-
-    list%head => store%head%store(1)
-    list%tail => prev_placed
-    NULLIFY(list%head%prev, list%tail%next)
-
-
-  END SUBROUTINE compact_backing_store
-
-
-
-  !This does the same as above, but in a slightly simpler way
-  ! However, this one can't be adapted to skip empty sections
-  SUBROUTINE alt_compact_backing_store(store, list)
 
     TYPE(particle_store), INTENT(INOUT) :: store
     TYPE(particle_sub_store), POINTER :: dest_section
     TYPE(particle_list), INTENT(INOUT) :: list
-    TYPE(particle), POINTER :: original, place_into
+    TYPE(particle), POINTER :: original, place_into, prev_placed
     INTEGER(i8) :: i, j
 
     IF (store_debug) THEN
@@ -1770,17 +1690,26 @@ CONTAINS
     dest_section => store%head
     original => list%head
     place_into => store%head%store(1)
+    NULLIFY(prev_placed)
     outer : DO j = 1, store%n_subs
       DO i = 1, dest_section%length
         IF (i > dest_section%length) EXIT
         ! Check if current particle is live and not already in right place
         IF (dest_section%store(i)%live > 0) THEN
+          IF( ASSOCIATED(prev_placed)) THEN
+            prev_placed%next => original
+          END IF
+          original%prev => prev_placed
+          prev_placed => original
           original => original%next
         ELSE
           place_into => dest_section%store(i)
           CALL copy_particle(original, place_into)
           original%live = 0
           original => original%next
+          IF( ASSOCIATED(prev_placed)) prev_placed%next => place_into
+          place_into%prev => prev_placed
+          prev_placed => place_into
         END IF
         IF (.NOT. ASSOCIATED(original)) THEN
           IF (dest_section%store(i)%live == 1) THEN
@@ -1794,6 +1723,7 @@ CONTAINS
       dest_section%first_free_element = dest_section%length + 1
       dest_section => dest_section%next
     END DO outer
+    NULLIFY(prev_placed%next)
 
     !Set first_free for any remaining destination sections
     IF(ASSOCIATED(dest_section)) THEN
@@ -1803,12 +1733,13 @@ CONTAINS
       END DO
     END IF
 
+    list%head => store%head%store(1)
+    list%tail => prev_placed
+
     CALL remove_empty_subs(list)
     CALL set_next_slot(list)
 
-    CALL relink_partlist(list, .FALSE.)
-
-  END SUBROUTINE alt_compact_backing_store
+  END SUBROUTINE compact_backing_store
 
 
 
