@@ -71,6 +71,7 @@ MODULE deck
 
   TYPE(file_buffer), POINTER :: file_buffer_head
   INTEGER :: nbuffers = 0
+  LOGICAL :: has_errors
 
 CONTAINS
 
@@ -79,6 +80,8 @@ CONTAINS
   !----------------------------------------------------------------------------
 
   SUBROUTINE deck_initialise
+
+    has_errors = .FALSE.
 
     CALL boundary_deck_initialise
     CALL collision_deck_initialise
@@ -716,6 +719,7 @@ CONTAINS
           continuation = .FALSE.
           u0 = ' '
         END IF
+        IF (errcode_deck /= c_err_none) has_errors = .TRUE.
         IF (got_eof) THEN
           CALL MPI_BCAST(0, 1, MPI_INTEGER, 0, comm, errcode)
           CLOSE(lun)
@@ -795,6 +799,10 @@ CONTAINS
 #endif
 
     IF (terminate) CALL abort_code(c_err_generic_error)
+
+#ifdef DECK_FATAL
+    IF (has_errors) CALL abort_code(c_err_generic_error)
+#endif
 
     CALL MPI_BARRIER(comm, errcode)
 

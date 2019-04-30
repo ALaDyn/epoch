@@ -156,6 +156,9 @@ CONTAINS
 #ifdef NO_MPI3
     found = .TRUE.
 #endif
+#ifdef DECK_FATAL
+    found = .TRUE.
+#endif
 
     IF (.NOT.found) THEN
       WRITE(*,*) '*************************************************************'
@@ -263,6 +266,11 @@ CONTAINS
     WRITE(*,*) 'Disable MPI3 features -DNO_MPI3'
 #else
     defines = IOR(defines, c_def_use_mpi3)
+#endif
+#ifdef DECK_FATAL
+    WRITE(*,*) 'All deck errors fatal -DDECK_FATAL'
+#else
+    defines = IOR(defines, c_def_deck_fatal)
 #endif
     WRITE(*,*) '*************************************************************'
 
