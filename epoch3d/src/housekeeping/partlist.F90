@@ -967,6 +967,8 @@ CONTAINS
     END DO
     list%id_update = list%id_update + newlist%id_update
 
+    CALL destroy_partlist(newlist)
+
   END SUBROUTINE add_partlist_to_list_and_store
 
 
@@ -1781,6 +1783,7 @@ CONTAINS
           list%store%tail => current%prev
         END IF
         list%store%total_length = list%store%total_length - current%length
+        DEALLOCATE(current%store)
         DEALLOCATE(current)
         list%store%n_subs = list%store%n_subs - 1
       END IF
