@@ -440,9 +440,9 @@ MODULE shared_data
     REAL(num), DIMENSION(:,:,:), POINTER :: ext_temp_z_min, ext_temp_z_max
 
     ! Return boundaries. Only track drift in x
-    REAL(num), DIMENSION(:,:), ALLOCATABLE :: ext_drift_x_min, ext_drift_x_max
-    REAL(num), DIMENSION(:,:), ALLOCATABLE :: ext_dens_x_min, ext_dens_x_max
-    REAL(num), DIMENSION(:,:), ALLOCATABLE :: net_px_min, net_px_max
+    REAL(num), DIMENSION(:,:), POINTER :: ext_drift_x_min, ext_drift_x_max
+    REAL(num), DIMENSION(:,:), POINTER :: ext_dens_x_min, ext_dens_x_max
+    REAL(num), DIMENSION(:,:), POINTER :: net_px_min, net_px_max
 
     TYPE(injector_block), POINTER :: injector_x_min, injector_x_max
 
@@ -956,7 +956,7 @@ MODULE shared_data
 
     REAL(num) :: t_start, t_end
     LOGICAL :: has_t_end
-    REAL(num), DIMENSION(:,:), ALLOCATABLE :: depth, dt_inject, drift_perp
+    REAL(num), DIMENSION(:,:), POINTER :: depth, dt_inject, drift_perp
 
     TYPE(injector_block), POINTER :: next
   END TYPE injector_block

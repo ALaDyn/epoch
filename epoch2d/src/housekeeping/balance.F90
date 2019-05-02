@@ -779,9 +779,8 @@ CONTAINS
       ALLOCATE(injector_current%depth(1-ng:ny_new+ng))
       injector_current%depth = temp_slice
 
-      IF (ALLOCATED(injector_current%drift_perp)) THEN
-        CALL remap_field_slice(c_dir_x, injector_current%drift_perp, &
-            temp_slice)
+      IF (ASSOCIATED(injector_current%drift_perp)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%drift_perp, temp_slice)
         DEALLOCATE(injector_current%drift_perp)
         ALLOCATE(injector_current%drift_perp(1-ng:ny_new+ng))
         injector_current%drift_perp = temp_slice
@@ -804,9 +803,8 @@ CONTAINS
       ALLOCATE(injector_current%depth(1-ng:ny_new+ng))
       injector_current%depth = temp_slice
 
-      IF (ALLOCATED(injector_current%drift_perp)) THEN
-        CALL remap_field_slice(c_dir_x, injector_current%drift_perp, &
-            temp_slice)
+      IF (ASSOCIATED(injector_current%drift_perp)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%drift_perp, temp_slice)
         DEALLOCATE(injector_current%drift_perp)
         ALLOCATE(injector_current%drift_perp(1-ng:ny_new+ng))
         injector_current%drift_perp = temp_slice

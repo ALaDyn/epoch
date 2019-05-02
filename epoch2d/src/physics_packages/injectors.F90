@@ -126,9 +126,9 @@ CONTAINS
       next => current%next
       IF (current%density_function%init) &
           CALL deallocate_stack(current%density_function)
-      IF (ALLOCATED(current%dt_inject)) DEALLOCATE(current%dt_inject)
-      IF (ALLOCATED(current%depth)) DEALLOCATE(current%depth)
-      IF (ALLOCATED(current%drift_perp)) DEALLOCATE(current%drift_perp)
+      IF (ASSOCIATED(current%dt_inject)) DEALLOCATE(current%dt_inject)
+      IF (ASSOCIATED(current%depth)) DEALLOCATE(current%depth)
+      IF (ASSOCIATED(current%drift_perp)) DEALLOCATE(current%drift_perp)
       DO i = 1, 3
         IF (current%temperature_function(i)%init) &
             CALL deallocate_stack(current%temperature_function(i))
@@ -441,7 +441,7 @@ CONTAINS
       END IF
     END DO
 
-    IF (ALLOCATED(injector%drift_perp)) THEN
+    IF (ASSOCIATED(injector%drift_perp)) THEN
       drift(1) = injector%drift_perp(parameters%pack_iy)
     END IF
 
