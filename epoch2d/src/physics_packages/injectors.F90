@@ -577,7 +577,7 @@ CONTAINS
     TYPE(injector_block), POINTER :: injector
     INTEGER, INTENT(IN) :: boundary
     TYPE(particle_species), POINTER :: species
-    INTEGER :: i
+    INTEGER :: i, bc
 
     species => species_list(injector%species)
     IF (injector%npart_per_cell < 0.0_num) THEN
@@ -598,6 +598,14 @@ CONTAINS
       END IF
     END DO
 
+    bc = species%bc_particle(boundary)
+    IF (bc == c_bc_return) THEN
+      CALL update_return_injector(injector)
+      species%bc_particle(boundary) = c_bc_open
+    ELSE IF (bc == c_bc_continue) THEN
+      species%bc_particle(boundary) = c_bc_open
+    END IF
+
   END SUBROUTINE finish_single_injector_setup
 
 
@@ -607,7 +615,6 @@ CONTAINS
     INTEGER, INTENT(IN) :: ispecies, bnd
     TYPE(injector_block), POINTER :: working_injector
 
-    species_list(ispecies)%bc_particle(bnd) = c_bc_open
     use_injectors = .TRUE.
     need_random_state = .TRUE.
 
@@ -616,8 +623,40 @@ CONTAINS
     CALL init_injector(bnd, working_injector)
     working_injector%species = ispecies
 
+    IF (species_list(ispecies)%bc_particle(bnd) == c_bc_return) THEN
+      ALLOCATE(working_injector%drift_perp(1-ng:ny+ng))
+
+      IF (bnd == 1) THEN
+        species_list(ispecies)%injector_x_min => working_injector
+        working_injector%drift_perp = species_list(ispecies)%ext_drift_x_min
+      ELSE
+        species_list(ispecies)%injector_x_max => working_injector
+        working_injector%drift_perp = species_list(ispecies)%ext_drift_x_max
+      END IF
+    END IF
+
     CALL attach_injector(working_injector)
 
   END SUBROUTINE create_boundary_injector
+
+
+
+  ! Update temperature and drift for a return-injector species
+
+  SUBROUTINE update_return_injector(injector)
+
+    TYPE(injector_block), INTENT(IN), POINTER :: injector
+    TYPE(particle_species), POINTER :: species
+
+    species => species_list(injector%species)
+    IF (injector%boundary == c_bd_x_min) THEN
+      injector%drift_perp = species%ext_drift_x_min
+    ELSE IF (injector%boundary == c_bd_x_max) THEN
+      injector%drift_perp = species%ext_drift_x_max
+    END IF
+
+    CALL update_dt_inject(injector)
+
+  END SUBROUTINE update_return_injector
 
 END MODULE injectors

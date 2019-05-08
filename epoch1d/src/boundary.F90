@@ -23,7 +23,6 @@ MODULE boundary
   USE utilities
   USE particle_id_hash_mod
   USE injectors
-  USE return_boundary
 
   IMPLICIT NONE
 
@@ -66,10 +65,8 @@ CONTAINS
             // 'species "' // TRIM(species_list(ispecies)%name) // '"'
         error = error .OR. setup_particle_boundary(bc, bc_error)
 
-        IF (bc == c_bc_continue) THEN
-          CALL create_boundary_injector(ispecies, i)
-          species_list(ispecies)%bc_particle(i) = c_bc_open
-        END IF
+        IF (bc == c_bc_continue .OR. bc == c_bc_return) &
+            CALL create_boundary_injector(ispecies, i)
       END DO
     END DO
 

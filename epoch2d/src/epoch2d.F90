@@ -51,7 +51,6 @@ PROGRAM pic
   USE calc_df
   USE injectors
   USE current_smooth
-  USE return_boundary
 #ifdef PHOTONS
   USE photons
 #endif
@@ -114,8 +113,6 @@ PROGRAM pic
   CALL read_deck(deck_file, .TRUE., c_ds_last)
   CALL after_deck_last
 
-  CALL setup_return_boundaries
-
   ! restart flag is set
   IF (ic_from_restart) THEN
     CALL restart_data(step)
@@ -126,7 +123,6 @@ PROGRAM pic
     time = 0.0_num
   END IF
 
-  CALL finish_setup_return_boundaries
   CALL custom_particle_load
   CALL manual_load
   CALL finish_injector_setup
