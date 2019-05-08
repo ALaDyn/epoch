@@ -185,10 +185,13 @@ DEFINES := $(DEFINE)
 # real particles.
 #DEFINES += $(D)PER_SPECIES_WEIGHT
 
-# Don't enable support for tracer particles (in order to make the particle
-# push slightly faster).
-# Tracer particles which behave like normal particles but do not affect
+# Don't enable support for zero-current particles (in order to make the
+# particle push slightly faster).
+# Zero-current particles which behave like normal particles but do not affect
 # the field, current or each other.
+# WARNING: These particles may not behave in the way you might expect. See the
+# documentation for further details. This flag will be renamed to
+# ZERO_CURRENT_PARTICLES in version 5.0
 #DEFINES += $(D)NO_TRACER_PARTICLES
 
 # Don't enable support for particle probes (in order to make the particle
@@ -433,8 +436,9 @@ FORCE:
 
 balance.o: balance.F90 boundary.o constants.o mpi_subtype_control.o \
   redblack_module.o timer.o utilities.o
-boundary.o: boundary.F90 laser.o mpi_subtype_control.o particle_id_hash.o \
-  particle_temperature.o partlist.o return_boundary.o utilities.o
+boundary.o: boundary.F90 injectors.o laser.o mpi_subtype_control.o \
+  particle_id_hash.o particle_temperature.o partlist.o return_boundary.o \
+  utilities.o
 calc_df.o: calc_df.F90 boundary.o
 collisions.o: collisions.F90 calc_df.o prefetch.o
 constants.o: constants.F90 $(SDFMOD)
@@ -493,7 +497,7 @@ finish.o: finish.f90 collisions.o deck.o diagnostics.o dist_fn.o injectors.o \
 helper.o: helper.F90 balance.o boundary.o deltaf_loader.o partlist.o simple_io.o
 ic_module.o: ic_module.f90 helper.o shared_data.o
 injectors.o: injectors.F90 evaluate.o particle_temperature.o partlist.o \
-  random_generator.o
+  random_generator.o utilities.o
 ionise.o: ionise.F90 boundary.o numerics.o partlist.o random_generator.o \
   utilities.o
 iterators.o: iterators.F90 particle_id_hash.o particle_pointer_advance.o \
@@ -517,8 +521,8 @@ random_generator.o: random_generator.f90
 redblack_module.o: redblack_module.f90 partlist.o
 return_boundary.o: return_boundary.F90 injectors.o shared_data.o
 setup.o: setup.F90 balance.o constants.o fields.o helper.o laser.o \
-  mpi_subtype_control.o particle_id_hash.o shunt.o split_particle.o timer.o \
-  version_data.o welcome.o window.o $(SDFMOD)
+  mpi_routines.o mpi_subtype_control.o particle_id_hash.o shunt.o \
+  split_particle.o timer.o version_data.o welcome.o window.o $(SDFMOD)
 shape_functions.o: shape_functions.F90 shared_data.o
 shared_data.o: shared_data.F90 constants.o $(SDFMOD)
 shunt.o: shunt.F90 evaluator_blocks.o tokenizer_blocks.o utilities.o

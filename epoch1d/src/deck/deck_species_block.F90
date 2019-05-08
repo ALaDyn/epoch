@@ -306,7 +306,7 @@ CONTAINS
 
           IF (ABS(species_list(i)%charge) < c_tiny) error = .TRUE.
 #ifndef NO_TRACER_PARTICLES
-          error = (error .OR. species_list(i)%tracer)
+          error = (error .OR. species_list(i)%zero_current)
 #endif
           IF (error) THEN
             IF (rank == 0) THEN
@@ -431,6 +431,7 @@ CONTAINS
     REAL(num), POINTER :: array(:)
     CHARACTER(LEN=string_length) :: filename, mult_string
     LOGICAL :: got_file, dump
+    LOGICAL, SAVE :: warn_tracer = .TRUE.
     INTEGER :: i, j, io, iu, n
     TYPE(initial_condition_block), POINTER :: ic
 
@@ -668,11 +669,11 @@ CONTAINS
     END IF
 
     ! *************************************************************
-    ! This section sets properties for tracer particles
+    ! This section sets properties for zero_current particles
     ! *************************************************************
-    IF (str_cmp(element, 'tracer')) THEN
+    IF (str_cmp(element, 'zero_current') .OR. str_cmp(element, 'tracer')) THEN
 #ifndef NO_TRACER_PARTICLES
-      species_list(species_id)%tracer = &
+      species_list(species_id)%zero_current = &
           as_logical_print(value, element, errcode)
 #else
       IF (as_logical_print(value, element, errcode)) THEN
@@ -680,6 +681,23 @@ CONTAINS
         extended_error_string = '-DNO_TRACER_PARTICLES'
       END IF
 #endif
+      IF (warn_tracer .AND. rank == 0 .AND. str_cmp(element, 'tracer')) THEN
+        warn_tracer = .FALSE.
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** WARNING ***'
+          WRITE(io,*) 'The "tracer" species do not behave in the way that ', &
+                      'many users expect them to'
+          WRITE(io,*) 'and can lead to unexpected and undesirable results. ', &
+                      'Please see the'
+          WRITE(io,*) 'documentation for further details.'
+          WRITE(io,*) 'For this reason, the "tracer" flag is being renamed ', &
+                      'to "zero_current".'
+          WRITE(io,*) 'As of version 5.0, the "tracer" flag will be removed ', &
+                      'entirely.'
+          WRITE(io,*)
+        END DO
+      END IF
       RETURN
     END IF
 
@@ -808,6 +826,7 @@ CONTAINS
       IF (got_file) THEN
         IF (.NOT. ASSOCIATED(ic%drift)) THEN
           ALLOCATE(ic%drift(1-ng:nx+ng,3))
+          ic%drift = 0.0_num
         END IF
         array => ic%drift(:,n)
       ELSE
@@ -825,6 +844,7 @@ CONTAINS
       IF (got_file) THEN
         IF (.NOT. ASSOCIATED(ic%drift)) THEN
           ALLOCATE(ic%drift(1-ng:nx+ng,3))
+          ic%drift = 0.0_num
         END IF
         array => ic%drift(:,n)
       ELSE
@@ -842,6 +862,7 @@ CONTAINS
       IF (got_file) THEN
         IF (.NOT. ASSOCIATED(ic%drift)) THEN
           ALLOCATE(ic%drift(1-ng:nx+ng,3))
+          ic%drift = 0.0_num
         END IF
         array => ic%drift(:,n)
       ELSE
@@ -910,6 +931,7 @@ CONTAINS
       IF (got_file) THEN
         IF (.NOT. ASSOCIATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,3))
+          ic%temp = 0.0_num
         END IF
       ELSE
         array => dummy
@@ -981,6 +1003,7 @@ CONTAINS
       IF (got_file) THEN
         IF (.NOT. ASSOCIATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,3))
+          ic%temp = 0.0_num
         END IF
         array => ic%temp(:,n)
       ELSE
@@ -1001,6 +1024,7 @@ CONTAINS
       IF (got_file) THEN
         IF (.NOT. ASSOCIATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,3))
+          ic%temp = 0.0_num
         END IF
         array => ic%temp(:,n)
       ELSE
@@ -1021,6 +1045,7 @@ CONTAINS
       IF (got_file) THEN
         IF (.NOT. ASSOCIATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,3))
+          ic%temp = 0.0_num
         END IF
         array => ic%temp(:,n)
       ELSE
@@ -1265,7 +1290,7 @@ CONTAINS
       CALL push_to_stack(stack, iblock)
       IF (ABS(mult - 1.0_num) > c_tiny) array = mult * array
     ELSE
-      CALL tokenize(value, stack, errcode)
+      CALL tokenize(value, stack, errcode, species_id)
       IF (ABS(mult - 1.0_num) > c_tiny) &
           CALL tokenize(mult_string, stack, errcode)
 

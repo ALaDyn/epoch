@@ -416,7 +416,7 @@ MODULE shared_data
     TYPE(primitive_stack) :: dist_fn_range(3)
 
 #ifndef NO_TRACER_PARTICLES
-    LOGICAL :: tracer
+    LOGICAL :: zero_current
 #endif
 
     ! ID code which identifies if a species is of a special type
@@ -429,7 +429,7 @@ MODULE shared_data
     ! Secondary list
     TYPE(particle_list), DIMENSION(:,:), POINTER :: secondary_list
 
-    ! Injection of particles
+    ! Loading of particles
     REAL(num) :: npart_per_cell
     TYPE(primitive_stack) :: density_function, temperature_function(3)
     TYPE(primitive_stack) :: drift_function(3)
@@ -544,16 +544,19 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_temperature_x     = 55
   INTEGER, PARAMETER :: c_dump_temperature_y     = 56
   INTEGER, PARAMETER :: c_dump_temperature_z     = 57
+  INTEGER, PARAMETER :: c_dump_average_px        = 58
+  INTEGER, PARAMETER :: c_dump_average_py        = 59
+  INTEGER, PARAMETER :: c_dump_average_pz        = 60
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 58
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 59
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 60
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 61
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 62
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 63
-  INTEGER, PARAMETER :: num_vars_to_dump         = 63
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 61
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 62
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 63
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 64
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 65
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 66
+  INTEGER, PARAMETER :: num_vars_to_dump         = 66
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 57
+  INTEGER, PARAMETER :: num_vars_to_dump         = 60
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -911,7 +914,7 @@ MODULE shared_data
     INTEGER :: boundary
     INTEGER :: id
     INTEGER :: species
-    INTEGER(i8) :: npart_per_cell
+    REAL(num) :: npart_per_cell
     REAL(num) :: density_min
     LOGICAL :: use_flux_injector
 

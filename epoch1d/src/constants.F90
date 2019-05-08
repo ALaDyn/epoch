@@ -65,7 +65,8 @@ MODULE constants
   INTEGER, PARAMETER :: c_bc_cpml_laser = 12
   INTEGER, PARAMETER :: c_bc_cpml_outflow = 13
   INTEGER, PARAMETER :: c_bc_mixed = 14
-  INTEGER, PARAMETER :: c_bc_return = 15
+  INTEGER, PARAMETER :: c_bc_continue = 15
+  INTEGER, PARAMETER :: c_bc_return = 16
 
   ! Boundary location codes
   INTEGER, PARAMETER :: c_bd_x_min = 1
@@ -213,7 +214,7 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_split_part_after_push = 2**3
   INTEGER(i8), PARAMETER :: c_def_per_particle_weight = 2**4
   INTEGER(i8), PARAMETER :: c_def_particle_count_update = 2**5
-  INTEGER(i8), PARAMETER :: c_def_tracer_particles = 2**6
+  INTEGER(i8), PARAMETER :: c_def_zero_current_particles = 2**6
   INTEGER(i8), PARAMETER :: c_def_particle_probes = 2**7
   INTEGER(i8), PARAMETER :: c_def_per_particle_chargemass = 2**8
   INTEGER(i8), PARAMETER :: c_def_particle_ionise = 2**9

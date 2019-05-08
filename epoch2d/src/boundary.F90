@@ -22,6 +22,7 @@ MODULE boundary
   USE mpi_subtype_control
   USE utilities
   USE particle_id_hash_mod
+  USE injectors
   USE return_boundary
 
   IMPLICIT NONE
@@ -30,7 +31,7 @@ CONTAINS
 
   SUBROUTINE setup_boundaries
 
-    INTEGER :: i, ispecies
+    INTEGER :: i, ispecies, bc
     LOGICAL :: error
     CHARACTER(LEN=5), DIMENSION(2*c_ndims) :: &
         boundary = (/ 'x_min', 'x_max', 'y_min', 'y_max' /)
@@ -60,10 +61,15 @@ CONTAINS
     error = .FALSE.
     DO ispecies = 1, n_species
       DO i = 1, 2*c_ndims
+        bc = species_list(ispecies)%bc_particle(i)
         bc_error = 'Unrecognised "' // TRIM(boundary(i)) // '" boundary for ' &
             // 'species "' // TRIM(species_list(ispecies)%name) // '"'
-        error = error .OR. setup_particle_boundary(&
-            species_list(ispecies)%bc_particle(i), bc_error)
+        error = error .OR. setup_particle_boundary(bc, bc_error)
+
+        IF (bc == c_bc_continue) THEN
+          CALL create_boundary_injector(ispecies, i)
+          species_list(ispecies)%bc_particle(i) = c_bc_open
+        END IF
       END DO
     END DO
 
@@ -106,6 +112,7 @@ CONTAINS
     IF (boundary == c_bc_periodic &
         .OR. boundary == c_bc_reflect &
         .OR. boundary == c_bc_thermal &
+        .OR. boundary == c_bc_continue &
         .OR. boundary == c_bc_return &
         .OR. boundary == c_bc_open) RETURN
 
@@ -939,14 +946,17 @@ CONTAINS
     REAL(num) :: cf2, temp(3)
     REAL(num) :: part_pos, boundary_shift
     REAL(num) :: x_min_outer, x_max_outer, y_min_outer, y_max_outer
+    REAL(num) :: x_shift, y_shift
 
-    boundary_shift = dx * REAL((1 + png) / 2, num)
-
+    boundary_shift = dx * REAL((1 + png + cpml_thickness) / 2, num)
     x_min_outer = x_min - boundary_shift
     x_max_outer = x_max + boundary_shift
+    x_shift = length_x + 2.0_num * dx * REAL(cpml_thickness, num)
 
+    boundary_shift = dy * REAL((1 + png + cpml_thickness) / 2, num)
     y_min_outer = y_min - boundary_shift
     y_max_outer = y_max + boundary_shift
+    y_shift = length_y + 2.0_num * dy * REAL(cpml_thickness, num)
 
     DO ispecies = 1, n_species
       cur => species_list(ispecies)%attached_list%head
@@ -995,10 +1005,10 @@ CONTAINS
                 cur%part_p(1) = -cur%part_p(1)
               ELSE IF (bc == c_bc_periodic) THEN
                 xbd = sgn
-                cur%part_pos(1) = part_pos - sgn * length_x
+                cur%part_pos(1) = part_pos - sgn * x_shift
               END IF
             END IF
-            IF (part_pos < x_min_outer) THEN
+            IF (part_pos < x_min_outer .AND. bc /= c_bc_periodic) THEN
               IF (bc == c_bc_thermal) THEN
                 ! Always use the triangle particle weighting for simplicity
                 cell_y_r = (cur%part_pos(2) - y_grid_min_local) / dy
@@ -1023,8 +1033,9 @@ CONTAINS
 
                 ! x-direction
                 i = 1
-                cur%part_p(i) = -sgn * flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                cur%part_p(i) = flux_momentum_from_temperature(&
+                    species_list(ispecies)%mass, temp(i), 0.0_num, &
+                    -REAL(sgn, num))
 
                 ! y-direction
                 i = 2
@@ -1072,10 +1083,10 @@ CONTAINS
                 cur%part_p(1) = -cur%part_p(1)
               ELSE IF (bc == c_bc_periodic) THEN
                 xbd = sgn
-                cur%part_pos(1) = part_pos - sgn * length_x
+                cur%part_pos(1) = part_pos - sgn * x_shift
               END IF
             END IF
-            IF (part_pos >= x_max_outer) THEN
+            IF (part_pos >= x_max_outer .AND. bc /= c_bc_periodic) THEN
               IF (bc == c_bc_thermal) THEN
                 ! Always use the triangle particle weighting for simplicity
                 cell_y_r = (cur%part_pos(2) - y_grid_min_local) / dy
@@ -1100,8 +1111,9 @@ CONTAINS
 
                 ! x-direction
                 i = 1
-                cur%part_p(i) = -sgn * flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                cur%part_p(i) = flux_momentum_from_temperature(&
+                    species_list(ispecies)%mass, temp(i), 0.0_num, &
+                    -REAL(sgn, num))
 
                 ! y-direction
                 i = 2
@@ -1150,10 +1162,10 @@ CONTAINS
                 cur%part_p(2) = -cur%part_p(2)
               ELSE IF (bc == c_bc_periodic) THEN
                 ybd = sgn
-                cur%part_pos(2) = part_pos - sgn * length_y
+                cur%part_pos(2) = part_pos - sgn * y_shift
               END IF
             END IF
-            IF (part_pos < y_min_outer) THEN
+            IF (part_pos < y_min_outer .AND. bc /= c_bc_periodic) THEN
               IF (bc == c_bc_thermal) THEN
                 ! Always use the triangle particle weighting for simplicity
                 cell_x_r = (cur%part_pos(1) - x_grid_min_local) / dx
@@ -1183,8 +1195,9 @@ CONTAINS
 
                 ! y-direction
                 i = 2
-                cur%part_p(i) = -sgn * flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                cur%part_p(i) = flux_momentum_from_temperature(&
+                    species_list(ispecies)%mass, temp(i), 0.0_num, &
+                    -REAL(sgn, num))
 
                 ! z-direction
                 i = 3
@@ -1227,10 +1240,10 @@ CONTAINS
                 cur%part_p(2) = -cur%part_p(2)
               ELSE IF (bc == c_bc_periodic) THEN
                 ybd = sgn
-                cur%part_pos(2) = part_pos - sgn * length_y
+                cur%part_pos(2) = part_pos - sgn * y_shift
               END IF
             END IF
-            IF (part_pos >= y_max_outer) THEN
+            IF (part_pos >= y_max_outer .AND. bc /= c_bc_periodic) THEN
               IF (bc == c_bc_thermal) THEN
                 ! Always use the triangle particle weighting for simplicity
                 cell_x_r = (cur%part_pos(1) - x_grid_min_local) / dx
@@ -1260,8 +1273,9 @@ CONTAINS
 
                 ! y-direction
                 i = 2
-                cur%part_p(i) = -sgn * flux_momentum_from_temperature(&
-                    species_list(ispecies)%mass, temp(i), 0.0_num)
+                cur%part_p(i) = flux_momentum_from_temperature(&
+                    species_list(ispecies)%mass, temp(i), 0.0_num, &
+                    -REAL(sgn, num))
 
                 ! z-direction
                 i = 3
