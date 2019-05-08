@@ -1259,20 +1259,21 @@ CONTAINS
       IF (bc == c_bc_return) THEN
         IF (.NOT.ALLOCATED(temp_slice)) &
             ALLOCATE(temp_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+
         max_boundary = .FALSE.
 
         CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%ext_drift_x_min, temp_slice)
+            species_list(ispecies)%ext_drift_x_min, temp_slice)
         DEALLOCATE(species_list(ispecies)%ext_drift_x_min)
         ALLOCATE(species_list(ispecies)&
             %ext_drift_x_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
         species_list(ispecies)%ext_drift_x_min = temp_slice
 
         CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%ext_dens_x_min, temp_slice)
+            species_list(ispecies)%ext_dens_x_min, temp_slice)
         DEALLOCATE(species_list(ispecies)%ext_dens_x_min)
-        ALLOCATE(species_list(ispecies)%&
-            ext_dens_x_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        ALLOCATE(species_list(ispecies)&
+            %ext_dens_x_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
         species_list(ispecies)%ext_dens_x_min = temp_slice
 
         DEALLOCATE(temp_slice)
@@ -1302,18 +1303,19 @@ CONTAINS
             ALLOCATE(temp_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng))
 
         max_boundary = .TRUE.
+
         CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%ext_drift_x_max, temp_slice)
+            species_list(ispecies)%ext_drift_x_max, temp_slice)
         DEALLOCATE(species_list(ispecies)%ext_drift_x_max)
-        ALLOCATE(species_list(ispecies)%&
-            ext_drift_x_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        ALLOCATE(species_list(ispecies)&
+            %ext_drift_x_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
         species_list(ispecies)%ext_drift_x_max = temp_slice
 
         CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%ext_dens_x_max, temp_slice)
+            species_list(ispecies)%ext_dens_x_max, temp_slice)
         DEALLOCATE(species_list(ispecies)%ext_dens_x_max)
-        ALLOCATE(species_list(ispecies)%&
-            ext_dens_x_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        ALLOCATE(species_list(ispecies)&
+            %ext_dens_x_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
         species_list(ispecies)%ext_dens_x_max = temp_slice
 
         DEALLOCATE(temp_slice)
@@ -1322,20 +1324,23 @@ CONTAINS
       IF (any_return) THEN
         IF (.NOT.ALLOCATED(temp_slice)) &
             ALLOCATE(temp_slice(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+
         max_boundary = .FALSE.
+
         CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%net_px_min, temp_slice)
+            species_list(ispecies)%net_px_min, temp_slice)
         DEALLOCATE(species_list(ispecies)%net_px_min)
-        ALLOCATE(species_list(ispecies)%&
-            net_px_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        ALLOCATE(species_list(ispecies)&
+            %net_px_min(1-ng:ny_new+ng, 1-ng:nz_new+ng))
         species_list(ispecies)%net_px_min = temp_slice
 
         max_boundary = .TRUE.
+
         CALL remap_field_slice(c_dir_x, &
-              species_list(ispecies)%net_px_max, temp_slice)
+            species_list(ispecies)%net_px_max, temp_slice)
         DEALLOCATE(species_list(ispecies)%net_px_max)
-        ALLOCATE(species_list(ispecies)%&
-          net_px_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        ALLOCATE(species_list(ispecies)&
+            %net_px_max(1-ng:ny_new+ng, 1-ng:nz_new+ng))
         species_list(ispecies)%net_px_max = temp_slice
 
         DEALLOCATE(temp_slice)
