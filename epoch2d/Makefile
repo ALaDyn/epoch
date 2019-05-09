@@ -260,7 +260,11 @@ DEFINES := $(DEFINE)
 # Disable MPI3 features
 #DEFINES += $(D)NO_MPI3
 
-#Enable boosted frame
+# Set options for debugging deck
+# Sets warning messages to be errors
+#DEFINES += $(D)DECK_DEBUG
+
+# Enable boosted frame
 #DEFINES += $(D)BOOSTED_FRAME
 
 # If you are having trouble compiling the encoded_source module or
@@ -272,6 +276,7 @@ DEFINES := $(DEFINE)
 # Automatically add -DPARSER_CHECKING for debug builds
 ifeq ($(strip $(MODE)),debug)
   DEFINES += $(D)PARSER_CHECKING
+  DEFINES += $(D)DECK_DEBUG
 endif
 
 

@@ -418,6 +418,9 @@ CONTAINS
     ELSE IF (str_cmp(element, 'use_more_setup_memory')) THEN
       use_more_setup_memory = as_logical_print(value, element, errcode)
 
+    ELSE IF (str_cmp(element, 'deck_warnings_fatal')) THEN
+      all_deck_errcodes_fatal = as_logical_print(value, element, errcode)
+
     ELSE IF (str_cmp(element, 'boost_vx')) THEN
 #ifdef BOOSTED_FRAME
       use_boosted_frame = .TRUE.
@@ -432,6 +435,7 @@ CONTAINS
       extended_error_string = '-DBOOSTED_FRAME'
       errcode = IOR(errcode, c_err_pp_options_missing)
 #endif
+
     ELSE IF (str_cmp(element, 'boost_gamma')) THEN
 #ifdef BOOSTED_FRAME
       use_boosted_frame = .TRUE.
@@ -447,6 +451,7 @@ CONTAINS
       extended_error_string = '-DBOOSTED_FRAME'
       errcode = IOR(errcode, c_err_pp_options_missing)
 #endif
+
     ELSE
       errcode = c_err_unknown_element
 
