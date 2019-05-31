@@ -124,7 +124,7 @@ CONTAINS
     REAL(num) :: gamma_rel_m1
 #endif
 #ifndef NO_TRACER_PARTICLES
-    LOGICAL :: not_tracer_species
+    LOGICAL :: not_zero_current_species
 #endif
     ! Particle weighting multiplication factor
 #ifdef PARTICLE_SHAPE_BSPLINE3
@@ -183,7 +183,7 @@ CONTAINS
       probes_for_species = ASSOCIATED(current_probe)
 #endif
 #ifndef NO_TRACER_PARTICLES
-      not_tracer_species = .NOT. species_list(ispecies)%tracer
+      not_zero_current_species = .NOT. species_list(ispecies)%zero_current
 #endif
 
 #ifdef PER_SPECIES_WEIGHT
@@ -431,10 +431,10 @@ CONTAINS
         ! Original code calculates densities of electrons, ions and neutrals
         ! here. This has been removed to reduce memory footprint
 
-        ! If the code is compiled with tracer particle support then put in an
-        ! IF statement so that the current is not calculated for this species
+        ! If the code is compiled with zero-current particle support then put in
+        ! an IF statement so that the current is not calculated for this species
 #ifndef NO_TRACER_PARTICLES
-        IF (not_tracer_species) THEN
+        IF (not_zero_current_species) THEN
 #endif
           ! Now advance to t+1.5dt to calculate current. This is detailed in
           ! the manual between pages 37 and 41. The version coded up looks
@@ -658,6 +658,8 @@ CONTAINS
     INTEGER,INTENT(IN) :: ispecies
     TYPE(particle), POINTER :: current
 
+    REAL(num) :: current_energy, dtfac, fac
+
     ! Used for particle probes (to see of probe conditions are satisfied)
 #ifndef NO_PARTICLE_PROBES
     REAL(num) :: init_part_x, final_part_x
@@ -666,7 +668,6 @@ CONTAINS
     TYPE(particle_probe), POINTER :: current_probe
     TYPE(particle), POINTER :: particle_copy
     REAL(num) :: d_init, d_final
-    REAL(num) :: probe_energy, dtfac, fac
     LOGICAL :: probes_for_species
 #endif
 
@@ -682,9 +683,9 @@ CONTAINS
     DO WHILE(ASSOCIATED(current))
       ! Note that this is the energy of a single REAL particle in the
       ! pseudoparticle, NOT the energy of the pseudoparticle
-      probe_energy = current%particle_energy
+      current_energy = current%particle_energy
 
-      fac = dtfac / probe_energy
+      fac = dtfac / current_energy
       delta_x = current%part_p(1) * fac
       delta_y = current%part_p(2) * fac
       delta_z = current%part_p(3) * fac
@@ -711,8 +712,8 @@ CONTAINS
         ! Cycle through probes
         DO WHILE(ASSOCIATED(current_probe))
           ! Unidirectional probe
-          IF (probe_energy > current_probe%ek_min) THEN
-            IF (probe_energy < current_probe%ek_max) THEN
+          IF (current_energy > current_probe%ek_min) THEN
+            IF (current_energy < current_probe%ek_max) THEN
 
               d_init  = SUM(current_probe%normal * (current_probe%point &
                   - (/init_part_x, init_part_y, init_part_z/)))

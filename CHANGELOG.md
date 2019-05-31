@@ -1,3 +1,48 @@
+## v4.16.0 to v4.17.0
+
+ * Added volume correction sampling Zenitani 2015 DOI 10.1063/1.4919383
+
+ * Added diagnostic for the average particle momentum per cell. This adds
+   the flags "average_p{x,y,z}" to the output block.
+
+ * Added low temperature correction to the Nanbu collision algorithm
+   (Pérez 2012 DOI 10.1063/1.4742167)
+
+ * Added "deck_warnings_fatal" flag to the control block. If set to "T" then the
+   code will abort if any warnings are encountered during the deck parse. The
+   default value is "F".
+
+ * Added the DECK_DEBUG compiler flag. If enabled then this forces
+   "deck_warnings_fatal" to always be set to "T"
+
+ * Added missing "nproc_[xyz]" and isotropic "temp" parameters. These were
+   mentioned in the documentation but had been omitted from the code.
+
+ * Added "drift_p{x,y,z}" and "drift_p{x,y,z}_back" as aliases for
+   "drift_{x,y,z}" and "drift_{x,y,z}_back"
+
+ * Added the ability to specify "temp" and "temp_[xyz]" in electronvolts when
+   setting up injectors.
+
+ * Added parameter "number_density_max" to the injectors, matching the
+   functionality available in the species block.
+
+ * Added non-abbreviated aliases for the following deck keywords:
+   "temperature" in place of "temp"
+   "background" for "back"
+   "nparticles" for "npart"
+   "fraction" for "frac"
+   "energy" for "en"
+   "gamma_minus_one" for "gamma_m1"
+   "average_particle_energy" for "ekbar"
+   "particle_energy_flux" for "ekflux"
+   "poynting_flux" for "poynt_flux"
+   "polarisation" for "pol"
+   "breit_wheeler" for "bw"
+
+ * Allow subset restrictions to be time-varying functions
+
+
 ## v4.15.0 to v4.16.0
 
  * Replaced USE_ISATTY compiler flag with NO_USE_ISATTY
@@ -5,6 +50,30 @@
  * Add NO_MPI3 compiler flag to disable MPI-3 features such as the
    MPI_TYPE_SIZE_X routine. This allows the code to be compiled against
    older versions of the MPI library.
+
+ * Added collisions block option "use_nanbu". If set to true then the
+   scattering algorithm of Nanbu, with relativistic corrections by
+   Perez will be used in the collisions module. If false, the previous
+   Sentoku-Kemp algorithm will be used. Due to known issues in the Sentoku-Kemp
+   method for some test problems, the Nanbu method is now the default.
+
+ * Bugfixes for Sentoku-Kemp collisions. These changes will affect the results
+   for some problems. Note that some test problems continue to demonstrate
+   unexpected behaviour and users are advised to use the Nanbu method instead.
+
+ * Added "number_density" aliases for "density" in the species and injector
+   blocks.
+   These include:
+     - number_density for density
+     - promote_number_density for promote_density
+     - demote_number_density for demote_density
+     - number_density_min for density_min
+     - number_density_max for density_max
+     - number_density_back for density_back
+
+ * Added a "zero_current" alias for "tracer" in the species blocks. The use of
+   "tracer" has now been deprecated and will be removed in version 5.0.
+   At that time, the compiler flag will also be renamed.
 
 
 ## v4.14.0 to v4.15.0 (2019-01-15)
@@ -386,6 +455,9 @@ Bugfixes:
  * Added c_const_{xb,yb,zb} to the deck parser
 
  * Stagger grid when evaluating field components (issue #1337)
+
+ * Add missing "restrict_<flag>" properties to dist_fn block, where <flag>
+   includes the following: en, gamma_m1, xy_angle, yz_angle, zx_angle
 
 
 ## v4.7.0 to v4.7.6 (2016-02-12)

@@ -434,6 +434,11 @@ CONTAINS
       RETURN
     END IF
 
+    IF (opcode == c_const_dir_z) THEN
+      CALL push_on_eval(REAL(c_dir_z, num))
+      RETURN
+    END IF
+
     IF (opcode == c_const_dir_px) THEN
       CALL push_on_eval(REAL(c_dir_px, num))
       RETURN
@@ -695,7 +700,7 @@ CONTAINS
       END IF
 
       CALL push_on_eval(val_local)
-      err = err_simplify
+      err = c_err_none
       RETURN
     END IF
 
@@ -743,7 +748,7 @@ CONTAINS
       END IF
 
       CALL push_on_eval(convert * val_local)
-      err = err_simplify
+      err = c_err_none
       RETURN
     END IF
 
