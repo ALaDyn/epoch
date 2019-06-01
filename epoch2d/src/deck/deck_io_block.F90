@@ -1090,7 +1090,8 @@ CONTAINS
     NULLIFY(io_block%dump_at_walltimes)
     DO i = 1, num_vars_to_dump
       io_block%averaged_data(i)%dump_single = .FALSE.
-      io_block%accumulated_data(i)%dump_single = .FALSE.
+      NULLIFY(io_block%accumulated_data(i)%array)
+      NULLIFY(io_block%accumulated_data(i)%r4array)
     END DO
 
   END SUBROUTINE init_io_block
