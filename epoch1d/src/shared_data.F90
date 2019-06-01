@@ -272,13 +272,13 @@ MODULE shared_data
     INTEGER :: nsteps, current_step, dump_step
     INTEGER :: nstep_acc, last_accumulate_step
     REAL(num) :: last_accumulate_time, dt_acc
-    REAL(num), DIMENSION(:), ALLOCATABLE :: time
+    REAL(num), DIMENSION(:), POINTER :: time
     LOGICAL :: reset
   END TYPE accumulator_type
 
   TYPE accumulated_data_block
-    REAL(num), DIMENSION(:,:), ALLOCATABLE :: array
-    REAL(r4), DIMENSION(:,:), ALLOCATABLE :: r4array
+    REAL(num), DIMENSION(:,:), POINTER :: array
+    REAL(r4), DIMENSION(:,:), POINTER :: r4array
     LOGICAL :: dump_single, array_assoc
   END TYPE accumulated_data_block
 
@@ -377,7 +377,6 @@ MODULE shared_data
     LOGICAL :: use_restriction(c_subset_max)
     LOGICAL :: use_restriction_function(c_subset_max)
     LOGICAL :: space_restrictions
-
     LOGICAL :: skip, dump_field_grid, dump_acc_grid
     LOGICAL :: time_varying
     REAL(num) :: restriction(c_subset_max)

@@ -1085,11 +1085,14 @@ CONTAINS
     io_block%walltime_prev = 0.0_num
     io_block%walltime_start = -1.0_num
     io_block%walltime_stop  = HUGE(1.0_num)
+    io_block%accumulate_counter%dt_acc = -1.0_num
+    io_block%accumulate_counter%nstep_acc = -1
     NULLIFY(io_block%dump_at_nsteps)
     NULLIFY(io_block%dump_at_times)
     NULLIFY(io_block%dump_at_walltimes)
     DO i = 1, num_vars_to_dump
       io_block%averaged_data(i)%dump_single = .FALSE.
+      io_block%accumulated_data(i)%dump_single = .FALSE.
       NULLIFY(io_block%accumulated_data(i)%array)
       NULLIFY(io_block%accumulated_data(i)%r4array)
     END DO

@@ -273,7 +273,7 @@ MODULE shared_data
     INTEGER :: nsteps, current_step, dump_step
     INTEGER :: nstep_acc, last_accumulate_step
     REAL(num) :: last_accumulate_time, dt_acc
-    REAL(num), DIMENSION(:), ALLOCATABLE :: time
+    REAL(num), DIMENSION(:), POINTER :: time
     LOGICAL :: reset
   END TYPE accumulator_type
 
@@ -385,6 +385,7 @@ MODULE shared_data
     INTEGER :: subtype, subarray, subtype_r4, subarray_r4
     INTEGER :: acc_subtype, acc_subarray, acc_subtype_r4, acc_subarray_r4
     INTEGER, DIMENSION(c_ndims) :: skip_dir, n_local, n_global, n_start, starts
+
     ! Persistent subset
     LOGICAL :: persistent, locked
     REAL(num) :: persist_start_time

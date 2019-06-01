@@ -671,7 +671,8 @@ CONTAINS
     ELSE IF (str_cmp(element, 'average_pz')) THEN
       elementselected = c_dump_average_pz
 
-    ELSE IF (str_cmp(element, 'temperature')) THEN
+    ELSE IF (str_cmp(element, 'temperature') &
+        .OR. str_cmp(element, 'temp')) THEN
       elementselected = c_dump_temperature
 
     ELSE IF (str_cmp(element, 'tx') &
@@ -1080,6 +1081,8 @@ CONTAINS
     DO i = 1, num_vars_to_dump
       io_block%averaged_data(i)%dump_single = .FALSE.
       io_block%accumulated_data(i)%dump_single = .FALSE.
+      NULLIFY(io_block%accumulated_data(i)%array)
+      NULLIFY(io_block%accumulated_data(i)%r4array)
     END DO
 
   END SUBROUTINE init_io_block

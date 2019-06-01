@@ -257,7 +257,7 @@ CONTAINS
       as_constant = c_const_io_accumulate
 
     ELSE IF (str_cmp(name, 'accumulate_single')) THEN
-        as_constant = c_const_io_accumulate_single
+      as_constant = c_const_io_accumulate_single
 
     ! Distribution function constants
     ELSE IF (str_cmp(name, 'dir_x')) THEN

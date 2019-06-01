@@ -49,6 +49,8 @@ CONTAINS
   SUBROUTINE deallocate_memory
 
     INTEGER :: i, n, stat
+    TYPE(accumulator_type), POINTER :: counter
+    TYPE(accumulated_data_block), POINTER :: accum
     CLASS(particle_id_hash), POINTER :: current_hash
 
     DEALLOCATE(x, xb, x_global, xb_global, xb_offset_global)
@@ -88,6 +90,20 @@ CONTAINS
       IF (ASSOCIATED(io_block_list(i)%dump_at_nsteps)) &
           DEALLOCATE(io_block_list(i)%dump_at_nsteps, STAT=stat)
     END DO
+
+    IF (io_block_list(1)%any_accumulate) THEN
+      counter => io_block_list(1)%accumulate_counter
+      IF (ASSOCIATED(counter%time)) DEALLOCATE(counter%time)
+
+      DO i = 1, num_vars_to_dump
+        accum => io_block_list(1)%accumulated_data(i)
+        IF (ASSOCIATED(accum%r4array)) THEN
+          DEALLOCATE(accum%r4array)
+        ELSE IF (ASSOCIATED(accum%array)) THEN
+          DEALLOCATE(accum%array)
+        END IF
+      END DO
+    END IF
 
     DEALLOCATE(io_block_list, STAT=stat)
     DEALLOCATE(io_list_data, STAT=stat)

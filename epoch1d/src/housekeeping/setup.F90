@@ -309,11 +309,13 @@ CONTAINS
     counter%last_accumulate_time = 0
     counter%last_accumulate_step = 0
     counter%reset = .FALSE.
+    NULLIFY(counter%time)
 
     DO io = 1, num_vars_to_dump
       accum => io_block_list(1)%accumulated_data(io)
       accum%dump_single = .FALSE.
       accum%array_assoc = .FALSE.
+      NULLIFY(accum%r4array, accum%array)
     END DO
 
     IF (.NOT. any_accumulate) RETURN
@@ -386,7 +388,7 @@ CONTAINS
     counter%dt_acc = dt_accum
     counter%nstep_acc = nstep_acc
     counter%nsteps = n_steps
-    IF (.NOT. ALLOCATED(counter%time)) ALLOCATE(counter%time(n_steps))
+    IF (.NOT. ASSOCIATED(counter%time)) ALLOCATE(counter%time(n_steps))
 
     DO io = 1, num_vars_to_dump
       ! Currently only accumulate core fields, so no per species option

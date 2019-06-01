@@ -55,10 +55,6 @@ CONTAINS
         cell_x = FLOOR((current%part_pos - x_grid_min_local) / dx) + 1
 #else
         cell_x = FLOOR((current%part_pos - x_grid_min_local) / dx + 1.5_num)
-        IF(cell_x < 1 .OR. cell_x > nx) THEN
-          current => next
-          CYCLE
-        ENDIF
 #endif
 
         CALL remove_particle_from_partlist(&

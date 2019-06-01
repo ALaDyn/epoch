@@ -1665,7 +1665,7 @@ CONTAINS
     TYPE(accumulator_type) :: accum
     TYPE(accumulated_data_block) :: accum_block
 
-     IF (.NOT. ALLOCATED(accum_block%array)) RETURN
+     IF (.NOT. ASSOCIATED(accum_block%array)) RETURN
 
      IF (accum%current_step > accum%nsteps) THEN
        PRINT*, 'WARNING: Accumulator overflow', accum%current_step, &

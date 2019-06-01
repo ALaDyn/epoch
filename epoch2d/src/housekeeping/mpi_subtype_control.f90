@@ -244,7 +244,6 @@ CONTAINS
       sub%subarray_r4 = mpitype
     END IF
 
-
   END SUBROUTINE create_subset_subtypes
 
 
@@ -263,6 +262,13 @@ CONTAINS
 
     DO i = 1, n_subsets
       sub => subset_list(i)
+
+      IF (sub%acc_subtype /= MPI_DATATYPE_NULL) THEN
+        CALL MPI_TYPE_FREE(sub%acc_subtype, errcode)
+        CALL MPI_TYPE_FREE(sub%acc_subarray, errcode)
+        CALL MPI_TYPE_FREE(sub%acc_subtype_r4, errcode)
+        CALL MPI_TYPE_FREE(sub%acc_subarray_r4, errcode)
+      END IF
 
       ranges = cell_global_ranges(global_ranges(sub))
       n_global = [ranges(2,1) - ranges(1,1), ranges(2,2) - ranges(1,2), n_times]

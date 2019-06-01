@@ -261,7 +261,7 @@ CONTAINS
     DO i = 1, n_subsets
       sub => subset_list(i)
 
-      IF ( sub%acc_subtype /= MPI_DATATYPE_NULL) THEN
+      IF (sub%acc_subtype /= MPI_DATATYPE_NULL) THEN
         CALL MPI_TYPE_FREE(sub%acc_subtype, errcode)
         CALL MPI_TYPE_FREE(sub%acc_subarray, errcode)
         CALL MPI_TYPE_FREE(sub%acc_subtype_r4, errcode)
@@ -334,7 +334,6 @@ CONTAINS
 
 
 
-
   !----------------------------------------------------------------------------
   ! Frees the subtypes created by create_subtypes
   !----------------------------------------------------------------------------
@@ -355,7 +354,6 @@ CONTAINS
     DO i = 1, n_subsets
       sub => subset_list(i)
       IF (sub%subtype /= MPI_DATATYPE_NULL) THEN
-
         CALL MPI_TYPE_FREE(sub%subtype, errcode)
         CALL MPI_TYPE_FREE(sub%subarray, errcode)
         CALL MPI_TYPE_FREE(sub%subtype_r4, errcode)
@@ -374,7 +372,6 @@ CONTAINS
         END IF
       END DO
     END IF
-
 
   END SUBROUTINE free_subtypes
 

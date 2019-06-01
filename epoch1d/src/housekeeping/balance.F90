@@ -611,7 +611,7 @@ CONTAINS
     DO id = 1, num_vars_to_dump
       io = 1
       IF (io_block_list(io)%accumulated_data(id)%dump_single) THEN
-        IF (.NOT. ALLOCATED(io_block_list(io)%accumulated_data(id)%r4array)) &
+        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%r4array)) &
             CYCLE
 
         ALLOCATE(r4temp_sum(1-ng:nx_new+ng, counter%nsteps))
@@ -631,7 +631,7 @@ CONTAINS
 
         DEALLOCATE(r4temp_sum)
       ELSE
-        IF (.NOT. ALLOCATED(io_block_list(io)%accumulated_data(id)%array)) &
+        IF (.NOT. ASSOCIATED(io_block_list(io)%accumulated_data(id)%array)) &
             CYCLE
 
         ALLOCATE(temp_sum(1-ng:nx_new+ng, counter%nsteps))

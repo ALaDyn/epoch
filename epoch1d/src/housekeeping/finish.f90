@@ -84,13 +84,13 @@ CONTAINS
 
     IF (io_block_list(1)%any_accumulate) THEN
       counter => io_block_list(1)%accumulate_counter
-      IF (ALLOCATED(counter%time)) DEALLOCATE(counter%time)
+      IF (ASSOCIATED(counter%time)) DEALLOCATE(counter%time)
 
       DO i = 1, num_vars_to_dump
         accum => io_block_list(1)%accumulated_data(i)
-        IF (ALLOCATED(accum%r4array)) THEN
+        IF (ASSOCIATED(accum%r4array)) THEN
           DEALLOCATE(accum%r4array)
-        ELSE IF (ALLOCATED(accum%array)) THEN
+        ELSE IF (ASSOCIATED(accum%array)) THEN
           DEALLOCATE(accum%array)
         END IF
       END DO
