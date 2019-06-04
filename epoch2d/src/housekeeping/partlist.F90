@@ -1628,7 +1628,8 @@ CONTAINS
         data_recv, nrecv, mpireal, src, tag, comm, status, errcode)
 
     DEALLOCATE(data_send)
-    CALL create_filled_partlist(partlist_recv, data_recv, npart_recv)
+    CALL create_filled_partlist(partlist_recv, data_recv, npart_recv, &
+        holds_copies = .TRUE.)
     DEALLOCATE(data_recv)
 
   END SUBROUTINE partlist_sendrecv
