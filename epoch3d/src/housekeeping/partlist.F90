@@ -280,19 +280,21 @@ CONTAINS
         substore%store(i_part)%next => substore%store(i_part+1)
         current => substore%store(i_part)
         CALL init_particle(current)
+        substore%store(i_part)%live = live_state_set
       ELSE IF ((i_part == 1 .AND. i_part < link_upto) &
           .OR. i_part == link_upto) THEN
         current => substore%store(i_part)
         CALL init_particle(current)
         NULLIFY(substore%store(i_part)%prev, &
             substore%store(i_part)%next)
+        substore%store(i_part)%live = live_state_set
       ELSE
         !Nullify pointers
         NULLIFY(substore%store(i_part)%prev, &
             substore%store(i_part)%next)
+        !Set not-live state
+        substore%store(i_part)%live = 0
       END IF
-      !Set not-live state
-      substore%store(i_part)%live = live_state_set
     END DO
 
     ! Correct links for 0th and n_elements-th particles
@@ -537,20 +539,65 @@ CONTAINS
       IF (stop_check .AND. ASSOCIATED(current, TARGET=list%tail)) EXIT
       part_x  = current%part_pos(1)
       part_y  = current%part_pos(2)
-      IF( part_x .GT. x_max_local  .OR. part_x .LT. x_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, x', part_x, b_pos
-        countd = countd + 1
+      part_z  = current%part_pos(3)
+
+      IF( part_x .GT. x_max_local+dx/2  .OR. part_x .LT. x_min_local-dx/2) THEN
+        ! Partly check the boundary conditions, but not exactly. It is unlikely
+        ! that the positions are wrong but not so as to trip this
+        IF ((x_min_boundary .AND. &
+            part_x .LT. x_min_local - dx*png/2.0) .OR. &
+            (x_max_boundary .AND. &
+            part_x .GT. x_max_local + dx*png/2.0)) THEN
+          WRITE(100+rank, *) 'Error, particle out of range, x (outer)', &
+              part_x, b_pos, x_max_local + dx*png/2.0
+          countd = countd + 1
+        ELSE IF((x_min_boundary .AND. &
+            part_x .GE. x_min_local - dx*png/2.0) .OR. &
+            (x_max_boundary .AND. &
+            part_x .LE. x_max_local + dx*png/2.0)) THEN
+          WRITE(100+rank, *) 'Particle in boundary range, x', part_x, b_pos
+        ELSE
+          WRITE(100+rank, *) 'Error, particle out of range, x', part_x, b_pos
+          countd = countd + 1
+        END IF
       END IF
-      IF(part_y .GT. y_max_local  .OR. part_y .LT. y_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, y', part_y, b_pos
-        WRITE(100+rank, *) y_min_local, y_max_local, current%live
-        countd = countd + 1
+      IF(part_y .GT. y_max_local+dy/2  .OR. part_y .LT. y_min_local-dy/2) THEN
+        IF ((y_min_boundary .AND. &
+            ABS(part_y - y_min_local) .GT. dy*png/2.0) .OR. &
+            (y_max_boundary .AND. &
+            ABS(part_y - y_min_local) .GT. dy*png/2.0)) THEN
+          WRITE(100+rank, *) 'Error, particle out of range, y (outer)', &
+              part_y, b_pos
+          countd = countd + 1
+        ELSE IF((y_min_boundary .AND. &
+            ABS(part_y - y_min_local) .LE. dy*png/2.0) .OR. &
+            (y_max_boundary .AND. &
+            ABS(part_y - y_min_local) .LE. dy*png/2.0)) THEN
+          WRITE(100+rank, *) 'Particle in boundary range, y', part_y, b_pos
+        ELSE
+          WRITE(100+rank, *) 'Error, particle out of range, y', part_y, b_pos
+          countd = countd + 1
+        END IF
       END IF
-      IF(part_z .GT. z_max_local  .OR. part_z .LT. z_min_local) THEN
-        WRITE(100+rank, *) 'Error, particle out of range, z', part_z, b_pos
-        WRITE(100+rank, *) z_min_local, z_max_local, current%live
-        countd = countd + 1
+      IF(part_z .GT. z_max_local+dz/2  .OR. part_z .LT. z_min_local-dz/2) THEN
+        IF ((z_min_boundary .AND. &
+            ABS(part_z - z_min_local) .GT. dz*png/2.0) .OR. &
+            (z_max_boundary .AND. &
+            ABS(part_z - z_min_local) .GT. dz*png/2.0)) THEN
+          WRITE(100+rank, *) 'Error, particle out of range, z (outer)', &
+              part_z, b_pos
+          countd = countd + 1
+        ELSE IF((z_min_boundary .AND. &
+            ABS(part_z - z_min_local) .LE. dz*png/2.0) .OR. &
+            (z_max_boundary .AND. &
+            ABS(part_z - z_min_local) .LE. dz*png/2.0)) THEN
+          WRITE(100+rank, *) 'Particle in boundary range, z', part_z, b_pos
+        ELSE
+          WRITE(100+rank, *) 'Error, particle out of range, z', part_z, b_pos
+          countd = countd + 1
+        END IF
       END IF
+
       current => current%next
       b_pos = b_pos + 1
     END DO
@@ -662,6 +709,7 @@ CONTAINS
     IF (use_store) THEN
       CALL create_particle_store(partlist, n_elements, live_state=live_state)
       partlist%count = n_elements
+      IF (PRESENT(holds_copies)) partlist%holds_copies = holds_copies
     ELSE
       CALL create_empty_partlist(partlist, holds_copies=holds_copies)
 
@@ -862,20 +910,21 @@ CONTAINS
     TYPE(particle), POINTER :: new_particle, next
     INTEGER(i8) :: ipart
 
+    ! Go through list and delete all the particles in the list
+    ! There can be teardown needed per-particle
+    new_particle => partlist%head
+    ipart = 0
+    DO WHILE (ipart < partlist%count)
+      next => new_particle%next
+      CALL destroy_particle(new_particle, &
+          partlist%holds_copies .OR. .NOT.partlist%safe, partlist%use_store)
+      new_particle => next
+      ipart = ipart+1
+    END DO
+
     IF(partlist%use_store) THEN
       CALL destroy_store(partlist%store)
     ELSE
-      ! Go through list and delete all the particles in the list
-      new_particle => partlist%head
-      ipart = 0
-      DO WHILE (ipart < partlist%count)
-        next => new_particle%next
-        CALL destroy_particle(new_particle, &
-            partlist%holds_copies .OR. .NOT.partlist%safe)
-        new_particle => next
-        ipart = ipart+1
-      END DO
-
       CALL create_empty_partlist(partlist)
     END IF
 
@@ -1377,12 +1426,12 @@ CONTAINS
   END SUBROUTINE create_particle_in_list
 
 
-  SUBROUTINE destroy_particle(part, is_copy)
+  SUBROUTINE destroy_particle(part, is_copy, no_dealloc)
 
     ! Routine to delete a particle. This routine is only safe to use on
     ! a particle that is not in a partlist
     TYPE(particle), POINTER :: part
-    LOGICAL, INTENT(IN), OPTIONAL :: is_copy
+    LOGICAL, INTENT(IN), OPTIONAL :: is_copy, no_dealloc
 
     IF (any_persistent_subset) THEN
       IF (PRESENT(is_copy)) THEN
@@ -1392,7 +1441,11 @@ CONTAINS
       END IF
     END IF
 
-    DEALLOCATE(part)
+    IF (PRESENT(no_dealloc)) THEN
+      IF (.NOT. no_dealloc) DEALLOCATE(part)
+    ELSE
+      DEALLOCATE(part)
+    END IF
 
   END SUBROUTINE destroy_particle
 
