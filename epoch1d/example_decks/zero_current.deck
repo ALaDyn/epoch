@@ -31,9 +31,9 @@ begin:species
   name = Right
   charge = -1
   mass = 1.0
-  temp_x = temp
-  drift_x = drift_p
-  density = dens
+  temperature_x = temp
+  drift_px = drift_p
+  number_density = dens
   npart_per_cell = nppc
 end:species
 
@@ -44,9 +44,9 @@ end:species
 #  boundary = x_max
 #  species = Left
 #  npart_per_cell = nppc
-#  temp_x = temp
-#  drift_x = -drift_p
-#  density = dens
+#  temperature_x = temp
+#  drift_px = -drift_p
+#  number_density = dens
 #end:injector
 
 
@@ -55,9 +55,9 @@ begin:species
   name = Left
   charge = -1
   mass = 1.0
-  temp_x = temp
-  drift_x = -drift_p
-  density = dens
+  temperature_x = temp
+  drift_px = -drift_p
+  number_density = dens
 
   # Uncomment below to use plain injector
   #bc_x_min = open
