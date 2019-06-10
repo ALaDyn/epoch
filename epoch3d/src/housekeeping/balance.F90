@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
-! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -848,15 +846,19 @@ CONTAINS
 
     injector_current => injector_x_min
     DO WHILE(ASSOCIATED(injector_current))
-      CALL remap_field_slice(c_dir_x, injector_current%dt_inject, temp_slice)
-      DEALLOCATE(injector_current%dt_inject)
-      ALLOCATE(injector_current%dt_inject(1-ng:ny_new+ng, 1-ng:nz_new+ng))
-      injector_current%dt_inject = temp_slice
+      IF (ASSOCIATED(injector_current%dt_inject)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%dt_inject, temp_slice)
+        DEALLOCATE(injector_current%dt_inject)
+        ALLOCATE(injector_current%dt_inject(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        injector_current%dt_inject = temp_slice
+      END IF
 
-      CALL remap_field_slice(c_dir_x, injector_current%depth, temp_slice)
-      DEALLOCATE(injector_current%depth)
-      ALLOCATE(injector_current%depth(1-ng:ny_new+ng, 1-ng:nz_new+ng))
-      injector_current%depth = temp_slice
+      IF (ASSOCIATED(injector_current%depth)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%depth, temp_slice)
+        DEALLOCATE(injector_current%depth)
+        ALLOCATE(injector_current%depth(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        injector_current%depth = temp_slice
+      END IF
 
       IF (ASSOCIATED(injector_current%drift_perp)) THEN
         CALL remap_field_slice(c_dir_x, injector_current%drift_perp, temp_slice)
@@ -872,15 +874,19 @@ CONTAINS
 
     injector_current => injector_x_max
     DO WHILE(ASSOCIATED(injector_current))
-      CALL remap_field_slice(c_dir_x, injector_current%dt_inject, temp_slice)
-      DEALLOCATE(injector_current%dt_inject)
-      ALLOCATE(injector_current%dt_inject(1-ng:ny_new+ng, 1-ng:nz_new+ng))
-      injector_current%dt_inject = temp_slice
+      IF (ASSOCIATED(injector_current%dt_inject)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%dt_inject, temp_slice)
+        DEALLOCATE(injector_current%dt_inject)
+        ALLOCATE(injector_current%dt_inject(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        injector_current%dt_inject = temp_slice
+      END IF
 
-      CALL remap_field_slice(c_dir_x, injector_current%depth, temp_slice)
-      DEALLOCATE(injector_current%depth)
-      ALLOCATE(injector_current%depth(1-ng:ny_new+ng, 1-ng:nz_new+ng))
-      injector_current%depth = temp_slice
+      IF (ASSOCIATED(injector_current%depth)) THEN
+        CALL remap_field_slice(c_dir_x, injector_current%depth, temp_slice)
+        DEALLOCATE(injector_current%depth)
+        ALLOCATE(injector_current%depth(1-ng:ny_new+ng, 1-ng:nz_new+ng))
+        injector_current%depth = temp_slice
+      END IF
 
       IF (ASSOCIATED(injector_current%drift_perp)) THEN
         CALL remap_field_slice(c_dir_x, injector_current%drift_perp, temp_slice)

@@ -1,5 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2017 Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -24,7 +23,7 @@ MODULE injectors
 
   IMPLICIT NONE
 
-  REAL(num) :: flow_limit_val = 5.0_num
+  REAL(num) :: flow_limit_val = 10.0_num
 
 CONTAINS
 
@@ -40,10 +39,9 @@ CONTAINS
     injector%t_end = t_end
     injector%has_t_end = .FALSE.
     injector%density_min = 0.0_num
+    injector%density_max = HUGE(1.0_num)
     injector%use_flux_injector = .TRUE.
     injector%drift_perp = 0.0_num
-    injector%depth = 1.0_num
-    injector%dt_inject = -1.0_num
     NULLIFY(injector%next)
 
   END SUBROUTINE init_injector
@@ -155,7 +153,7 @@ CONTAINS
     REAL(num) :: bdy_pos, cell_size
     TYPE(particle), POINTER :: new
     TYPE(particle_list) :: plist
-    REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
+    REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift
     REAL(num) :: gamma_mass, v_inject, density, vol, p_drift, p_ratio
     REAL(num) :: npart_ideal, itemp, v_inject_s, density_correction, dir_mult
     REAL(num) :: v_inject_dt
@@ -163,7 +161,7 @@ CONTAINS
     REAL(num) :: weight_fac
 #endif
     REAL(num), DIMENSION(3) :: temperature, drift
-    INTEGER :: parts_this_time, ipart, idir, dir_index, flux_dir
+    INTEGER :: parts_this_time, ipart, idir, dir_index, flux_dir, flux_dir_cell
     TYPE(parameter_pack) :: parameters
     LOGICAL :: first_inject
     REAL(num), PARAMETER :: sqrt2 = SQRT(2.0_num)
@@ -209,10 +207,12 @@ CONTAINS
 
     parameters%use_grid_position = .TRUE.
 
-    CALL populate_injector_properties(injector, parameters, density_grid, &
-        temperature, drift)
+    CALL populate_injector_properties(injector, parameters, density=density)
 
-    IF (density_grid < injector%density_min) RETURN
+    IF (density < injector%density_min) RETURN
+
+    CALL populate_injector_properties(injector, parameters, &
+        temperature=temperature, drift=drift)
 
     IF (injector%use_flux_injector) THEN
       flux_dir = dir_index
@@ -225,7 +225,6 @@ CONTAINS
 
     mass = species_list(injector%species)%mass
     typical_mc2 = (mass * c)**2
-
 #ifndef PER_SPECIES_WEIGHT
     weight_fac = vol / injector%npart_per_cell
 #endif
@@ -234,8 +233,9 @@ CONTAINS
     ! like hottest component
     p_therm = SQRT(mass * kb * MAXVAL(temperature))
     p_inject_drift = drift(dir_index)
+    flux_dir_cell = flux_dir
 
-    IF (flux_dir /= -1) THEN
+    IF (flux_dir_cell /= -1) THEN
       ! Drift adjusted so that +ve is 'inwards' through boundary
       p_drift = p_inject_drift * dir_mult
 
@@ -248,6 +248,9 @@ CONTAINS
         gamma_mass = SQRT(p_inject_drift**2 + typical_mc2) / c
         v_inject_s = p_inject_drift / gamma_mass
         density_correction = 1.0_num
+        ! Large drift flux Maxwellian can be approximated by a
+        ! non-flux Maxwellian
+        flux_dir_cell = -1
       ELSE IF (p_drift < -flow_limit_val * p_therm) THEN
         ! Net is outflow - inflow velocity is zero
         v_inject_s = 0.0_num
@@ -306,11 +309,16 @@ CONTAINS
       parameters%pack_pos = new%part_pos
       parameters%use_grid_position = .FALSE.
 
+#ifdef PER_SPECIES_WEIGHT
+      CALL populate_injector_properties(injector, parameters, &
+          temperature=temperature, drift=drift)
+#else
       CALL populate_injector_properties(injector, parameters, density, &
           temperature, drift)
+#endif
 
       DO idir = 1, 3
-        IF (idir == flux_dir) THEN
+        IF (idir == flux_dir_cell) THEN
           ! Drift is signed - dir mult is the direciton we want to get
           new%part_p(idir) = flux_momentum_from_temperature(&
               mass, temperature(idir), drift(idir), dir_mult)
@@ -324,6 +332,7 @@ CONTAINS
       new%mass = mass
 #endif
 #ifndef PER_SPECIES_WEIGHT
+      density = MIN(density, injector%density_max)
       new%weight = weight_fac * density
 #endif
       CALL add_particle_to_partlist(plist, new)
@@ -340,31 +349,41 @@ CONTAINS
 
     TYPE(injector_block), POINTER :: injector
     TYPE(parameter_pack), INTENT(IN) :: parameters
-    REAL(num), INTENT(OUT) :: density
-    REAL(num), DIMENSION(3), INTENT(OUT) :: temperature, drift
+    REAL(num), INTENT(OUT), OPTIONAL :: density
+    REAL(num), DIMENSION(3), INTENT(OUT), OPTIONAL :: temperature, drift
     INTEGER :: errcode, i
 
     errcode = 0
-    density = MAX(evaluate_with_parameters(injector%density_function, &
-        parameters, errcode), 0.0_num)
+    IF (PRESENT(density)) THEN
+      density = 0.0_num
+      IF (injector%density_function%init) THEN
+        density = MAX(evaluate_with_parameters(injector%density_function, &
+            parameters, errcode), 0.0_num)
+      END IF
+    END IF
 
     ! Stack can only be time varying if valid. Change if this isn't true
-    DO i = 1, 3
-      IF (injector%temperature_function(i)%init) THEN
-        temperature(i) = &
-            MAX(evaluate_with_parameters(injector%temperature_function(i), &
-                parameters, errcode), 0.0_num)
-      ELSE
-        temperature(i) = 0.0_num
-      END IF
-      IF (injector%drift_function(i)%init) THEN
-        drift(i) = &
-            evaluate_with_parameters(injector%drift_function(i), &
-                                     parameters, errcode)
-      ELSE
-        drift(i) = 0.0_num
-      END IF
-    END DO
+    IF (PRESENT(temperature)) THEN
+      temperature(:) = 0.0_num
+      DO i = 1, 3
+        IF (injector%temperature_function(i)%init) THEN
+          temperature(i) = &
+              MAX(evaluate_with_parameters(injector%temperature_function(i), &
+                  parameters, errcode), 0.0_num)
+        END IF
+      END DO
+    END IF
+
+    IF (PRESENT(drift)) THEN
+      drift(:) = 0.0_num
+      DO i = 1, 3
+        IF (injector%drift_function(i)%init) THEN
+          drift(i) = &
+              evaluate_with_parameters(injector%drift_function(i), &
+                                       parameters, errcode)
+        END IF
+      END DO
+    END IF
 
     IF (injector%drift_perp > 0.0_num) THEN
       drift(1) = injector%drift_perp
@@ -471,8 +490,7 @@ CONTAINS
     bc = species%bc_particle(boundary)
     IF (bc == c_bc_return) THEN
       CALL update_return_injector(injector)
-      species%bc_particle(boundary) = c_bc_open
-    ELSE IF (bc == c_bc_continue) THEN
+    ELSE
       species%bc_particle(boundary) = c_bc_open
     END IF
 

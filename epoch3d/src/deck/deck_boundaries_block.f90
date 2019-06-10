@@ -1,5 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -243,10 +242,10 @@ CONTAINS
       CALL abort_code(c_err_bad_value)
     END IF
 
-    ! Sanity check on continue boundaries
+    ! Sanity check on heat_bath boundaries
     error = .FALSE.
     DO idx = 1, 2 * c_ndims
-      IF (bc_field(idx) == c_bc_continue) error = .TRUE.
+      IF (bc_field(idx) == c_bc_heat_bath) error = .TRUE.
     END DO
 
     IF (error) THEN
@@ -255,7 +254,7 @@ CONTAINS
           io = io_units(iu)
           WRITE(io,*)
           WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'Continue boundaries apply to particles only'
+          WRITE(io,*) 'heat_bath boundaries apply to particles only'
         END DO
       END IF
       CALL abort_code(c_err_bad_value)

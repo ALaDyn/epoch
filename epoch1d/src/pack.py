@@ -1,8 +1,6 @@
 #! /usr/bin/env python
 
-# Copyright (C) 2014-2015 Andrew Wood <andrew@st-andrews.fge.co.uk>
-# Copyright (C) 2014-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-# Copyright (C) 2015      Stephan Kuschel <stephan.kuschel@gmail.com>
+# Copyright (C) 2009-2019 University of Warwick
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -414,8 +412,23 @@ else:
     else:
         sp.call(["git diff > %s" % gitdiff], shell=True)
     if os.path.getsize(gitdiff) != 0:
-        checksum = get_bytes_checksum([gitdiff])
+        # Remove TABLES directory from diff
+        f_in = open(gitdiff, 'r', encoding='utf-8')
+        lines = f_in.readlines()
+        f_in.close()
+        f_in = open(gitdiff, 'w', encoding='utf-8')
+        ignore = False
+        for l in lines:
+            if l.startswith("diff"):
+                if l.find("/TABLES/") != -1:
+                    ignore = True
+                else:
+                    ignore = False
+            if not ignore:
+                f_in.write(l)
+        f_in.close()
 
+        checksum = get_bytes_checksum([gitdiff])
         zgitdiff = gitdiff + '.gz'
         f_in = open(gitdiff, 'rb')
         f_out = gzip.open(zgitdiff, 'wb')

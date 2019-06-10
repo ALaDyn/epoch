@@ -1,6 +1,4 @@
-! Copyright (C) 2011-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2012      Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -630,7 +628,7 @@ CONTAINS
 
           mrbeb_c = hartree / ionisation_energy / 2.0_num &
               * (0.3_num * (ion_charge / q0 / n1)**2 &
-              * 0.7_num * ((ion_charge / q0 + 1.0_num) / n2)**2)
+              + 0.7_num * ((ion_charge / q0 + 1.0_num) / n2)**2)
 
           ! MRBEB cross section (cm^2)
           eiics = mrbeb_const / (bt2 + mrbeb_c * bb2) / bp &
@@ -743,7 +741,7 @@ CONTAINS
     TYPE(particle), POINTER :: current, impact
     REAL(num) :: factor, np
     REAL(num) :: dens, ekbar, log_lambda
-    INTEGER(i8) :: icount, k
+    INTEGER(i8) :: icount, pcount, k
 
     factor = 0.0_num
     np = 0.0_num
@@ -757,14 +755,22 @@ CONTAINS
     ! No collisions in cold plasma so return
     IF (ekbar <= c_tiny) RETURN
 
+    ! Number of collisions
+    pcount = icount / 2 + MOD(icount, 2_i8)
+
 #ifdef PER_SPECIES_WEIGHT
     np = icount * weight
-    factor = user_factor
+    ! Factor of 2 due to intra species collisions
+    ! See Section 4.1 of Nanbu
+    factor = user_factor * pcount * weight * 2.0_num
 #else
+    ! temporarily join tail to the head of the list to make it circular
+    p_list%tail%next => p_list%head
+
     current => p_list%head
     impact => current%next
-    DO k = 2, icount-2, 2
-      np = np + current%weight
+    DO k = 1, pcount
+      np = np + current%weight + impact%weight
       factor = factor + MIN(current%weight, impact%weight)
       current => impact%next
       impact => current%next
@@ -773,22 +779,12 @@ CONTAINS
       CALL prefetch_particle(impact)
 #endif
     END DO
-    np = np + current%weight
-    factor = factor + MIN(current%weight, impact%weight)
-
-    IF (MOD(icount, 2_i8) /= 0) THEN
-      np = np + impact%next%weight
-      factor = factor + MIN(current%weight, impact%next%weight)
-      np = np + impact%weight
-      factor = factor + MIN(impact%weight, impact%next%weight)
-    END IF
-
-    factor = user_factor / factor
+    factor = user_factor / factor / 2.0_num
 #endif
 
     current => p_list%head
     impact => current%next
-    DO k = 2, icount-2, 2
+    DO k = 1, pcount
       CALL scatter_fn(current, impact, mass, mass, charge, charge, &
           weight, weight, dens, dens, log_lambda, factor, np)
       current => impact%next
@@ -799,21 +795,8 @@ CONTAINS
 #endif
     END DO
 
-    IF (MOD(icount, 2_i8) == 0) THEN
-      CALL scatter_fn(current, impact, mass, mass, charge, charge, &
-          weight, weight, dens, dens, log_lambda, factor, np)
-    ELSE
-      CALL scatter_fn(current, impact, mass, mass, charge, charge, &
-          weight, weight, dens, dens, log_lambda, 0.5_num*factor, np)
-      current => impact%next
-      impact => current%prev%prev
-      CALL scatter_fn(current, impact, mass, mass, charge, charge, &
-          weight, weight, dens, dens, log_lambda, 0.5_num*factor, np)
-      current => current%prev
-      impact => current%next
-      CALL scatter_fn(current, impact, mass, mass, charge, charge, &
-          weight, weight, dens, dens, log_lambda, 0.5_num*factor, np)
-    END IF
+    ! restore the tail of the list
+    NULLIFY(p_list%tail%next)
 
   END SUBROUTINE intra_species_collisions
 
@@ -998,12 +981,12 @@ CONTAINS
     p_mag2 = DOT_PRODUCT(p3, p3)
     p_mag = SQRT(p_mag2)
 
-    s_fac = idens * jdens * dt * factor
+    s_fac = idens * jdens * dt * factor * dx * dy * dz
     fac = (q1 * q2)**2 * log_lambda * s_fac / (pi4_eps2_c4 * gm1 * gm2)
     s12 = fac * gc * p_mag * c / gm * (gm3 * gm4 / p_mag2 + 1.0_num)**2
 
     ! Cold plasma upper limit for s12
-    v_rel = gm * p_mag / (gm3 * gm4 * gc)
+    v_rel = gm * p_mag * c / (gm3 * gm4 * gc)
     s_prime = pi_fac * s_fac * (m1 + m2) * v_rel &
         / MAX(m1 * idens**two_thirds, m2 * jdens**two_thirds)
 
@@ -1184,7 +1167,6 @@ CONTAINS
     ! Collision frequency
     nu = coll_freq(vrabs, log_lambda, m1, m2, q1, q2, MIN(idens, jdens))
     nu = MIN(nu * factor * np * dt, 0.02_num)
-
 
     ! NOTE: nu is now the number of collisions per timestep, NOT collision
     ! frequency
@@ -1720,7 +1702,7 @@ CONTAINS
 
           wdata = gamma_rel_m1 * fac
         ELSE
-#ifdef PHOTONS
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
           wdata = current%particle_energy * part_w
 #else
           wdata = 0.0_num
@@ -1982,7 +1964,6 @@ CONTAINS
       part2%part_p = p2
       part1%weight = wt1
       part2%weight = wt2
-
 
       en1_before = cc * wt1 * SQRT(DOT_PRODUCT(p1, p1) + (mass1 * c)**2)
       en2_before = cc * wt2 * SQRT(DOT_PRODUCT(p2, p2) + (mass2 * c)**2)

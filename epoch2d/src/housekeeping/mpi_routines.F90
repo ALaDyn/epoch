@@ -1,5 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2010 Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -433,6 +432,8 @@ CONTAINS
         ALLOCATE(species_list(ispecies)%ext_temp_y_max(1-ng:nx+ng,1:3))
       END IF
     END DO
+
+    ALLOCATE(total_particle_energy_species(n_species))
 
     CALL allocate_ic
 

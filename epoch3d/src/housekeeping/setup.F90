@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -257,6 +255,30 @@ CONTAINS
     xb(1-ng:nx+ng) = xb_global(nx_global_min-ng:nx_global_max+ng)
     yb(1-ng:ny+ng) = yb_global(ny_global_min-ng:ny_global_max+ng)
     zb(1-ng:nz+ng) = zb_global(nz_global_min-ng:nz_global_max+ng)
+
+    dir_d(1) = dx
+    dir_min(1) = x_min
+    dir_max(1) = x_max
+    dir_grid_min(1) = x_grid_min
+    dir_grid_max(1) = x_grid_max
+    dir_min_local(1) = x_min_local
+    dir_max_local(1) = x_max_local
+
+    dir_d(2) = dy
+    dir_min(2) = y_min
+    dir_max(2) = y_max
+    dir_grid_min(2) = y_grid_min
+    dir_grid_max(2) = y_grid_max
+    dir_min_local(2) = y_min_local
+    dir_max_local(2) = y_max_local
+
+    dir_d(3) = dz
+    dir_min(3) = z_min
+    dir_max(3) = z_max
+    dir_grid_min(3) = z_grid_min
+    dir_grid_max(3) = z_grid_max
+    dir_min_local(3) = z_min_local
+    dir_max_local(3) = z_max_local
 
   END SUBROUTINE setup_grid
 
@@ -1490,14 +1512,14 @@ CONTAINS
 #endif
 
         ELSE IF (block_id(1:11) == 'qed energy/') THEN
-#ifdef PHOTONS
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
           CALL sdf_read_point_variable(sdf_handle, npart_local, &
               species_subtypes(ispecies), it_qed_energy)
 #else
           IF (rank == 0) THEN
             PRINT*, '*** ERROR ***'
             PRINT*, 'Cannot load dump file with QED energies.'
-            PRINT*, 'Please recompile with the -DPHOTONS option.'
+            PRINT*, 'Please recompile with -DPHOTONS or -DBREMSSTRAHLUNG.'
           END IF
           CALL abort_code(c_err_pp_options_missing)
           STOP
@@ -1512,6 +1534,20 @@ CONTAINS
             PRINT*, '*** ERROR ***'
             PRINT*, 'Cannot load dump file with Trident optical depths.'
             PRINT*, 'Please recompile with the -DTRIDENT_PHOTONS option.'
+          END IF
+          CALL abort_code(c_err_pp_options_missing)
+          STOP
+#endif
+
+        ELSE IF (block_id(1:21) == 'bremsstrahlung depth/') THEN
+#ifdef BREMSSTRAHLUNG
+          CALL sdf_read_point_variable(sdf_handle, npart_local, &
+              species_subtypes(ispecies), it_optical_depth_bremsstrahlung)
+#else
+          IF (rank == 0) THEN
+            PRINT*, '*** ERROR ***'
+            PRINT*, 'Cannot load dump file with bremsstrahlung optical depths.'
+            PRINT*, 'Please recompile with the -DBREMSSTRAHLUNG option.'
           END IF
           CALL abort_code(c_err_pp_options_missing)
           STOP
@@ -1940,26 +1976,6 @@ CONTAINS
 
 
 
-  FUNCTION it_qed_energy(array, npart_this_it, start, param)
-
-    REAL(num) :: it_qed_energy
-    REAL(num), DIMENSION(:), INTENT(IN) :: array
-    INTEGER, INTENT(INOUT) :: npart_this_it
-    LOGICAL, INTENT(IN) :: start
-    INTEGER, INTENT(IN), OPTIONAL :: param
-    INTEGER :: ipart
-
-    DO ipart = 1, npart_this_it
-      iterator_list%particle_energy = array(ipart)
-      iterator_list => iterator_list%next
-    END DO
-
-    it_qed_energy = 0
-
-  END FUNCTION it_qed_energy
-
-
-
 #ifdef TRIDENT_PHOTONS
   FUNCTION it_optical_depth_trident(array, npart_this_it, start, param)
 
@@ -1979,6 +1995,50 @@ CONTAINS
 
   END FUNCTION it_optical_depth_trident
 #endif
+#endif
+
+
+
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
+  FUNCTION it_qed_energy(array, npart_this_it, start, param)
+
+    REAL(num) :: it_qed_energy
+    REAL(num), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      iterator_list%particle_energy = array(ipart)
+      iterator_list => iterator_list%next
+    END DO
+
+    it_qed_energy = 0
+
+  END FUNCTION it_qed_energy
+#endif
+
+
+
+#ifdef BREMSSTRAHLUNG
+  FUNCTION it_optical_depth_bremsstrahlung(array, npart_this_it, start, param)
+
+    REAL(num) :: it_optical_depth_bremsstrahlung
+    REAL(num), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      iterator_list%optical_depth_bremsstrahlung = array(ipart)
+      iterator_list => iterator_list%next
+    END DO
+
+    it_optical_depth_bremsstrahlung = 0
+
+  END FUNCTION it_optical_depth_bremsstrahlung
 #endif
 
 

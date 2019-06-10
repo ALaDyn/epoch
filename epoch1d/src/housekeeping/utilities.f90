@@ -1,4 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -20,14 +20,14 @@ MODULE utilities
   IMPLICIT NONE
 
   INTERFACE grow_array
-    MODULE PROCEDURE grow_real_array, grow_integer_array, grow_string_array, &
-                     grow_real_array2d, grow_integer_array2d
+    MODULE PROCEDURE grow_real_array, grow_integer_array, grow_logical_array, &
+                     grow_string_array, grow_real_array2d, grow_integer_array2d
   END INTERFACE grow_array
 
-  PUBLIC :: erf_func
+  PRIVATE
 
-  PRIVATE :: grow_real_array, grow_integer_array, grow_string_array
-  PRIVATE :: grow_real_array2d, grow_integer_array2d
+  PUBLIC :: erf_func
+  PUBLIC :: abort_code, grow_array, get_free_lun
 
 CONTAINS
 
@@ -92,6 +92,35 @@ CONTAINS
     DEALLOCATE(tmp_array)
 
   END SUBROUTINE grow_integer_array
+
+
+
+  SUBROUTINE grow_logical_array(array, idx)
+
+    LOGICAL, DIMENSION(:), POINTER :: array
+    INTEGER, INTENT(IN) :: idx
+    LOGICAL, DIMENSION(:), ALLOCATABLE :: tmp_array
+    INTEGER :: old_size, new_size, i
+
+    old_size = SIZE(array)
+    IF (idx <= old_size) RETURN
+
+    ALLOCATE(tmp_array(old_size))
+    DO i = 1, old_size
+      tmp_array(i) = array(i)
+    END DO
+
+    new_size = 2 * old_size
+    DEALLOCATE(array)
+    ALLOCATE(array(new_size))
+
+    DO i = 1, old_size
+      array(i) = tmp_array(i)
+    END DO
+
+    DEALLOCATE(tmp_array)
+
+  END SUBROUTINE grow_logical_array
 
 
 
@@ -277,5 +306,34 @@ CONTAINS
    erf_func = SIGN(unity - unity / denom**16, val)
 
   END FUNCTION erf_func
+
+
+
+  FUNCTION get_free_lun()
+
+    ! This subroutine simply cycles round until it finds a free lun between
+    ! min_lun and max_lun
+    INTEGER :: get_free_lun
+    INTEGER :: lun
+    INTEGER, PARAMETER :: min_lun = 10, max_lun = 20
+    LOGICAL :: is_open
+
+    is_open = .TRUE.
+
+    lun = min_lun
+    DO
+      INQUIRE(unit=lun, opened=is_open)
+      IF (.NOT. is_open) EXIT
+      lun = lun+1
+      IF (lun > max_lun) THEN
+        WRITE(*,*) '*** ERROR ***'
+        WRITE(*,*) 'Unable to open lun for input deck read'
+        CALL abort_code(c_err_io_error)
+      END IF
+    END DO
+
+    get_free_lun = lun
+
+  END FUNCTION get_free_lun
 
 END MODULE utilities

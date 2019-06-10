@@ -1,5 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -65,7 +64,7 @@ CONTAINS
             // 'species "' // TRIM(species_list(ispecies)%name) // '"'
         error = error .OR. setup_particle_boundary(bc, bc_error)
 
-        IF (bc == c_bc_continue .OR. bc == c_bc_return) &
+        IF (bc == c_bc_heat_bath .OR. bc == c_bc_return) &
             CALL create_boundary_injector(ispecies, i)
       END DO
     END DO
@@ -109,7 +108,7 @@ CONTAINS
     IF (boundary == c_bc_periodic &
         .OR. boundary == c_bc_reflect &
         .OR. boundary == c_bc_thermal &
-        .OR. boundary == c_bc_continue &
+        .OR. boundary == c_bc_heat_bath &
         .OR. boundary == c_bc_return &
         .OR. boundary == c_bc_open) RETURN
 
