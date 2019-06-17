@@ -481,7 +481,7 @@ CONTAINS
     INTEGER, INTENT(IN), OPTIONAL :: direction
     ! The data to be weighted onto the grid
     REAL(num) :: wdata
-    REAL(num) :: idx
+    REAL(num) :: idx, vol
     INTEGER :: ispecies, ix, spec_start, spec_end
     TYPE(particle), POINTER :: current
     LOGICAL :: spec_sum
@@ -489,7 +489,8 @@ CONTAINS
 
     data_array = 0.0_num
 
-    idx = 1.0_num / dx
+    vol = dx
+    idx = 1.0_num / vol
 
     spec_start = current_species
     spec_end = current_species
@@ -507,22 +508,27 @@ CONTAINS
 #ifndef NO_TRACER_PARTICLES
       IF (spec_sum .AND. io_list(ispecies)%zero_current) CYCLE
 #endif
-      current => io_list(ispecies)%attached_list%head
-      wdata = io_list(ispecies)%weight
+      IF (io_list(ispecies)%background_species) THEN
+        data_array(1:nx) = data_array(1:nx) &
+            + io_list(ispecies)%background_density(1:nx) * vol
+      ELSE
+        current => io_list(ispecies)%attached_list%head
+        wdata = io_list(ispecies)%weight
 
-      DO WHILE (ASSOCIATED(current))
+        DO WHILE (ASSOCIATED(current))
 #ifndef PER_SPECIES_WEIGHT
-        wdata = current%weight
+          wdata = current%weight
 #endif
 
 #include "particle_to_grid.inc"
 
-        DO ix = sf_min, sf_max
-          data_array(cell_x+ix) = data_array(cell_x+ix) + gx(ix) * wdata
-        END DO
+          DO ix = sf_min, sf_max
+            data_array(cell_x+ix) = data_array(cell_x+ix) + gx(ix) * wdata
+          END DO
 
-        current => current%next
-      END DO
+          current => current%next
+        END DO
+      END IF
       CALL calc_boundary(data_array, ispecies)
     END DO
 

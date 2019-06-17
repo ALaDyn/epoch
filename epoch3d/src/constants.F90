@@ -187,9 +187,9 @@ MODULE constants
   ! Constants used for bremsstrahlung with plasma screening
 #ifdef BREMSSTRAHLUNG
   REAL(num), PARAMETER :: e_radius = 0.25_num / pi / epsilon0 / m0 * (q0 / c)**2
-  REAL(num), PARAMETER :: plasma_screen_const_1 = 1.4_num / alpha
-  REAL(num), PARAMETER :: plasma_screen_const_2 = &
-      SQRT(epsilon0 * kb) / q0 * m0 * c * alpha / 1.4_num / h_bar
+  REAL(num), PARAMETER :: log_plasma_screen_const_1 = LOG(1.4_num / alpha)
+  REAL(num), PARAMETER :: log_plasma_screen_const_2 = &
+      LOG(SQRT(epsilon0 * kb) / q0 * m0 * c * alpha / 1.4_num / h_bar)
 #endif
 
   ! define special particle IDs
@@ -491,6 +491,9 @@ MODULE constants
   ! sng is the number of ghost cells needed by the current smoother
   INTEGER, PARAMETER :: ng = png + 2
   INTEGER, PARAMETER :: jng = MAX(ng,png)
+  ! ncell_min is the number of cells needed by the domain before subcyling
+  ! of communications is required
+  INTEGER, PARAMETER :: ncell_min = (png + 1) / 2 + 1
 
   INTEGER, PARAMETER :: c_max_zeros = 9
   INTEGER, PARAMETER :: c_dump_part_grid         = 1

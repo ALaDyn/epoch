@@ -41,7 +41,6 @@ CONTAINS
     injector%density_min = 0.0_num
     injector%density_max = HUGE(1.0_num)
     injector%use_flux_injector = .TRUE.
-    NULLIFY(injector%dt_inject)
     NULLIFY(injector%depth)
     NULLIFY(injector%next)
 
@@ -121,7 +120,6 @@ CONTAINS
       next => current%next
       IF (current%density_function%init) &
           CALL deallocate_stack(current%density_function)
-      IF (ASSOCIATED(current%dt_inject)) DEALLOCATE(current%dt_inject)
       IF (ASSOCIATED(current%depth)) DEALLOCATE(current%depth)
       IF (ASSOCIATED(current%drift_perp)) DEALLOCATE(current%drift_perp)
       DO i = 1, 3
@@ -215,7 +213,6 @@ CONTAINS
     REAL(num), DIMENSION(c_ndims-1) :: perp_cell_size, cur_cell
     TYPE(parameter_pack) :: parameters
     INTEGER, DIMENSION(2) :: i2d
-    LOGICAL :: first_inject
     REAL(num), PARAMETER :: sqrt2 = SQRT(2.0_num)
     REAL(num), PARAMETER :: sqrt2_inv = 1.0_num / sqrt2
     REAL(num), PARAMETER :: sqrt2pi_inv = 1.0_num / SQRT(2.0_num * pi)
@@ -327,19 +324,6 @@ CONTAINS
 
         parameters%use_grid_position = .TRUE.
 
-        IF (injector%dt_inject(ii,jj) > 0.0_num) THEN
-          npart_ideal = dt / injector%dt_inject(ii,jj)
-          itemp = random_box_muller(0.5_num * SQRT(npart_ideal &
-              * (1.0_num - npart_ideal / injector%npart_per_cell))) &
-              + npart_ideal
-          injector%depth(ii,jj) = injector%depth(ii,jj) - itemp
-          first_inject = .FALSE.
-
-          IF (injector%depth(ii,jj) >= 0.0_num) CYCLE
-        ELSE
-          first_inject = .TRUE.
-        END IF
-
         CALL populate_injector_properties(injector, parameters, density=density)
 
         IF (density < injector%density_min) CYCLE
@@ -404,18 +388,11 @@ CONTAINS
         v_inject = ABS(v_inject_s)
         v_inject_dt = dt * v_inject_s
 
-        injector%dt_inject(ii,jj) = cell_size &
-            / MAX(injector%npart_per_cell * v_inject * density_correction, &
-            c_tiny)
-        IF (first_inject) THEN
-          ! On the first run of the injectors it isn't possible to decrement
-          ! the optical depth until this point
-          npart_ideal = dt / injector%dt_inject(ii,jj)
-          itemp = random_box_muller(0.5_num * SQRT(npart_ideal &
-              * (1.0_num - npart_ideal / injector%npart_per_cell))) &
-              + npart_ideal
-          injector%depth(ii,jj) = injector%depth(ii,jj) - itemp
-        END IF
+        npart_ideal = injector%npart_per_cell * v_inject * density_correction &
+            * dt / cell_size
+        itemp = random_box_muller(0.5_num * SQRT(npart_ideal &
+            * (1.0_num - npart_ideal / injector%npart_per_cell))) + npart_ideal
+        injector%depth(ii,jj) = injector%depth(ii,jj) - itemp
 
         parts_this_time = FLOOR(ABS(injector%depth(ii,jj) - 1.0_num))
         injector%depth(ii,jj) = injector%depth(ii,jj) &
@@ -522,97 +499,6 @@ CONTAINS
 
 
 
-  SUBROUTINE update_dt_inject(injector)
-
-    TYPE(injector_block), POINTER :: injector
-    REAL(num) :: mass, typical_mc2, p_therm, p_inject_drift, density_grid
-    REAL(num) :: gamma_mass, v_inject, abs_bdy_space
-    REAL(num) :: v_inject_s
-    INTEGER :: dir_index, ii, jj
-    INTEGER, DIMENSION(c_ndims-1) :: perp_dir_index, nel
-    REAL(num), DIMENSION(3) :: temperature, drift
-    TYPE(parameter_pack) :: parameters
-
-    IF (injector%boundary == c_bd_x_min) THEN
-      parameters%pack_ix = 1
-      abs_bdy_space = dx
-      dir_index = 1
-      nel = (/ny, nz/)
-      perp_dir_index = (/2, 3/)
-    ELSE IF (injector%boundary == c_bd_x_max) THEN
-      parameters%pack_ix = nx
-      abs_bdy_space = dx
-      dir_index = 1
-      nel = (/ny, nz/)
-      perp_dir_index = (/2, 3/)
-    ELSE IF (injector%boundary == c_bd_y_min) THEN
-      parameters%pack_iy = 1
-      dir_index = 2
-      abs_bdy_space = dy
-      nel = (/nx, nz/)
-      perp_dir_index = (/1, 3/)
-    ELSE IF (injector%boundary == c_bd_y_max) THEN
-      parameters%pack_iy = ny
-      dir_index = 2
-      abs_bdy_space = dy
-      nel = (/nx, nz/)
-      perp_dir_index = (/1, 3/)
-    ELSE IF (injector%boundary == c_bd_z_min) THEN
-      parameters%pack_iy = 1
-      dir_index = 3
-      abs_bdy_space = dy
-      nel = (/nx, ny/)
-      perp_dir_index = (/1, 2/)
-    ELSE IF (injector%boundary == c_bd_z_max) THEN
-      parameters%pack_iy = ny
-      dir_index = 3
-      abs_bdy_space = dy
-      nel = (/nx, ny/)
-      perp_dir_index = (/1, 2/)
-    END IF
-
-    mass = species_list(injector%species)%mass
-    typical_mc2 = (mass * c)**2
-    parameters%use_grid_position = .TRUE.
-
-    DO ii = 1, nel(1)
-      DO jj = 1, nel(2)
-        IF (perp_dir_index(1) == 1) THEN
-          parameters%pack_ix = ii
-        ELSE IF (perp_dir_index(1) == 2) THEN
-          parameters%pack_iy = ii
-        ELSE
-          parameters%pack_iz = ii
-        END IF
-
-        IF (perp_dir_index(2) == 1) THEN
-          parameters%pack_ix = jj
-        ELSE IF (perp_dir_index(2) == 2) THEN
-          parameters%pack_iy = jj
-        ELSE
-          parameters%pack_iz = jj
-        END IF
-
-        CALL populate_injector_properties(injector, parameters, density_grid, &
-            temperature, drift)
-
-        ! Assume agressive maximum thermal momentum, all components
-        ! like hottest component
-        p_therm = SQRT(mass * kb * MAXVAL(temperature))
-        p_inject_drift = drift(dir_index)
-        gamma_mass = SQRT((p_therm + p_inject_drift)**2 + typical_mc2) / c
-        v_inject_s = p_inject_drift / gamma_mass
-        v_inject = ABS(v_inject_s)
-
-        injector%dt_inject(ii,jj) = abs_bdy_space &
-            / MAX(injector%npart_per_cell * v_inject, c_tiny)
-      END DO
-    END DO
-
-  END SUBROUTINE update_dt_inject
-
-
-
   SUBROUTINE finish_injector_setup
 
     TYPE(injector_block), POINTER :: current
@@ -702,6 +588,20 @@ CONTAINS
       species%bc_particle(boundary) = c_bc_open
     END IF
 
+    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
+      ALLOCATE(injector%depth(1-ng:ny+ng, 1-ng:nz+ng))
+    END IF
+
+    IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
+      ALLOCATE(injector%depth(1-ng:nx+ng, 1-ng:nz+ng))
+    END IF
+
+    IF (boundary == c_bd_z_min .OR. boundary == c_bd_z_max) THEN
+      ALLOCATE(injector%depth(1-ng:nx+ng, 1-ng:ny+ng))
+    END IF
+
+    injector%depth = 1.0_num
+
   END SUBROUTINE finish_single_injector_setup
 
 
@@ -750,8 +650,6 @@ CONTAINS
     ELSE IF (injector%boundary == c_bd_x_max) THEN
       injector%drift_perp = species%ext_drift_x_max
     END IF
-
-    CALL update_dt_inject(injector)
 
   END SUBROUTINE update_return_injector
 
