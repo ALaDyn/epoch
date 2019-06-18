@@ -44,6 +44,17 @@ CONTAINS
     NULLIFY(injector%depth)
     NULLIFY(injector%next)
 
+    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
+      ALLOCATE(injector%depth(1-ng:ny+ng))
+    END IF
+
+    IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
+      ALLOCATE(injector%depth(1-ng:nx+ng))
+    END IF
+
+    injector%depth = 1.0_num
+    need_random_state = .TRUE.
+
   END SUBROUTINE init_injector
 
 
@@ -344,6 +355,8 @@ CONTAINS
           * (1.0_num - npart_ideal / injector%npart_per_cell))) + npart_ideal
       injector%depth(ii) = injector%depth(ii) - itemp
 
+      IF (injector%depth(ii) >= 0.0_num) CYCLE
+
       parts_this_time = FLOOR(ABS(injector%depth(ii) - 1.0_num))
       injector%depth(ii) = injector%depth(ii) + REAL(parts_this_time, num)
 
@@ -517,16 +530,6 @@ CONTAINS
       species%bc_particle(boundary) = c_bc_open
     END IF
 
-    IF (boundary == c_bd_x_min .OR. boundary == c_bd_x_max) THEN
-      ALLOCATE(injector%depth(1-ng:ny+ng))
-    END IF
-
-    IF (boundary == c_bd_y_min .OR. boundary == c_bd_y_max) THEN
-      ALLOCATE(injector%depth(1-ng:nx+ng))
-    END IF
-
-    injector%depth = 1.0_num
-
   END SUBROUTINE finish_single_injector_setup
 
 
@@ -537,7 +540,6 @@ CONTAINS
     TYPE(injector_block), POINTER :: working_injector
 
     use_injectors = .TRUE.
-    need_random_state = .TRUE.
 
     ALLOCATE(working_injector)
 
@@ -577,5 +579,33 @@ CONTAINS
     END IF
 
   END SUBROUTINE update_return_injector
+
+
+
+  SUBROUTINE setup_injector_depths(inj_init, depths, inj_count)
+
+    TYPE(injector_block), POINTER :: inj_init
+    REAL(num), DIMENSION(:,:), INTENT(IN) :: depths
+    INTEGER, INTENT(OUT) :: inj_count
+    TYPE(injector_block), POINTER :: inj
+    INTEGER :: iinj
+
+    iinj = 1
+    inj => inj_init
+
+    DO WHILE(ASSOCIATED(inj))
+      ! Exclude ghost cells
+      IF (inj%boundary == c_bd_x_min .OR. inj%boundary == c_bd_x_max) THEN
+        inj%depth(1:ny) = depths(:,iinj)
+      ELSE
+        inj%depth(1:nx) = depths(:,iinj)
+      END IF
+      iinj = iinj + 1
+      inj => inj%next
+    END DO
+
+    inj_count = iinj - 1
+
+  END SUBROUTINE setup_injector_depths
 
 END MODULE injectors

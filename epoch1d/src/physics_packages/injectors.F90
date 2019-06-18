@@ -44,6 +44,9 @@ CONTAINS
     injector%drift_perp = 0.0_num
     NULLIFY(injector%next)
 
+    injector%depth = 1.0_num
+    need_random_state = .TRUE.
+
   END SUBROUTINE init_injector
 
 
@@ -279,6 +282,8 @@ CONTAINS
         * (1.0_num - npart_ideal / injector%npart_per_cell))) + npart_ideal
     injector%depth = injector%depth - itemp
 
+    IF (injector%depth >= 0.0_num) RETURN
+
     parts_this_time = FLOOR(ABS(injector%depth - 1.0_num))
     injector%depth = injector%depth + REAL(parts_this_time, num)
 
@@ -434,8 +439,6 @@ CONTAINS
       species%bc_particle(boundary) = c_bc_open
     END IF
 
-    injector%depth = 1.0_num
-
   END SUBROUTINE finish_single_injector_setup
 
 
@@ -446,7 +449,6 @@ CONTAINS
     TYPE(injector_block), POINTER :: working_injector
 
     use_injectors = .TRUE.
-    need_random_state = .TRUE.
 
     ALLOCATE(working_injector)
 
@@ -484,5 +486,28 @@ CONTAINS
     END IF
 
   END SUBROUTINE update_return_injector
+
+
+
+  SUBROUTINE setup_injector_depths(inj_init, depths, inj_count)
+
+    TYPE(injector_block), POINTER :: inj_init
+    REAL(num), DIMENSION(:), INTENT(IN) :: depths
+    INTEGER, INTENT(OUT) :: inj_count
+    TYPE(injector_block), POINTER :: inj
+    INTEGER :: iinj
+
+    iinj = 1
+    inj => inj_init
+
+    DO WHILE(ASSOCIATED(inj))
+      inj%depth = depths(iinj)
+      iinj = iinj + 1
+      inj => inj%next
+    END DO
+
+    inj_count = iinj - 1
+
+  END SUBROUTINE setup_injector_depths
 
 END MODULE injectors
