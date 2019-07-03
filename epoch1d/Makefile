@@ -187,30 +187,30 @@ DEFINES := $(DEFINE)
 # push slightly faster).
 # Tracer particles which behave like normal particles but do not affect
 # the field, current or each other.
-#DEFINES += $(D)NO_TRACER_PARTICLES
+DEFINES += $(D)NO_TRACER_PARTICLES
 
 # Don't enable support for particle probes (in order to make the particle
 # push slightly faster).
 # Particle probes are diagnostics which gather information on particles which
 # cross a plane in the simulation.
-#DEFINES += $(D)NO_PARTICLE_PROBES
+DEFINES += $(D)NO_PARTICLE_PROBES
 
 # Use second order particle weighting (default is third order).
 #DEFINES += $(D)PARTICLE_SHAPE_TOPHAT
 
 # Use fifth order particle weighting (default is third order).
-#DEFINES += $(D)PARTICLE_SHAPE_BSPLINE3
+DEFINES += $(D)PARTICLE_SHAPE_BSPLINE3
 
 # Include a unique global particle ID. The first flag defines the ID using
 # an 8-byte integer, the second uses 4-bytes.
-#DEFINES += $(D)PARTICLE_ID
+DEFINES += $(D)PARTICLE_ID
 #DEFINES += $(D)PARTICLE_ID4
 
 # Include QED routines
 #DEFINES += $(D)PHOTONS
 
 # Include bremsstrahlung routines
-#DEFINES += $(D)BREMSSTRAHLUNG
+DEFINES += $(D)BREMSSTRAHLUNG
 
 # Use the Trident process for pair production
 #DEFINES += $(D)TRIDENT_PHOTONS

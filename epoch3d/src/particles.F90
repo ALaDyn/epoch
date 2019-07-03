@@ -666,7 +666,8 @@ CONTAINS
     REAL(num) :: delta_x, delta_y, delta_z
     INTEGER,INTENT(IN) :: ispecies
     TYPE(particle), POINTER :: current
-
+    REAL(num) :: probe_energy, dtfac, fac
+    
     ! Used for particle probes (to see of probe conditions are satisfied)
 #ifndef NO_PARTICLE_PROBES
     REAL(num) :: init_part_x, final_part_x
@@ -675,7 +676,6 @@ CONTAINS
     TYPE(particle_probe), POINTER :: current_probe
     TYPE(particle), POINTER :: particle_copy
     REAL(num) :: d_init, d_final
-    REAL(num) :: probe_energy, dtfac, fac
     LOGICAL :: probes_for_species
 #endif
 
