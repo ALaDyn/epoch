@@ -32,7 +32,7 @@ CONTAINS
     DO ispecies = 1,n_species
       current => species_list(ispecies)%attached_list%head
       DO WHILE(ASSOCIATED(current))
-        current%start_x = current%part_pos
+        current%start_x = current%part_pos(1)
         current => current%next
       END DO
     END DO
@@ -58,9 +58,9 @@ CONTAINS
       DO WHILE(ASSOCIATED(current))
 
         ! Find eta at the particle position
-        part_x  = current%part_pos - x_grid_min_local
-        part_y  = current%part_pos - y_grid_min_local
-        part_z  = current%part_pos - z_grid_min_local
+        part_x  = current%part_pos(1) - x_grid_min_local
+        part_y  = current%part_pos(2) - y_grid_min_local
+        part_z  = current%part_pos(3) - z_grid_min_local
         part_ux = current%part_p(1) / mc0
         part_uy = current%part_p(2) / mc0
         part_uz = current%part_p(3) / mc0

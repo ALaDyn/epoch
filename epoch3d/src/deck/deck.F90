@@ -32,6 +32,7 @@ MODULE deck
   USE deck_subset_block
   USE deck_collision_block
   USE deck_part_from_file_block
+  USE deck_landau_lifshitz_block
 #ifdef PHOTONS
   USE photons
 #endif
@@ -99,6 +100,7 @@ CONTAINS
 #ifndef NO_PARTICLE_PROBES
     CALL probe_deck_initialise
 #endif
+    CALL landau_lifshitz_deck_initialise
     CALL qed_deck_initialise
     CALL bremsstrahlung_deck_initialise
     CALL species_deck_initialise
@@ -129,6 +131,7 @@ CONTAINS
 #ifndef NO_PARTICLE_PROBES
     CALL probe_deck_finalise
 #endif
+    CALL landau_lifshitz_deck_finalise
     CALL qed_deck_finalise
     CALL bremsstrahlung_deck_finalise
     CALL species_deck_finalise
@@ -174,6 +177,8 @@ CONTAINS
     ELSE IF (str_cmp(block_name, 'probe')) THEN
       CALL probe_block_start
 #endif
+    ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
+      CALL landau_lifshitz_block_start
     ELSE IF (str_cmp(block_name, 'qed')) THEN
       CALL qed_block_start
     ELSE IF (str_cmp(block_name, 'bremsstrahlung')) THEN
@@ -225,6 +230,8 @@ CONTAINS
     ELSE IF (str_cmp(block_name, 'probe')) THEN
       CALL probe_block_end
 #endif
+    ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
+      CALL landau_lifshitz_block_end
     ELSE IF (str_cmp(block_name, 'qed')) THEN
       CALL qed_block_end
     ELSE IF (str_cmp(block_name, 'bremsstrahlung')) THEN
@@ -308,6 +315,10 @@ CONTAINS
       handle_block = IOR(handle_block, c_err_pp_options_wrong)
       extended_error_string = '-DNO_PARTICLE_PROBES'
 #endif
+      RETURN
+    ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
+      handle_block = &
+          landau_lifshitz_block_handle_element(block_element, block_value)
       RETURN
     ELSE IF (str_cmp(block_name, 'qed')) THEN
       handle_block = qed_block_handle_element(block_element, block_value)

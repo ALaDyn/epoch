@@ -169,7 +169,7 @@ MODULE constants
   REAL(num), PARAMETER :: mc0 = 2.73092429345209278e-22_num
 
   ! Constants used in pair production
-#ifdef PHOTONS
+#if defined(PHOTONS) || defined(LANDAU_LIFSHITZ)
   ! b_s = mc0**2 / (h_bar * q0)
   REAL(num), PARAMETER :: b_s = 4.414005028109566589829741352306303e9_num
   ! e_s = b_s * c
@@ -240,6 +240,7 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_work_done_integrated = 2**22
   INTEGER(i8), PARAMETER :: c_def_hc_push = 2**23
   INTEGER(i8), PARAMETER :: c_def_bremsstrahlung = 2**24
+  INTEGER(i8), PARAMETER :: c_def_landau_lifshitz = 2**25
 
   ! Stagger types
   INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
@@ -584,6 +585,11 @@ MODULE shared_data
     REAL(num) :: work_y_total
     REAL(num) :: work_z_total
 #endif
+#ifdef LANDAU_LIFSHITZ
+    REAL(num) :: power_eta
+    REAL(num) :: ex_at_part
+    REAL(num) :: start_x
+#endif
 #ifdef PHOTONS
     REAL(num) :: optical_depth
 #endif
@@ -781,16 +787,19 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_ppc               = 56
   INTEGER, PARAMETER :: c_dump_average_weight    = 57
   INTEGER, PARAMETER :: c_dump_part_opdepth_brem = 58
+  INTEGER, PARAMETER :: c_dump_part_power_eta    = 59
+  INTEGER, PARAMETER :: c_dump_part_ex_at_part   = 60
+  INTEGER, PARAMETER :: c_dump_part_start_x      = 61
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 59
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 60
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 61
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 62
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 63
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 64
-  INTEGER, PARAMETER :: num_vars_to_dump         = 64
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 62
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 63
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 64
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 65
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 66
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 67
+  INTEGER, PARAMETER :: num_vars_to_dump         = 67
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 58
+  INTEGER, PARAMETER :: num_vars_to_dump         = 61
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -1084,6 +1093,14 @@ MODULE shared_data
   INTEGER :: bc_z_min_after_move
   INTEGER :: bc_z_max_after_move
   REAL(num), DIMENSION(3) :: window_shift
+
+#ifdef LANDAU_LIFSHITZ
+  !----------------------------------------------------------------------------
+  ! Landau Lifshitz classical radiation reaction - written by S. J. Morris
+  !----------------------------------------------------------------------------
+  REAL(num) :: landau_lifshitz_start_time = 0.0_num
+#endif
+  LOGICAL :: use_landau_lifshitz = .FALSE.
 
 #ifdef PHOTONS
   !----------------------------------------------------------------------------

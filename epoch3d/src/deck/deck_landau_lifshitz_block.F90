@@ -44,7 +44,7 @@ CONTAINS
 
     IF (rank == 0) THEN
 #ifdef PHOTONS
-      IF (use_qed .AND. use_landau_lifshitz)
+      IF (use_qed .AND. use_landau_lifshitz) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
           WRITE(io,*) '*** ERROR ***'
@@ -52,6 +52,7 @@ CONTAINS
               ' simultaneously.'
         END DO
         CALL abort_code(c_err_io_error)
+      END IF
 #endif
     END IF
 
@@ -65,10 +66,10 @@ CONTAINS
               ' "landau_lifshitz" block.'
           WRITE(io,*) 'Please recompile with the -DLANDAU_LIFSHITZ', &
               'preprocessor flag.'
-        ENDDO
-      ENDIF
+        END DO
+      END IF
       CALL abort_code(c_err_pp_options_missing)
-    ENDIF
+    END IF
 #endif
 
 END SUBROUTINE landau_lifshitz_deck_finalise

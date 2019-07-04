@@ -584,6 +584,14 @@ CONTAINS
         CALL write_particle_variable(c_dump_part_id, code, &
             'ID', '#', it_output_integer4)
 #endif
+#ifdef LANDAU_LIFSHITZ
+        CALL write_particle_variable(c_dump_part_power_eta, code, &
+            'eta', '', it_output_real)
+        CALL write_particle_variable(c_dump_part_ex_at_part, code, &
+            'ex_at_part', '', it_output_real)
+        CALL write_particle_variable(c_dump_part_start_x, code, &
+            'start_x', '', it_output_real)
+#endif
 #ifdef PHOTONS
         CALL write_particle_variable(c_dump_part_opdepth, code, &
             'Optical depth', '', it_output_real)

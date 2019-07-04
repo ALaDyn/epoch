@@ -32,7 +32,7 @@ CONTAINS
     DO ispecies = 1,n_species
       current => species_list(ispecies)%attached_list%head
       DO WHILE(ASSOCIATED(current))
-        current%start_x = current%part_pos
+        current%start_x = current%part_pos(1)
         current => current%next
       END DO
     END DO

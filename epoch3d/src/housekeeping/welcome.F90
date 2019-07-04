@@ -123,6 +123,9 @@ CONTAINS
 #ifdef PARTICLE_ID
     found = .TRUE.
 #endif
+#ifdef LANDAU_LIFSHITZ
+    found = .TRUE.
+#endif
 #ifdef PHOTONS
     found = .TRUE.
 #ifdef TRIDENT_PHOTONS

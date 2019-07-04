@@ -61,6 +61,9 @@ CONTAINS
 #ifdef COLLISIONS_TEST
     nvar = nvar+1
 #endif
+#ifdef LANDAU_LIFSHITZ
+    nvar = nvar+3
+#endif
 #ifdef PHOTONS
     nvar = nvar+1
 #endif
@@ -411,6 +414,14 @@ CONTAINS
     array(cpos) = REAL(a_particle%coll_count, num)
     cpos = cpos+1
 #endif
+#ifdef LANDAU_LIFSHITZ
+    array(cpos) = a_particle%power_eta
+    cpos = cpos+1
+    array(cpos) = a_particle%ex_at_part
+    cpos = cpos+1
+    array(cpos) = a_particle%start_x
+    cpos = cpos+1
+#endif
 #ifdef PHOTONS
     array(cpos) = a_particle%optical_depth
     cpos = cpos+1
@@ -481,6 +492,14 @@ CONTAINS
     a_particle%coll_count = NINT(array(cpos))
     cpos = cpos+1
 #endif
+#ifdef LANDAU_LIFSHITZ
+    a_particle%power_eta = array(cpos)
+    cpos = cpos+1
+    a_particle%ex_at_part = array(cpos)
+    cpos = cpos+1
+    a_particle%start_x = array(cpos)
+    cpos = cpos+1
+#endif
 #ifdef PHOTONS
     a_particle%optical_depth = array(cpos)
     cpos = cpos + 1
@@ -533,6 +552,11 @@ CONTAINS
 #endif
 #ifdef COLLISIONS_TEST
     new_particle%coll_count = 0
+#endif
+#ifdef LANDAU_LIFSHITZ
+    new_particle%power_eta = 0.0_num
+    new_particle%ex_at_part = 0.0_num
+    new_particle%start_x = 0.0_num
 #endif
 #if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
     ! This assigns an optical depth to newly created particle

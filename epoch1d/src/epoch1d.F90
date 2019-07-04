@@ -51,6 +51,9 @@ PROGRAM pic
   USE calc_df
   USE injectors
   USE current_smooth
+#ifdef LANDAU_LIFSHITZ
+  USE landau_lifshitz
+#endif
 #ifdef PHOTONS
   USE photons
 #endif
@@ -163,6 +166,9 @@ PROGRAM pic
   IF (use_particle_migration) CALL initialise_migration
 
   IF (rank == 0) PRINT *, 'Equilibrium set up OK, running code'
+#ifdef LANDAU_LIFSHITZ
+  IF (use_landau_lifshitz) CALL setup_landau_lifshitz()
+#endif
 #ifdef PHOTONS
   IF (use_qed) CALL setup_qed_module()
 #endif
@@ -187,6 +193,12 @@ PROGRAM pic
     END IF
 
     push = (time >= particle_push_start_time)
+#ifdef LANDAU_LIFSHITZ
+    IF (push .AND. use_landau_lifshitz &
+        .AND. time > landau_lifshitz_start_time) THEN
+      CALL classical_radiation_reaction()
+    END IF
+#endif
 #ifdef PHOTONS
     IF (push .AND. use_qed .AND. time > qed_start_time) THEN
       CALL qed_update_optical_depth()

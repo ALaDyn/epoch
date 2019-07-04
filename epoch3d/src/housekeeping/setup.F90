@@ -1401,6 +1401,48 @@ CONTAINS
           STOP
 #endif
 
+        ELSE IF (block_id(1:4) == 'eta/') THEN
+#ifdef LANDAU_LIFSHITZ
+          CALL sdf_read_point_variable(sdf_handle, npart_local, &
+              species_subtypes(ispecies), it_eta)
+#else
+          IF (rank == 0) THEN
+            PRINT*, '*** ERROR ***'
+            PRINT*, 'Cannot load dump file with eta values.'
+            PRINT*, 'Please recompile with the -DLANDAU_LIFSHITZ option.'
+          END IF
+          CALL abort_code(c_err_pp_options_missing)
+          STOP
+#endif
+
+        ELSE IF (block_id(1:11) == 'ex_at_part/') THEN
+#ifdef LANDAU_LIFSHITZ
+          CALL sdf_read_point_variable(sdf_handle, npart_local, &
+              species_subtypes(ispecies), it_ex_at_part)
+#else
+          IF (rank == 0) THEN
+            PRINT*, '*** ERROR ***'
+            PRINT*, 'Cannot load dump file with ex_at_part values.'
+            PRINT*, 'Please recompile with the -DLANDAU_LIFSHITZ option.'
+          END IF
+          CALL abort_code(c_err_pp_options_missing)
+          STOP
+#endif
+
+        ELSE IF (block_id(1:8) == 'start_x/') THEN
+#ifdef LANDAU_LIFSHITZ
+          CALL sdf_read_point_variable(sdf_handle, npart_local, &
+              species_subtypes(ispecies), it_start_x)
+#else
+          IF (rank == 0) THEN
+            PRINT*, '*** ERROR ***'
+            PRINT*, 'Cannot load dump file with start_x values.'
+            PRINT*, 'Please recompile with the -DLANDAU_LIFSHITZ option.'
+          END IF
+          CALL abort_code(c_err_pp_options_missing)
+          STOP
+#endif
+
         ELSE IF (block_id(1:14) == 'optical depth/') THEN
 #ifdef PHOTONS
           CALL sdf_read_point_variable(sdf_handle, npart_local, &
@@ -1760,6 +1802,68 @@ CONTAINS
     it_id8 = 0
 
   END FUNCTION it_id8
+#endif
+
+
+
+#ifdef LANDAU_LIFSHITZ
+  FUNCTION it_eta(array, npart_this_it, start, param)
+
+    REAL(num) :: it_eta
+    REAL(num), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      iterator_list%power_eta = array(ipart)
+      iterator_list => iterator_list%next
+    END DO
+
+    it_eta = 0
+
+  END FUNCTION it_eta
+
+
+
+  FUNCTION it_ex_at_part(array, npart_this_it, start, param)
+
+    REAL(num) :: it_ex_at_part
+    REAL(num), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      iterator_list%ex_at_part = array(ipart)
+      iterator_list => iterator_list%next
+    END DO
+
+    it_ex_at_part = 0
+
+  END FUNCTION it_ex_at_part
+
+
+
+  FUNCTION it_start_x(array, npart_this_it, start, param)
+
+    REAL(num) :: it_start_x
+    REAL(num), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      iterator_list%start_x = array(ipart)
+      iterator_list => iterator_list%next
+    END DO
+
+    it_start_x = 0
+
+  END FUNCTION it_start_x
 #endif
 
 

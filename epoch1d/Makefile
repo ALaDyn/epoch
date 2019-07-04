@@ -301,7 +301,7 @@ SRCFILES = balance.F90 boundary.f90 bremsstrahlung.F90 calc_df.F90 \
 	deck_subset_block.f90 deck_window_block.f90 deltaf_loader.F90 \
 	diagnostics.F90 dist_fn.F90 epoch1d.F90 evaluate.F90 evaluator_blocks.F90 \
 	fields.f90 finish.f90 helper.F90 ic_module.f90 injectors.F90 ionise.F90 \
-	iterators.F90 landau_lifshitz.F90 laser.f90 mpi_routines.F90
+	iterators.F90 landau_lifshitz.F90 laser.f90 mpi_routines.F90 \
   mpi_subtype_control.f90 numerics.f90 particle_migration.F90 \
   particle_pointer_advance.f90 particle_temperature.F90 particles.F90 \
   partlist.F90 photons.F90 prefetch.F90 probes.F90 random_generator.f90 \

@@ -77,6 +77,11 @@ CONTAINS
     io_block_name (c_dump_part_qed_energy  ) = ''
     io_block_name (c_dump_part_opdepth_tri ) = ''
     io_block_name (c_dump_part_opdepth_brem) = ''
+#ifdef LANDAU_LIFSHITZ
+    io_block_name (c_dump_part_power_eta   ) = 'eta'
+    io_block_name (c_dump_part_ex_at_part  ) = 'ex_at_part'
+    io_block_name (c_dump_part_start_x     ) = 'start_x'
+#endif
 #ifdef PHOTONS
     io_block_name (c_dump_part_opdepth     ) = 'optical_depth'
 #endif

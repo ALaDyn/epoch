@@ -301,6 +301,29 @@ CONTAINS
         END DO
 #endif
 
+#ifdef LANDAU_LIFSHITZ
+      CASE (c_dump_part_power_eta)
+        DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
+          part_count = part_count + 1
+          array(part_count) = cur%power_eta
+          cur => cur%next
+        END DO
+
+      CASE (c_dump_part_ex_at_part)
+        DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
+          part_count = part_count + 1
+          array(part_count) = cur%ex_at_part
+          cur => cur%next
+        END DO
+
+      CASE (c_dump_part_start_x)
+        DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
+          part_count = part_count + 1
+          array(part_count) = cur%start_x
+          cur => cur%next
+        END DO
+#endif
+
 #ifdef PHOTONS
       CASE (c_dump_part_opdepth)
         DO WHILE (ASSOCIATED(cur) .AND. (part_count < npoint_it))
