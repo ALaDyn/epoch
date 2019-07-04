@@ -227,6 +227,7 @@ CONTAINS
     INTEGER, DIMENSION(c_ndims-1) :: perp_dir_index, nperp
     REAL(num), DIMENSION(c_ndims-1) :: perp_cell_size, cur_cell
     TYPE(parameter_pack) :: parameters
+    LOGICAL :: created_plist
     INTEGER, DIMENSION(2) :: i2d
     REAL(num), PARAMETER :: sqrt2 = SQRT(2.0_num)
     REAL(num), PARAMETER :: sqrt2_inv = 1.0_num / sqrt2
@@ -319,7 +320,7 @@ CONTAINS
     weight_fac = vol / injector%npart_per_cell
 #endif
 
-    CALL create_empty_partlist(plist)
+    created_plist = .FALSE.
 
     DO ii = 1, nperp(1)
       DO jj = 1, nperp(2)
@@ -369,11 +370,8 @@ CONTAINS
             ! non-flux Maxwellian
             flux_dir_cell = -1
           ELSE IF (p_drift < -flow_limit_val * p_therm) THEN
-            ! Net is outflow - inflow velocity is zero
-            v_inject_s = 0.0_num
-            gamma_mass = 1.0_num
-            ! Since we inject nothing, no need to correct density
-            density_correction = 1.0_num
+            ! Net is outflow - inflow velocity is zero. No particles injected
+            CYCLE
           ELSE IF (ABS(p_drift) < p_therm * 1.0e-9_num) THEN
             v_inject_s = 2.0_num * sqrt2pi_inv * p_therm &
                 + (1.0_num - 2.0_num * sqrt2 / pi) * p_drift
@@ -385,6 +383,7 @@ CONTAINS
 
             ! Fraction of the drifting Maxwellian distribution inflowing
             density_correction = 0.5_num * (1.0_num + erf_func(p_ratio))
+            IF (density_correction < c_tiny) CYCLE
 
             ! Below is actually MOMENTUM, will correct on next line
             v_inject_s = dir_mult * (p_drift &
@@ -414,6 +413,13 @@ CONTAINS
         parts_this_time = FLOOR(ABS(injector%depth(ii,jj) - 1.0_num))
         injector%depth(ii,jj) = injector%depth(ii,jj) &
             + REAL(parts_this_time, num)
+
+        IF (parts_this_time < 1) CYCLE
+
+        IF (.NOT.created_plist) THEN
+          CALL create_empty_partlist(plist)
+          created_plist = .TRUE.
+        END IF
 
         DO ipart = 1, parts_this_time
           CALL create_particle(new)
@@ -459,7 +465,9 @@ CONTAINS
       END DO
     END DO
 
-    CALL append_partlist(species_list(injector%species)%attached_list, plist)
+    IF (created_plist) THEN
+      CALL append_partlist(species_list(injector%species)%attached_list, plist)
+    END IF
 
   END SUBROUTINE run_single_injector
 
