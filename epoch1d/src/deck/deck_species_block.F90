@@ -284,9 +284,8 @@ CONTAINS
             ELSE
               error = .TRUE.
               ! Return boundaries only allowed on x
-              ! Set to thermal as closest option
-              ! If continuation injectors are added, use these instead here
-              bc_species(idx) = c_bc_thermal
+              ! Set to heat_bath as closest option
+              bc_species(idx) = c_bc_heat_bath
             END IF
           END IF
         END DO
@@ -324,21 +323,20 @@ CONTAINS
         END IF
 
         ! Disable return bnds on all but first species
-        ! Again, continuation injectors would supersede thermal fallback
         IF (nreturn > 1 .AND. i /= return_sp) THEN
           IF (species_list(i)%bc_particle(c_bd_x_min) == c_bc_return) &
-              species_list(i)%bc_particle(c_bd_x_min) = c_bc_thermal
+              species_list(i)%bc_particle(c_bd_x_min) = c_bc_heat_bath
           IF (species_list(i)%bc_particle(c_bd_x_max) == c_bc_return) &
-              species_list(i)%bc_particle(c_bd_x_max) = c_bc_thermal
+              species_list(i)%bc_particle(c_bd_x_max) = c_bc_heat_bath
           IF (rank == 0) THEN
             DO iu = 1, nio_units ! Print to stdout and to file
               io = io_units(iu)
               WRITE(io,*)
               WRITE(io,*) '*** WARNING ***'
-              WRITE(io,*) 'Too many return boundary species!', &
-                  ' Disabling for ',&
-                  'species ', TRIM(species_list(i)%name), ' Code will ', &
-                  'continue to run with thermal boundaries on this species'
+              WRITE(io,*) 'Too many return boundary species!'
+              WRITE(io,*) 'Disabling for species ', TRIM(species_list(i)%name)
+              WRITE(io,*) 'Code will continue to run using heat_bath ', &
+                          'boundaries on this species'
             END DO
           END IF
         END IF
