@@ -1670,7 +1670,7 @@ CONTAINS
       IF (boundary == c_bd_x_min) THEN
         curr_species%ext_drift_x_min(1:ny,1:nz) = &
             values(ny_global_min:ny_global_max, nz_global_min:nz_global_max)
-      ELSE IF(boundary == c_bd_x_max) THEN
+      ELSE IF (boundary == c_bd_x_max) THEN
         curr_species%ext_drift_x_max(1:ny,1:nz) = &
             values(ny_global_min:ny_global_max, nz_global_min:nz_global_max)
       END IF

@@ -1455,7 +1455,7 @@ CONTAINS
 
       IF (boundary == c_bd_x_min) THEN
         curr_species%ext_drift_x_min = values(1)
-      ELSE IF(boundary == c_bd_x_max) THEN
+      ELSE IF (boundary == c_bd_x_max) THEN
         curr_species%ext_drift_x_max = values(1)
       END IF
 
