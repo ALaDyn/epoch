@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2011-2012 Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
-! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -21,6 +19,7 @@ MODULE diagnostics
   USE sdf
   USE deck
   USE dist_fn
+  USE evaluator
   USE epoch_source_info
   USE iterators
   USE probes
@@ -53,6 +52,7 @@ MODULE diagnostics
   LOGICAL :: dump_field_grid, skipped_any_set
   LOGICAL :: got_request_dump_name = .FALSE.
   LOGICAL :: got_request_dump_restart = .FALSE.
+  LOGICAL :: from_dump_request = .FALSE.
   CHARACTER(LEN=string_length) :: request_dump_name = ''
   LOGICAL, ALLOCATABLE :: dump_point_grid(:)
   LOGICAL, ALLOCATABLE, SAVE :: prefix_first_call(:)
@@ -215,7 +215,8 @@ CONTAINS
     REAL(num), DIMENSION(:), ALLOCATABLE :: x_reduced
     REAL(num), DIMENSION(:), ALLOCATABLE :: array
     INTEGER, DIMENSION(2,c_ndims) :: ranges
-    INTEGER :: code, i, io, ispecies, iprefix, mask, rn, dir, dumped, nval
+    INTEGER :: code, i, io, ispecies, iprefix, mask, rn, dir, dumped, nval, n
+    INTEGER :: errcode
     INTEGER :: random_state(4)
     INTEGER, ALLOCATABLE :: random_states_per_proc(:)
     INTEGER, DIMENSION(c_ndims) :: dims
@@ -375,6 +376,18 @@ CONTAINS
 
       nstep_prev = step
 
+      DO isubset = 1, n_subsets
+        errcode = 0
+        sub => subset_list(isubset)
+        IF (.NOT. sub%time_varying) CYCLE
+        DO n = 1, c_subset_max
+          IF (sub%use_restriction_function(n)) THEN
+            sub%restriction(n) = evaluate(sub%restriction_function(n), errcode)
+          END IF
+        END DO
+        IF (sub%space_restrictions) CALL create_subset_subtypes(isubset)
+      END DO
+
       ! open the file
       CALL sdf_open(sdf_handle, full_filename, comm, c_sdf_write)
       CALL sdf_set_string_length(sdf_handle, c_max_string_length)
@@ -412,6 +425,11 @@ CONTAINS
             'laser_x_min_phase')
         CALL write_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
             'laser_x_max_phase')
+
+        CALL write_injector_depths(sdf_handle, injector_x_min, &
+            'injector_x_min_depths', c_dir_x, x_min_boundary)
+        CALL write_injector_depths(sdf_handle, injector_x_max, &
+            'injector_x_max_depths', c_dir_x, x_max_boundary)
 
         DO io = 1, n_io_blocks
           CALL sdf_write_srl(sdf_handle, &
@@ -552,6 +570,38 @@ CONTAINS
           END DO
         END IF
 #endif
+
+        mask = iomask(c_dump_total_energy_sum)
+        IF (IAND(mask, code) /= 0) THEN
+          CALL build_species_subset
+
+          IF (IAND(mask, c_io_species) == 0) THEN
+            CALL calc_total_energy_sum(.FALSE.)
+          ELSE
+            CALL calc_total_energy_sum(.TRUE.)
+
+            DO ispecies = 1, n_species
+              species => io_list(ispecies)
+              IF (IAND(species%dumpmask, code) == 0) CYCLE
+
+              CALL sdf_write_srl(sdf_handle, &
+                  'total_particle_energy/' // TRIM(species%name), &
+                  'Total Particle Energy/' // TRIM(species%name) // ' (J)', &
+                  total_particle_energy_species(ispecies))
+            END DO
+          END IF
+
+          IF (isubset == 1) THEN
+            IF (IAND(mask, c_io_no_sum) == 0) THEN
+              CALL sdf_write_srl(sdf_handle, 'total_particle_energy', &
+                  'Total Particle Energy in Simulation (J)', &
+                  total_particle_energy)
+            END IF
+            CALL sdf_write_srl(sdf_handle, 'total_field_energy', &
+                'Total Field Energy in Simulation (J)', total_field_energy)
+          END IF
+        END IF
+
         CALL write_particle_variable(c_dump_part_px, code, &
             'Px', 'kg.m/s', it_output_real)
         CALL write_particle_variable(c_dump_part_py, code, &
@@ -592,12 +642,18 @@ CONTAINS
 #ifdef PHOTONS
         CALL write_particle_variable(c_dump_part_opdepth, code, &
             'Optical depth', '', it_output_real)
+#endif
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
         CALL write_particle_variable(c_dump_part_qed_energy, code, &
             'QED energy', 'J', it_output_real)
-#ifdef TRIDENT_PHOTONS
+#endif
+#if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
         CALL write_particle_variable(c_dump_part_opdepth_tri, code, &
             'Trident Depth', '', it_output_real)
 #endif
+#ifdef BREMSSTRAHLUNG
+        CALL write_particle_variable(c_dump_part_opdepth_brem, code, &
+            'Bremsstrahlung Depth', '', it_output_real)
 #endif
 #ifdef WORK_DONE_INTEGRATED
         CALL write_particle_variable(c_dump_part_work_x, code, &
@@ -617,7 +673,7 @@ CONTAINS
 
         ! These are derived variables from the particles
         CALL write_nspecies_field(c_dump_ekbar, code, &
-            'ekbar', 'EkBar', 'J', &
+            'ekbar', 'Average_Particle_Energy', 'J', &
             c_stagger_cell_centre, calc_ekbar, array)
 
         CALL write_nspecies_field(c_dump_mass_density, code, &
@@ -639,6 +695,18 @@ CONTAINS
         CALL write_nspecies_field(c_dump_average_weight, code, &
             'average_weight', 'Particles_Average_Weight', 'weight', &
             c_stagger_cell_centre, calc_average_weight, array)
+
+        CALL write_nspecies_field(c_dump_average_px, code, &
+            'average_px', 'Particles_Average_Px', 'kg.m/s', &
+            c_stagger_cell_centre, calc_average_momentum, array, (/c_dir_x/))
+
+        CALL write_nspecies_field(c_dump_average_py, code, &
+            'average_py', 'Particles_Average_Py', 'kg.m/s', &
+            c_stagger_cell_centre, calc_average_momentum, array, (/c_dir_y/))
+
+        CALL write_nspecies_field(c_dump_average_pz, code, &
+            'average_pz', 'Particles_Average_Pz', 'kg.m/s', &
+            c_stagger_cell_centre, calc_average_momentum, array, (/c_dir_z/))
 
         CALL write_nspecies_field(c_dump_temperature, code, &
             'temperature', 'Temperature', 'K', &
@@ -669,7 +737,7 @@ CONTAINS
             c_stagger_cell_centre, calc_per_species_current, array, (/c_dir_z/))
 
         CALL write_nspecies_field(c_dump_ekflux, code, &
-            'ekflux', 'EkFlux', 'W/m^2', &
+            'ekflux', 'Particle_Energy_Flux', 'W/m^2', &
             c_stagger_cell_centre, calc_ekflux, array, fluxdir, dir_tags)
 
         CALL write_nspecies_field(c_dump_poynt_flux, code, &
@@ -698,6 +766,12 @@ CONTAINS
       IF (IAND(mask, code) /= 0) dump_field_grid = .TRUE.
       IF (IAND(mask, c_io_never) /= 0) dump_field_grid = .FALSE.
       IF (restart_flag) dump_field_grid = .TRUE.
+
+      use_offset_grid = .FALSE.
+      DO io = 1, n_io_blocks
+        use_offset_grid = use_offset_grid &
+           .OR. (io_block_list(io)%dump .AND. io_block_list(io)%use_offset_grid)
+      END DO
 
       IF (dump_field_grid) THEN
         IF (.NOT. use_offset_grid) THEN
@@ -829,15 +903,6 @@ CONTAINS
             'Absorption/Fraction of Laser Energy Absorbed (%)', laser_absorbed)
       END IF
 
-      IF (IAND(iomask(c_dump_total_energy_sum), code) /= 0) THEN
-        CALL calc_total_energy_sum
-
-        CALL sdf_write_srl(sdf_handle, 'total_particle_energy', &
-            'Total Particle Energy in Simulation (J)', total_particle_energy)
-        CALL sdf_write_srl(sdf_handle, 'total_field_energy', &
-            'Total Field Energy in Simulation (J)', total_field_energy)
-      END IF
-
       ! close the file
       CALL sdf_close(sdf_handle)
 
@@ -857,9 +922,13 @@ CONTAINS
           CALL append_filename(dump_type, filename, n_io_blocks+2)
         END IF
         IF (iprefix > 1) dump_type = TRIM(file_prefixes(iprefix))
-        WRITE(stat_unit, '(''Wrote '', a7, '' dump number'', i5, '' at time'', &
-          & g20.12, '' and iteration'', i7)') dump_type, &
-          file_numbers(iprefix)-1, time, step
+        IF (from_dump_request) THEN
+          WRITE(stat_unit,'(a)') 'Writing DUMP file request'
+          from_dump_request = .FALSE.
+        END IF
+        WRITE(stat_unit, '(''Wrote '', a7, '', '', a18, '' at time'', &
+          & g12.4, '' and iteration'', i8)') dump_type, &
+          TRIM(filename), time, step
         CALL flush_stat_file()
       END IF
 
@@ -953,6 +1022,56 @@ CONTAINS
     END IF
 
   END SUBROUTINE write_return_injectors
+
+
+
+  SUBROUTINE write_injector_depths(sdf_handle, first_injector, block_name, &
+      direction, runs_this_rank)
+
+    TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
+    TYPE(injector_block), POINTER :: first_injector
+    CHARACTER(LEN=*), INTENT(IN) :: block_name
+    INTEGER, INTENT(IN) :: direction
+    LOGICAL, INTENT(IN) :: runs_this_rank
+    TYPE(injector_block), POINTER :: current_injector
+    REAL(num), DIMENSION(:), ALLOCATABLE :: depths
+    INTEGER :: iinj, inj_count, ierr
+
+    current_injector => first_injector
+    inj_count = 0
+    DO WHILE(ASSOCIATED(current_injector))
+      inj_count = inj_count + 1
+      current_injector => current_injector%next
+    END DO
+
+    IF (inj_count > 0) THEN
+      ALLOCATE(depths(inj_count))
+      iinj = 1
+      current_injector => first_injector
+
+      DO WHILE(ASSOCIATED(current_injector))
+        depths(iinj) = current_injector%depth
+        iinj = iinj + 1
+        current_injector => current_injector%next
+      END DO
+
+      IF (.NOT. runs_this_rank) depths = HUGE(0.0_num)
+
+      IF (rank == 0) THEN
+        CALL MPI_Reduce(MPI_IN_PLACE, depths, inj_count, mpireal, MPI_MIN, &
+            0, comm, ierr)
+      ELSE
+        CALL MPI_Reduce(depths, depths, inj_count, mpireal, MPI_MIN, &
+            0, comm, ierr)
+      END IF
+
+      CALL sdf_write_srl(sdf_handle, TRIM(block_name), TRIM(block_name), &
+          inj_count, depths, 0)
+
+      DEALLOCATE(depths)
+    END IF
+
+  END SUBROUTINE write_injector_depths
 
 
 
@@ -1109,6 +1228,7 @@ CONTAINS
     dump_source_code = .FALSE.
     dump_input_decks = .FALSE.
     print_arrays = .FALSE.
+    from_dump_request = .FALSE.
     iomask = c_io_none
     iodumpmask = c_io_none
 
@@ -1132,6 +1252,14 @@ CONTAINS
       IF (force) THEN
         io_block_list(io)%dump = .TRUE.
         restart_flag = .TRUE.
+      END IF
+
+      IF (got_request_dump_name) THEN
+        IF (str_cmp(request_dump_name, io_block_list(io)%name)) THEN
+          io_block_list(io)%dump = .TRUE.
+          from_dump_request = .TRUE.
+          got_request_dump_name = .FALSE.
+        END IF
       END IF
 
       IF (elapsed_time < walltime_start) CYCLE
@@ -1232,15 +1360,11 @@ CONTAINS
         END IF
       END IF
 
-      IF (got_request_dump_name) THEN
-        IF (str_cmp(request_dump_name, io_block_list(io)%name)) THEN
-          io_block_list(io)%dump = .TRUE.
-        END IF
-      END IF
-
       io_block_list(io)%average_time_start = &
           time_first - io_block_list(io)%average_time
+    END DO
 
+    DO io = 1, n_io_blocks
       IF (io_block_list(io)%dump) THEN
         print_arrays = .TRUE.
         IF (io_block_list(io)%restart) restart_flag = .TRUE.
@@ -1272,6 +1396,7 @@ CONTAINS
     END DO
 
     IF (got_request_dump_restart) THEN
+      got_request_dump_restart = .FALSE.
       restart_flag = .TRUE.
       print_arrays = .TRUE.
       dump_source_code = .TRUE.
@@ -1298,9 +1423,6 @@ CONTAINS
 
     IF (force) iomask = IOR(iomask, io_block_list(1)%dumpmask)
     iodumpmask(1,:) = iomask
-
-    got_request_dump_name = .FALSE.
-    got_request_dump_restart = .FALSE.
 
   END SUBROUTINE io_test
 
@@ -1384,6 +1506,30 @@ CONTAINS
         ALLOCATE(array(1-ng:nx+ng))
         DO ispecies = 1, n_species_local
           CALL calc_average_weight(array, ispecies-avg%species_sum)
+          avg%r4array(:,ispecies) = avg%r4array(:,ispecies) &
+              + REAL(array * dt, r4)
+        END DO
+        DEALLOCATE(array)
+      CASE(c_dump_average_px)
+        ALLOCATE(array(1-ng:nx+ng))
+        DO ispecies = 1, n_species_local
+          CALL calc_average_momentum(array, ispecies-avg%species_sum, c_dir_x)
+          avg%r4array(:,ispecies) = avg%r4array(:,ispecies) &
+              + REAL(array * dt, r4)
+        END DO
+        DEALLOCATE(array)
+      CASE(c_dump_average_py)
+        ALLOCATE(array(1-ng:nx+ng))
+        DO ispecies = 1, n_species_local
+          CALL calc_average_momentum(array, ispecies-avg%species_sum, c_dir_y)
+          avg%r4array(:,ispecies) = avg%r4array(:,ispecies) &
+              + REAL(array * dt, r4)
+        END DO
+        DEALLOCATE(array)
+      CASE(c_dump_average_pz)
+        ALLOCATE(array(1-ng:nx+ng))
+        DO ispecies = 1, n_species_local
+          CALL calc_average_momentum(array, ispecies-avg%species_sum, c_dir_z)
           avg%r4array(:,ispecies) = avg%r4array(:,ispecies) &
               + REAL(array * dt, r4)
         END DO
@@ -1500,6 +1646,27 @@ CONTAINS
         ALLOCATE(array(1-ng:nx+ng))
         DO ispecies = 1, n_species_local
           CALL calc_average_weight(array, ispecies-avg%species_sum)
+          avg%array(:,ispecies) = avg%array(:,ispecies) + array * dt
+        END DO
+        DEALLOCATE(array)
+      CASE(c_dump_average_px)
+        ALLOCATE(array(1-ng:nx+ng))
+        DO ispecies = 1, n_species_local
+          CALL calc_average_momentum(array, ispecies-avg%species_sum, c_dir_x)
+          avg%array(:,ispecies) = avg%array(:,ispecies) + array * dt
+        END DO
+        DEALLOCATE(array)
+      CASE(c_dump_average_py)
+        ALLOCATE(array(1-ng:nx+ng))
+        DO ispecies = 1, n_species_local
+          CALL calc_average_momentum(array, ispecies-avg%species_sum, c_dir_y)
+          avg%array(:,ispecies) = avg%array(:,ispecies) + array * dt
+        END DO
+        DEALLOCATE(array)
+      CASE(c_dump_average_pz)
+        ALLOCATE(array(1-ng:nx+ng))
+        DO ispecies = 1, n_species_local
+          CALL calc_average_momentum(array, ispecies-avg%species_sum, c_dir_z)
           avg%array(:,ispecies) = avg%array(:,ispecies) + array * dt
         END DO
         DEALLOCATE(array)
@@ -1792,7 +1959,6 @@ CONTAINS
     INTERFACE
       SUBROUTINE func(data_array, current_species, direction)
         USE constants
-        USE shared_data
         REAL(num), DIMENSION(1-ng:), INTENT(OUT) :: data_array
         INTEGER, INTENT(IN) :: current_species
         INTEGER, INTENT(IN), OPTIONAL :: direction
@@ -2366,6 +2532,7 @@ CONTAINS
     REAL(num), INTENT(INOUT) :: part_mc
     LOGICAL :: use_particle
     REAL(num) :: gamma_rel, random_num
+    INTEGER :: n
 
     use_particle = .TRUE.
 
@@ -2374,85 +2541,123 @@ CONTAINS
       part_mc = c * current%mass
 #endif
       gamma_rel = SQRT(SUM((current%part_p / part_mc)**2) + 1.0_num)
-      IF (sub%use_gamma_min &
-          .AND. gamma_rel < sub%gamma_min) use_particle = .FALSE.
-      IF (sub%use_gamma_max &
-          .AND. gamma_rel > sub%gamma_max) use_particle = .FALSE.
+
+      n = c_subset_gamma_min
+      IF (sub%use_restriction(n)) THEN
+        IF (gamma_rel < sub%restriction(n)) &
+            use_particle = .FALSE.
+      END IF
+
+      n = c_subset_gamma_max
+      IF (sub%use_restriction(n)) THEN
+        IF (gamma_rel > sub%restriction(n)) &
+            use_particle = .FALSE.
+      END IF
     END IF
 
-    IF (sub%use_x_min &
-        .AND. current%part_pos < sub%x_min) &
-            use_particle = .FALSE.
+    n = c_subset_x_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_pos < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_x_max &
-        .AND. current%part_pos > sub%x_max) &
-            use_particle = .FALSE.
+    n = c_subset_x_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_pos > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_px_min &
-        .AND. current%part_p(1) < sub%px_min) &
-            use_particle = .FALSE.
+    n = c_subset_px_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_p(1) < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_px_max &
-        .AND. current%part_p(1) > sub%px_max) &
-            use_particle = .FALSE.
+    n = c_subset_px_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_p(1) > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_py_min &
-        .AND. current%part_p(2) < sub%py_min) &
-            use_particle = .FALSE.
+    n = c_subset_py_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_p(2) < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_py_max &
-        .AND. current%part_p(2) > sub%py_max) &
-            use_particle = .FALSE.
+    n = c_subset_py_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_p(2) > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_pz_min &
-        .AND. current%part_p(3) < sub%pz_min) &
-            use_particle = .FALSE.
+    n = c_subset_pz_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_p(3) < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_pz_max &
-        .AND. current%part_p(3) > sub%pz_max) &
-            use_particle = .FALSE.
+    n = c_subset_pz_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%part_p(3) > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-#ifdef PER_SPECIES_WEIGHT
-    IF (sub%use_weight_min &
-        .AND. current%weight < sub%weight_min) &
-            use_particle = .FALSE.
+#ifndef PER_SPECIES_WEIGHT
+    n = c_subset_weight_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%weight < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_weight_max &
-        .AND. current%weight > sub%weight_max) &
-            use_particle = .FALSE.
-
+    n = c_subset_weight_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%weight > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 #endif
 #ifdef PER_PARTICLE_CHARGE_MASS
-    IF (sub%use_charge_min &
-        .AND. current%charge < sub%charge_min) &
-            use_particle = .FALSE.
+    n = c_subset_charge_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%charge < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_charge_max &
-        .AND. current%charge > sub%charge_max) &
-            use_particle = .FALSE.
+    n = c_subset_charge_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%charge > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_mass_min &
-        .AND. current%mass < sub%mass_min) &
-            use_particle = .FALSE.
+    n = c_subset_mass_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%mass < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_mass_max &
-        .AND. current%mass > sub%mass_max) &
-            use_particle = .FALSE.
-
+    n = c_subset_mass_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%mass > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 #endif
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
-    IF (sub%use_id_min &
-        .AND. current%id < sub%id_min) &
-            use_particle = .FALSE.
+    n = c_subset_id_min
+    IF (sub%use_restriction(n)) THEN
+      IF (current%id < sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 
-    IF (sub%use_id_max &
-        .AND. current%id > sub%id_max) &
-            use_particle = .FALSE.
+    n = c_subset_id_max
+    IF (sub%use_restriction(n)) THEN
+      IF (current%id > sub%restriction(n)) &
+          use_particle = .FALSE.
+    END IF
 #endif
-
-    IF (sub%use_random) THEN
+    n = c_subset_random
+    IF (sub%use_restriction(n)) THEN
       random_num = random()
-      IF (random_num > sub%random_fraction) &
+      IF (random_num > sub%restriction(n)) &
           use_particle = .FALSE.
     END IF
 
@@ -2841,25 +3046,6 @@ CONTAINS
 
 
 
-  FUNCTION lowercase(string_in) RESULT(string_out)
-
-    CHARACTER(LEN=*), PARAMETER :: lwr = 'abcdefghijklmnopqrstuvwxyz'
-    CHARACTER(LEN=*), PARAMETER :: upr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    CHARACTER(LEN=*), INTENT(IN) :: string_in
-    CHARACTER(LEN=LEN(string_in)) :: string_out
-    INTEGER :: i, idx
-
-    string_out = string_in
-
-    DO i = 1, LEN(string_out)
-      idx = INDEX(upr, string_out(i:i))
-      IF (idx /= 0) string_out(i:i) = lwr(idx:idx)
-    END DO
-
-  END FUNCTION lowercase
-
-
-
   SUBROUTINE create_timestring(time, timestring)
 
     REAL(num), INTENT(IN) :: time
@@ -3042,12 +3228,16 @@ CONTAINS
               file=TRIM(data_dir) // '/' // TRIM(request_dump_file))
           IF (ierr == 0) THEN
             READ(lu,'(A)',iostat=ierr) request_dump_name
+            CLOSE(lu, status='DELETE')
             IF (ierr == 0) THEN
               got_request_dump_name = .TRUE.
+              WRITE(stat_unit,'(a)') 'Found DUMP file output request with ' &
+                  // 'contents: ' // TRIM(request_dump_name)
             ELSE
               got_request_dump_restart = .TRUE.
+              WRITE(stat_unit,'(a)') 'Found DUMP file output request'
             END IF
-            CLOSE(lu, status='DELETE')
+            CALL flush_stat_file()
           ELSE
             got_request_dump_name = .FALSE.
             got_request_dump_restart = .FALSE.
@@ -3239,21 +3429,5 @@ CONTAINS
     !CALL write_input_decks(h)
 
   END SUBROUTINE write_source_info
-
-
-
-  FUNCTION trim_string(string)
-
-    CHARACTER(LEN=c_max_string_length) :: trim_string
-    CHARACTER(LEN=*) :: string
-
-    string = ADJUSTL(string)
-    IF (LEN_TRIM(string) > c_max_string_length) THEN
-      trim_string = string(1:c_max_string_length)
-    ELSE
-      trim_string = TRIM(string)
-    END IF
-
-  END FUNCTION trim_string
 
 END MODULE diagnostics

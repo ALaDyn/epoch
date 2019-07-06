@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -31,6 +29,7 @@ MODULE deck_control_block
   PUBLIC :: control_block_handle_element, control_block_check
 
   LOGICAL :: got_time, got_grid(2*c_ndims)
+  LOGICAL :: got_optimal_layout, got_nproc
 
 CONTAINS
 
@@ -38,7 +37,8 @@ CONTAINS
 
     IF (deck_state /= c_ds_first) RETURN
 
-    use_exact_restart = .FALSE.
+    use_exact_restart = .TRUE.
+    use_exact_restart_set = .FALSE.
     allow_cpu_reduce = .TRUE.
     check_walltime = .FALSE.
     simplify_deck = .TRUE.
@@ -55,6 +55,8 @@ CONTAINS
     use_particle_migration = .FALSE.
     use_pre_balance = .TRUE.
     use_optimal_layout = .TRUE.
+    got_optimal_layout = .FALSE.
+    got_nproc = .FALSE.
     restart_number = 0
     check_stop_frequency = 10
     stop_at_walltime = -1.0_num
@@ -77,6 +79,7 @@ CONTAINS
 
     CHARACTER(LEN=22) :: filename_fmt, str
     INTEGER :: io, iu
+    LOGICAL, SAVE :: warn = .TRUE.
 
     IF (n_zeros_control > 0) THEN
       IF (n_zeros_control < n_zeros) THEN
@@ -125,6 +128,22 @@ CONTAINS
         END DO
         CALL abort_code(c_err_missing_elements)
       END IF
+    END IF
+
+    IF (got_nproc .AND. got_optimal_layout) THEN
+      IF (warn .AND. rank == 0) THEN
+        warn = .FALSE.
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** WARNING ***'
+          WRITE(io,*) 'Both "use_optimal_layout" and "nprocx" specified ', &
+                      'in the input deck.'
+          WRITE(io,*) 'The specified processor layout will be ignored.'
+          WRITE(io,*)
+        END DO
+      END IF
+    ELSE IF (got_nproc .AND. .NOT.got_optimal_layout) THEN
+      use_optimal_layout = .FALSE.
     END IF
 
     IF (deck_state == c_ds_first) RETURN
@@ -200,12 +219,14 @@ CONTAINS
 
     ELSE IF (str_cmp(element, 'nprocx')) THEN
       nprocx = as_integer_print(value, element, errcode)
+      got_nproc = .TRUE.
 
     ELSE IF (str_cmp(element, 'nprocy')) THEN
 
     ELSE IF (str_cmp(element, 'nprocz')) THEN
 
-    ELSE IF (str_cmp(element, 'npart')) THEN
+    ELSE IF (str_cmp(element, 'npart') &
+        .OR. str_cmp(element, 'nparticles')) THEN
       npart_global = as_long_integer_print(value, element, errcode)
 
     ELSE IF (str_cmp(element, 'nsteps')) THEN
@@ -297,6 +318,7 @@ CONTAINS
 
     ELSE IF (str_cmp(element, 'use_exact_restart')) THEN
       use_exact_restart = as_logical_print(value, element, errcode)
+      use_exact_restart_set = use_exact_restart
 
     ELSE IF (str_cmp(element, 'allow_cpu_reduce')) THEN
       allow_cpu_reduce = as_logical_print(value, element, errcode)
@@ -375,12 +397,13 @@ CONTAINS
     ELSE IF (str_cmp(element, 'use_optimal_layout') &
         .OR. str_cmp(element, 'optimal_layout')) THEN
       use_optimal_layout = as_logical_print(value, element, errcode)
+      got_optimal_layout = use_optimal_layout
 
     ELSE IF (str_cmp(element, 'smooth_iterations')) THEN
       smooth_its = as_integer_print(value, element, errcode)
 
     ELSE IF (str_cmp(element, 'smooth_compensation')) THEN
-      IF(as_logical_print(value, element, errcode)) smooth_comp_its = 1
+      IF (as_logical_print(value, element, errcode)) smooth_comp_its = 1
 
     ELSE IF (str_cmp(element, 'smooth_strides')) THEN
       IF (str_cmp(value, 'auto')) THEN
@@ -395,6 +418,9 @@ CONTAINS
 
     ELSE IF (str_cmp(element, 'use_more_setup_memory')) THEN
       use_more_setup_memory = as_logical_print(value, element, errcode)
+
+    ELSE IF (str_cmp(element, 'deck_warnings_fatal')) THEN
+      all_deck_errcodes_fatal = as_logical_print(value, element, errcode)
 
     ELSE
       errcode = c_err_unknown_element

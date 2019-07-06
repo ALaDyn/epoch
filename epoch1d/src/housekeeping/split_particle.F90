@@ -1,5 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009      Chris Brady <C.S.Brady@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -86,6 +85,7 @@ CONTAINS
       DEALLOCATE(species_list(ispecies)%secondary_list)
     END DO
 
+    CALL setup_bc_lists
     CALL particle_bcs
 
   END SUBROUTINE reattach_particles_to_mainlist

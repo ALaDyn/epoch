@@ -39,8 +39,7 @@ begin:species
   name = Electron
   charge = -1.0
   mass = 1.0
-  tracer = T
-  npart = nx * ny * 5
+  nparticles = nx * ny * 5
 end:species
 
 
@@ -48,21 +47,20 @@ begin:species
   name = Palladium
   charge = 22.0
   mass = 1836.2 * 105.0
-  tracer = T
 
   number_density = den_max
-  temp = 1e6
+  temperature = 1e6
 
   ionisation_electron_species = Electron
   ionisation_energies = (54.4*ev, 24.6*ev)
-  npart = nx * ny * 5
+  nparticles = nx * ny * 5
 end:species
 
 
 begin:species
   name = Electron
   number_density = number_density(Palladium) * 22.0
-  temp = 1e6
+  temperature = 1e6
 end:species
 
 
@@ -74,7 +72,7 @@ end:output_global
 begin:output
   name = normal
 
-  # Number of timesteps between output dumps
+  # Simulated time between output dumps
   dt_snapshot = 1.0e-15
 
   # Properties on grid
@@ -88,7 +86,7 @@ begin:output
   jx = always
   jy = always
   jz = never
-  ekbar = always
+  average_particle_energy = always
   mass_density = never + species
   charge_density = always
   number_density = always + species
@@ -102,7 +100,7 @@ end:output
 begin:output
   name = large
 
-  # Number of timesteps between output dumps
+  # Simulated time between output dumps
   dt_snapshot = 10.0e-15
 
   # Properties at particle positions
@@ -120,11 +118,11 @@ end:laser
 
 
 begin:dist_fn
-  name = x_en
+  name = x_energy
   ndims = 2
 
   direction1 = dir_x
-  direction2 = dir_en
+  direction2 = dir_energy
 
   # Range is ignored for spatial coordinates
   range1 = (1, 1)
@@ -143,7 +141,7 @@ begin:dist_fn
   name = en
   ndims = 1
 
-  direction1 = dir_en
+  direction1 = dir_energy
 
   # Range is ignored for spatial coordinates
   range1 = (0, 2.0*kev)

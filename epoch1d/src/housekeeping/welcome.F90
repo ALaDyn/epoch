@@ -1,7 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2015      Stephan Kuschel <stephan.kuschel@gmail.com>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -129,6 +126,9 @@ CONTAINS
     found = .TRUE.
 #endif
 #endif
+#ifdef BREMSSTRAHLUNG
+    found = .TRUE.
+#endif
 #ifdef PREFETCH
     found = .TRUE.
 #endif
@@ -187,14 +187,13 @@ CONTAINS
     WRITE(*,*) 'Top-hat particle shape -DPARTICLE_SHAPE_TOPHAT'
 #endif
 #ifdef PER_SPECIES_WEIGHT
-    WRITE(*,*) 'Per species weighting -DPER_SPECIES_WEIGHT'
-#else
     defines = IOR(defines, c_def_per_particle_weight)
+    WRITE(*,*) 'Per species weighting -DPER_SPECIES_WEIGHT'
 #endif
 #ifdef NO_TRACER_PARTICLES
-    WRITE(*,*) 'No tracer particle support -DNO_TRACER_PARTICLES'
+    WRITE(*,*) 'No zero-current particle support -DNO_TRACER_PARTICLES'
 #else
-    defines = IOR(defines, c_def_tracer_particles)
+    defines = IOR(defines, c_def_zero_current_particles)
 #endif
 #ifdef NO_PARTICLE_PROBES
     WRITE(*,*) 'No particle probe support -DNO_PARTICLE_PROBES'
@@ -225,6 +224,10 @@ CONTAINS
     defines = IOR(defines, c_def_trident_photons)
     WRITE(*,*) 'Pair production by Trident process -DTRIDENT_PHOTONS'
 #endif
+#endif
+#ifdef BREMSSTRAHLUNG
+    defines = IOR(defines, c_def_bremsstrahlung)
+    WRITE(*,*) 'Bremsstrahlung radiation -DBREMSSTRAHLUNG'
 #endif
 #ifdef PREFETCH
     defines = IOR(defines, c_def_prefetch)

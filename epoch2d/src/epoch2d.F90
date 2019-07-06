@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -51,9 +49,11 @@ PROGRAM pic
   USE calc_df
   USE injectors
   USE current_smooth
-  USE return_boundary
 #ifdef PHOTONS
   USE photons
+#endif
+#ifdef BREMSSTRAHLUNG
+  USE bremsstrahlung
 #endif
 
   IMPLICIT NONE
@@ -68,11 +68,6 @@ PROGRAM pic
 
   step = 0
   time = 0.0_num
-#ifdef COLLISIONS_TEST
-  ! used for testing
-  CALL test_collisions
-  STOP
-#endif
 
   CALL mpi_minimal_init ! mpi_routines.f90
   real_walltime_start = MPI_WTIME()
@@ -114,8 +109,6 @@ PROGRAM pic
   CALL read_deck(deck_file, .TRUE., c_ds_last)
   CALL after_deck_last
 
-  CALL setup_return_boundaries
-
   ! restart flag is set
   IF (ic_from_restart) THEN
     CALL restart_data(step)
@@ -126,9 +119,10 @@ PROGRAM pic
     time = 0.0_num
   END IF
 
-  CALL finish_setup_return_boundaries
   CALL custom_particle_load
   CALL manual_load
+  CALL finish_injector_setup
+
   CALL initialise_window ! window.f90
   CALL set_dt
   CALL set_maxwell_solver
@@ -144,14 +138,19 @@ PROGRAM pic
   IF (npart_global > 0) CALL balance_workload(.TRUE.)
 
   IF (use_current_correction) CALL calc_initial_current
+  CALL setup_bc_lists
   CALL particle_bcs
   CALL efield_bcs
 
   IF (ic_from_restart) THEN
     IF (dt_from_restart > 0) dt = dt_from_restart
-    time = time + dt / 2.0_num
-    CALL update_eb_fields_final
-    CALL moving_window
+    IF (step == 0) THEN
+      CALL bfield_final_bcs
+    ELSE
+      time = time + dt / 2.0_num
+      CALL update_eb_fields_final
+      CALL moving_window
+    END IF
   ELSE
     dt_store = dt
     dt = dt / 2.0_num
@@ -164,15 +163,18 @@ PROGRAM pic
   ! Setup particle migration between species
   IF (use_particle_migration) CALL initialise_migration
   CALL build_persistent_subsets
+#ifdef PHOTONS
+  IF (use_qed) CALL setup_qed_module()
+#endif
+#ifdef BREMSSTRAHLUNG
+  IF (use_bremsstrahlung) CALL setup_bremsstrahlung_module()
+#endif
 
   IF (rank == 0) THEN
     PRINT*
     PRINT*, 'Equilibrium set up OK, running code'
     PRINT*
   END IF
-#ifdef PHOTONS
-  IF (use_qed) CALL setup_qed_module()
-#endif
 
   walltime_started = MPI_WTIME()
   IF (.NOT.ic_from_restart) CALL output_routines(step) ! diagnostics.f90
@@ -181,9 +183,6 @@ PROGRAM pic
   IF (timer_collect) CALL timer_start(c_timer_step)
 
   DO
-    IF ((step >= nsteps .AND. nsteps >= 0) &
-        .OR. (time >= t_end) .OR. halt) EXIT
-
     IF (timer_collect) THEN
       CALL timer_stop(c_timer_step)
       CALL timer_reset
@@ -194,6 +193,13 @@ PROGRAM pic
 #ifdef PHOTONS
     IF (push .AND. use_qed .AND. time > qed_start_time) THEN
       CALL qed_update_optical_depth()
+    END IF
+#endif
+
+#ifdef BREMSSTRAHLUNG
+    IF (push .AND. use_bremsstrahlung &
+        .AND. time > bremsstrahlung_start_time) THEN
+      CALL bremsstrahlung_update_optical_depth()
     END IF
 #endif
 
@@ -228,10 +234,14 @@ PROGRAM pic
       CALL update_particle_count
     END IF
 
-    CALL check_for_stop_condition(halt, force_dump)
-    IF (halt) EXIT
     step = step + 1
     time = time + dt / 2.0_num
+
+    CALL check_for_stop_condition(halt, force_dump)
+
+    IF ((step >= nsteps .AND. nsteps >= 0) &
+        .OR. (time >= t_end) .OR. halt) EXIT
+
     CALL output_routines(step)
     time = time + dt / 2.0_num
 
@@ -244,6 +254,10 @@ PROGRAM pic
 
 #ifdef PHOTONS
   IF (use_qed) CALL shutdown_qed_module()
+#endif
+
+#ifdef BREMSSTRAHLUNG
+  IF (use_bremsstrahlung) CALL shutdown_bremsstrahlung_module()
 #endif
 
   CALL output_routines(step, force_dump)
