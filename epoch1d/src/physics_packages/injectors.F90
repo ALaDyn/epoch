@@ -456,10 +456,10 @@ CONTAINS
     working_injector%species = ispecies
 
     IF (species_list(ispecies)%bc_particle(bnd) == c_bc_return) THEN
-      IF (bnd == 1) THEN
+      IF (bnd == c_bd_x_min) THEN
         species_list(ispecies)%injector_x_min => working_injector
         working_injector%drift_perp = species_list(ispecies)%ext_drift_x_min
-      ELSE
+      ELSE IF (bnd == c_bd_x_max) THEN
         species_list(ispecies)%injector_x_max => working_injector
         working_injector%drift_perp = species_list(ispecies)%ext_drift_x_max
       END IF

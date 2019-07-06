@@ -1208,7 +1208,7 @@ CONTAINS
     ! setup time
     ! Exponential average using calculated equillibration time
     ! using p(t+dt) = a p(t) + b p_c
-    IF (boundaries(1)) THEN
+    IF (boundaries(c_bd_x_min)) THEN
       alpha = 2.0_num / (om_pe_fac &
           / SQRT(species_list(return_species)%ext_dens_x_min) + 1.0_num)
 
@@ -1224,7 +1224,7 @@ CONTAINS
       END IF
     END IF
 
-    IF (boundaries(2)) THEN
+    IF (boundaries(c_bd_x_max)) THEN
       alpha = 2.0_num / (om_pe_fac &
           / SQRT(species_list(return_species)%ext_dens_x_max) + 1.0_num)
 
