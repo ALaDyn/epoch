@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -36,8 +34,7 @@ CONTAINS
     ! This gives exact charge conservation on the grid
 
     ! Contains the integer cell position of the particle in x, y, z
-    INTEGER :: cell_x1, cell_x2, cell_x3
-    INTEGER :: cell_y1, cell_y2, cell_y3
+    INTEGER :: cell_x3, cell_y3
 
     ! Xi (space factor see page 38 in manual)
     ! The code now uses gx and hx instead of xi0 and xi1
@@ -70,26 +67,6 @@ CONTAINS
     REAL(num) :: probe_energy, part_mc2
 #endif
 
-    ! Contains the floating point version of the cell number (never actually
-    ! used)
-    REAL(num) :: cell_x_r, cell_y_r
-
-    ! The fraction of a cell between the particle position and the cell boundary
-    REAL(num) :: cell_frac_x, cell_frac_y
-
-    ! Weighting factors as Eqn 4.77 page 25 of manual
-    ! Eqn 4.77 would be written as
-    ! F(j-1) * gmx + F(j) * g0x + F(j+1) * gpx
-    ! Defined at the particle position
-    REAL(num), DIMENSION(sf_min-1:sf_max+1) :: gx, gy
-
-    ! Defined at the particle position - 0.5 grid cell in each direction
-    ! This is to deal with the grid stagger
-    REAL(num), DIMENSION(sf_min-1:sf_max+1) :: hx, hy
-
-    ! Fields at particle location
-    REAL(num) :: ex_part, ey_part, ez_part, bx_part, by_part, bz_part
-
     ! P+, P- and Tau variables from Boris1970, page27 of manual
     REAL(num) :: uxp, uxm, uyp, uym, uzp, uzm
     REAL(num) :: tau, taux, tauy, tauz, taux2, tauy2, tauz2
@@ -102,14 +79,16 @@ CONTAINS
     REAL(num) :: wx, wy, wz
 
     ! Temporary variables
-    REAL(num) :: idx, idy
     REAL(num) :: idty, idtx, idxy
     REAL(num) :: idt, dto2, dtco2
     REAL(num) :: fcx, fcy, fcz, fjx, fjy, fjz
     REAL(num) :: root, dtfac, gamma_rel, part_u2, third, igamma
     REAL(num) :: delta_x, delta_y, part_vz
     REAL(num) :: hy_iy, xfac1, yfac1, yfac2
-    INTEGER :: ispecies, ix, iy, dcellx, dcelly, cx, cy
+    REAL(num) :: bnd_x_min, bnd_x_max
+    REAL(num) :: bnd_y_min, bnd_y_max
+    INTEGER :: ispecies, ix, iy, cx, cy
+    INTEGER, DIMENSION(2*c_ndims) :: bc_species
     INTEGER(i8) :: ipart
 #ifdef WORK_DONE_INTEGRATED
     REAL(num) :: tmp_x, tmp_y, tmp_z
@@ -122,21 +101,14 @@ CONTAINS
 #ifdef ZERO_CURRENT_PARTICLES
     LOGICAL :: not_zero_current_species
 #endif
-    ! Particle weighting multiplication factor
-#ifdef PARTICLE_SHAPE_BSPLINE3
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (1.0_num / 24.0_num)**c_ndims
-#elif  PARTICLE_SHAPE_TOPHAT
-    REAL(num), PARAMETER :: fac = 1.0_num
-#else
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (0.5_num)**c_ndims
-#endif
 #ifdef DELTAF_METHOD
     REAL(num) :: weight_back
 #endif
 
     TYPE(particle), POINTER :: current, next
+    TYPE(particle_pointer_list), POINTER :: bnd_part_last, bnd_part_next
+
+#include "fields_at_particle_head.inc"
 
 #ifdef PREFETCH
     CALL prefetch_particle(species_list(1)%attached_list%head)
@@ -151,8 +123,6 @@ CONTAINS
 
     ! Unvarying multiplication factors
 
-    idx = 1.0_num / dx
-    idy = 1.0_num / dy
     idt = 1.0_num / dt
     dto2 = dt / 2.0_num
     dtco2 = c * dto2
@@ -165,13 +135,63 @@ CONTAINS
 
     DO ispecies = 1, n_species
       current => species_list(ispecies)%attached_list%head
+
+      IF (species_list(ispecies)%attached_list%count == 0) CYCLE
+
       IF (species_list(ispecies)%immobile) CYCLE
       IF (species_list(ispecies)%species_type == c_species_id_photon) THEN
+#ifdef BREMSSTRAHLUNG
+        IF (ispecies == bremsstrahlung_photon_species) THEN
+          IF (bremsstrahlung_photon_dynamics) THEN
+            CALL push_photons(ispecies)
+          ELSE
+            CYCLE
+          END IF
+        END IF
+#endif
 #ifdef PHOTONS
         IF (photon_dynamics) CALL push_photons(ispecies)
 #endif
         CYCLE
       END IF
+
+      bc_species = species_list(ispecies)%bc_particle
+      IF (bc_species(c_bd_x_min) == c_bc_thermal &
+          .OR. bc_field(c_bd_x_min) == c_bc_cpml_laser &
+          .OR. bc_field(c_bd_x_min) == c_bc_cpml_outflow) THEN
+        bnd_x_min = x_min_outer
+      ELSE
+        bnd_x_min = x_min_local
+      END IF
+      IF (bc_species(c_bd_x_max) == c_bc_thermal &
+          .OR. bc_field(c_bd_x_max) == c_bc_cpml_laser &
+          .OR. bc_field(c_bd_x_max) == c_bc_cpml_outflow) THEN
+        bnd_x_max = x_max_outer
+      ELSE
+        bnd_x_max = x_max_local
+      END IF
+      IF (bc_species(c_bd_y_min) == c_bc_thermal &
+          .OR. bc_field(c_bd_y_min) == c_bc_cpml_laser &
+          .OR. bc_field(c_bd_y_min) == c_bc_cpml_outflow) THEN
+        bnd_y_min = y_min_outer
+      ELSE
+        bnd_y_min = y_min_local
+      END IF
+      IF (bc_species(c_bd_y_max) == c_bc_thermal &
+          .OR. bc_field(c_bd_y_max) == c_bc_cpml_laser &
+          .OR. bc_field(c_bd_y_max) == c_bc_cpml_outflow) THEN
+        bnd_y_max = y_max_outer
+      ELSE
+        bnd_y_max = y_max_local
+      END IF
+
+      ! Setup list of particles which may need boundary conditions applied
+      ALLOCATE(species_list(ispecies)%boundary_particles)
+      NULLIFY(species_list(ispecies)%boundary_particles%particle)
+      NULLIFY(species_list(ispecies)%boundary_particles%next)
+      NULLIFY(bnd_part_next)
+      bnd_part_last => species_list(ispecies)%boundary_particles
+
 #ifndef NO_PARTICLE_PROBES
       current_probe => species_list(ispecies)%attached_probes
       probes_for_species = ASSOCIATED(current_probe)
@@ -250,72 +270,7 @@ CONTAINS
         tmp_z = part_uz * root
 #endif
 
-        ! Grid cell position as a fraction.
-#ifdef PARTICLE_SHAPE_TOPHAT
-        cell_x_r = part_x * idx - 0.5_num
-        cell_y_r = part_y * idy - 0.5_num
-#else
-        cell_x_r = part_x * idx
-        cell_y_r = part_y * idy
-#endif
-        ! Round cell position to nearest cell
-        cell_x1 = FLOOR(cell_x_r + 0.5_num)
-        ! Calculate fraction of cell between nearest cell boundary and particle
-        cell_frac_x = REAL(cell_x1, num) - cell_x_r
-        cell_x1 = cell_x1 + 1
-
-        cell_y1 = FLOOR(cell_y_r + 0.5_num)
-        cell_frac_y = REAL(cell_y1, num) - cell_y_r
-        cell_y1 = cell_y1 + 1
-
-        ! Particle weight factors as described in the manual, page25
-        ! These weight grid properties onto particles
-        ! Also used to weight particle properties onto grid, used later
-        ! to calculate J
-        ! NOTE: These weights require an additional multiplication factor!
-#ifdef PARTICLE_SHAPE_BSPLINE3
-#include "bspline3/gx.inc"
-#elif  PARTICLE_SHAPE_TOPHAT
-#include "tophat/gx.inc"
-#else
-#include "triangle/gx.inc"
-#endif
-
-        ! Now redo shifted by half a cell due to grid stagger.
-        ! Use shifted version for ex in X, ey in Y, ez in Z
-        ! And in Y&Z for bx, X&Z for by, X&Y for bz
-        cell_x2 = FLOOR(cell_x_r)
-        cell_frac_x = REAL(cell_x2, num) - cell_x_r + 0.5_num
-        cell_x2 = cell_x2 + 1
-
-        cell_y2 = FLOOR(cell_y_r)
-        cell_frac_y = REAL(cell_y2, num) - cell_y_r + 0.5_num
-        cell_y2 = cell_y2 + 1
-
-        dcellx = 0
-        dcelly = 0
-        ! NOTE: These weights require an additional multiplication factor!
-#ifdef PARTICLE_SHAPE_BSPLINE3
-#include "bspline3/hx_dcell.inc"
-#elif  PARTICLE_SHAPE_TOPHAT
-#include "tophat/hx_dcell.inc"
-#else
-#include "triangle/hx_dcell.inc"
-#endif
-
-        ! These are the electric and magnetic fields interpolated to the
-        ! particle position. They have been checked and are correct.
-        ! Actually checking this is messy.
-#ifdef PARTICLE_SHAPE_BSPLINE3
-#include "bspline3/e_part.inc"
-#include "bspline3/b_part.inc"
-#elif  PARTICLE_SHAPE_TOPHAT
-#include "tophat/e_part.inc"
-#include "tophat/b_part.inc"
-#else
-#include "triangle/e_part.inc"
-#include "triangle/b_part.inc"
-#endif
+#include "fields_at_particle.inc"
 
         ! update particle momenta using weighted fields
         uxm = part_ux + cmratio * ex_part
@@ -385,6 +340,17 @@ CONTAINS
         current%part_pos = (/ part_x + x_grid_min_local, &
             part_y + y_grid_min_local /)
         current%part_p   = part_mc * (/ part_ux, part_uy, part_uz /)
+
+        ! Add particle to boundary candidate list
+        IF (current%part_pos(1) < bnd_x_min &
+            .OR. current%part_pos(1) > bnd_x_max &
+            .OR. current%part_pos(2) < bnd_y_min &
+            .OR. current%part_pos(2) > bnd_y_max) THEN
+          ALLOCATE(bnd_part_next)
+          bnd_part_next%particle => current
+          bnd_part_last%next => bnd_part_next
+          bnd_part_last => bnd_part_next
+        END IF
 
 #ifdef WORK_DONE_INTEGRATED
         ! This is the actual total work done by the fields: Results correspond
@@ -508,7 +474,7 @@ CONTAINS
 #ifdef ZERO_CURRENT_PARTICLES
         END IF
 #endif
-#ifndef NO_PARTICLE_PROBES
+#if !defined(NO_PARTICLE_PROBES) && !defined(NO_IO)
         IF (probes_for_species) THEN
           ! Compare the current particle with the parameters of any probes in
           ! the system. These particles are copied into a separate part of the
@@ -550,6 +516,13 @@ CONTAINS
 #endif
         current => next
       END DO
+
+      ! Boundary list head contains no particle
+      bnd_part_last => species_list(ispecies)%boundary_particles
+      species_list(ispecies)%boundary_particles &
+          => species_list(ispecies)%boundary_particles%next
+      DEALLOCATE(bnd_part_last)
+      IF (ASSOCIATED(bnd_part_next)) NULLIFY(bnd_part_next%next)
       CALL current_bcs(species=ispecies)
     END DO
 
@@ -600,14 +573,19 @@ CONTAINS
 
 
 
-#ifdef PHOTONS
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
   SUBROUTINE push_photons(ispecies)
 
     ! Very simple photon pusher
     ! Properties of the current particle. Copy out of particle arrays for speed
     REAL(num) :: delta_x, delta_y
     INTEGER,INTENT(IN) :: ispecies
+    INTEGER, DIMENSION(2*c_ndims) :: bc_species
+    REAL(num) :: current_energy, dtfac, fac
+    REAL(num) :: bnd_x_min, bnd_x_max
+    REAL(num) :: bnd_y_min, bnd_y_max
     TYPE(particle), POINTER :: current
+    TYPE(particle_pointer_list), POINTER :: bnd_part_last, bnd_part_next
 
     ! Used for particle probes (to see of probe conditions are satisfied)
 #ifndef NO_PARTICLE_PROBES
@@ -616,9 +594,47 @@ CONTAINS
     TYPE(particle_probe), POINTER :: current_probe
     TYPE(particle), POINTER :: particle_copy
     REAL(num) :: d_init, d_final
-    REAL(num) :: probe_energy, dtfac, fac
     LOGICAL :: probes_for_species
 #endif
+
+    IF (species_list(ispecies)%attached_list%count == 0) RETURN
+
+    bc_species = species_list(ispecies)%bc_particle
+    IF (bc_species(c_bd_x_min) == c_bc_thermal &
+        .OR. bc_field(c_bd_x_min) == c_bc_cpml_laser &
+        .OR. bc_field(c_bd_x_min) == c_bc_cpml_outflow) THEN
+      bnd_x_min = x_min_outer
+    ELSE
+      bnd_x_min = x_min_local
+    END IF
+    IF (bc_species(c_bd_x_max) == c_bc_thermal &
+        .OR. bc_field(c_bd_x_max) == c_bc_cpml_laser &
+        .OR. bc_field(c_bd_x_max) == c_bc_cpml_outflow) THEN
+      bnd_x_max = x_max_outer
+    ELSE
+      bnd_x_max = x_max_local
+    END IF
+    IF (bc_species(c_bd_y_min) == c_bc_thermal &
+        .OR. bc_field(c_bd_y_min) == c_bc_cpml_laser &
+        .OR. bc_field(c_bd_y_min) == c_bc_cpml_outflow) THEN
+      bnd_y_min = y_min_outer
+    ELSE
+      bnd_y_min = y_min_local
+    END IF
+    IF (bc_species(c_bd_y_max) == c_bc_thermal &
+        .OR. bc_field(c_bd_y_max) == c_bc_cpml_laser &
+        .OR. bc_field(c_bd_y_max) == c_bc_cpml_outflow) THEN
+      bnd_y_max = y_max_outer
+    ELSE
+      bnd_y_max = y_max_local
+    END IF
+
+    ! Setup list of particles which may need boundary conditions applied
+    ALLOCATE(species_list(ispecies)%boundary_particles)
+    NULLIFY(species_list(ispecies)%boundary_particles%particle)
+    NULLIFY(species_list(ispecies)%boundary_particles%next)
+    NULLIFY(bnd_part_next)
+    bnd_part_last => species_list(ispecies)%boundary_particles
 
 #ifndef NO_PARTICLE_PROBES
     current_probe => species_list(ispecies)%attached_probes
@@ -632,9 +648,9 @@ CONTAINS
     DO WHILE(ASSOCIATED(current))
       ! Note that this is the energy of a single REAL particle in the
       ! pseudoparticle, NOT the energy of the pseudoparticle
-      probe_energy = current%particle_energy
+      current_energy = current%particle_energy
 
-      fac = dtfac / probe_energy
+      fac = dtfac / current_energy
       delta_x = current%part_p(1) * fac
       delta_y = current%part_p(2) * fac
 #ifndef NO_PARTICLE_PROBES
@@ -647,6 +663,17 @@ CONTAINS
       final_part_y = current%part_pos(2)
 #endif
 
+      ! Add particle to boundary candidate list
+      IF (current%part_pos(1) < bnd_x_min &
+          .OR. current%part_pos(1) > bnd_x_max &
+          .OR. current%part_pos(2) < bnd_y_min &
+          .OR. current%part_pos(2) > bnd_y_max) THEN
+        ALLOCATE(bnd_part_next)
+        bnd_part_next%particle => current
+        bnd_part_last%next => bnd_part_next
+        bnd_part_last => bnd_part_next
+      END IF
+
 #ifndef NO_PARTICLE_PROBES
       IF (probes_for_species) THEN
         ! Compare the current particle with the parameters of any probes in
@@ -658,8 +685,8 @@ CONTAINS
         ! Cycle through probes
         DO WHILE(ASSOCIATED(current_probe))
           ! Unidirectional probe
-          IF (probe_energy > current_probe%ek_min) THEN
-            IF (probe_energy < current_probe%ek_max) THEN
+          IF (current_energy > current_probe%ek_min) THEN
+            IF (current_energy < current_probe%ek_max) THEN
 
               d_init  = SUM(current_probe%normal &
                   * (current_probe%point - (/init_part_x, init_part_y/)))
@@ -684,6 +711,13 @@ CONTAINS
 
       current => current%next
     END DO
+
+    ! Boundary list head contains no particle
+    bnd_part_last => species_list(ispecies)%boundary_particles
+    species_list(ispecies)%boundary_particles &
+        => species_list(ispecies)%boundary_particles%next
+    DEALLOCATE(bnd_part_last)
+    IF (ASSOCIATED(bnd_part_next)) NULLIFY(bnd_part_next%next)
 
   END SUBROUTINE push_photons
 #endif

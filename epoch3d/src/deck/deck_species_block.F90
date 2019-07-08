@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2016 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -50,6 +48,9 @@ MODULE deck_species_block
   INTEGER, DIMENSION(:,:), ALLOCATABLE :: bc_particle_array
   REAL(num) :: species_mass, species_charge
   INTEGER :: species_dumpmask
+#ifdef BREMSSTRAHLUNG
+  INTEGER :: species_atomic_number
+#endif
   INTEGER, DIMENSION(2*c_ndims) :: species_bc_particle
 
 CONTAINS
@@ -398,6 +399,13 @@ CONTAINS
       species_charge = as_real_print(value, element, errcode) * q0
     END IF
 
+#ifdef BREMSSTRAHLUNG
+    IF (str_cmp(element, 'atomic_no') &
+        .OR. str_cmp(element, 'atomic_number')) THEN
+      species_atomic_number = as_integer_print(value, element, errcode)
+    END IF
+#endif
+
     IF (str_cmp(element, 'dump')) THEN
       dump = as_logical_print(value, element, errcode)
       IF (dump) THEN
@@ -454,13 +462,13 @@ CONTAINS
         species_list(species_id)%ic_df_type = c_ic_df_thermal
       END IF
       RETURN
-    ENDIF
+    END IF
 
     IF (str_cmp(element, 'fractional_tail_cutoff')) THEN
       species_list(species_id)%fractional_tail_cutoff = &
           as_real_print(value, element, errcode)
       RETURN
-    ENDIF
+    END IF
 
     ! *************************************************************
     ! This section identifies a species. Generic
@@ -468,6 +476,23 @@ CONTAINS
     ! *************************************************************
     IF (str_cmp(element, 'identify')) THEN
       CALL identify_species(value, errcode)
+
+      ! If this particle is the release species of an ionising species, then
+      ! subtract the charge and mass of this species from the ionising species
+      ! to get the charge and mass of the child species.
+      DO i = 1, n_species
+        IF (species_id == species_list(i)%release_species) THEN
+          j = species_list(i)%ionise_to_species
+          DO WHILE(j > 0)
+            species_list(j)%mass = species_list(j)%mass &
+                - species_list(species_id)%mass
+            species_list(j)%charge = species_list(j)%charge &
+                - species_list(species_id)%charge
+            species_charge_set(j) = .TRUE.
+            j = species_list(j)%ionise_to_species
+          END DO
+        END IF
+      END DO
       RETURN
     END IF
 
@@ -532,13 +557,15 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'npart')) THEN
+    IF (str_cmp(element, 'npart') &
+        .OR. str_cmp(element, 'nparticles')) THEN
       species_list(species_id)%count = &
           as_long_integer_print(value, element, errcode)
       RETURN
     END IF
 
-    IF (str_cmp(element, 'npart_per_cell')) THEN
+    IF (str_cmp(element, 'npart_per_cell') &
+        .OR. str_cmp(element, 'nparticles_per_cell')) THEN
       species_list(species_id)%npart_per_cell = &
           as_real_print(value, element, errcode)
       RETURN
@@ -558,6 +585,20 @@ CONTAINS
     IF (str_cmp(element, 'meet_injectors') &
         .OR. str_cmp(element, 'load_up_to_injectors')) THEN
       species_list(species_id)%fill_ghosts = &
+          as_logical_print(value, element, errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'field_aligned_initialisation') &
+        .OR. str_cmp(element, 'field_aligned')) THEN
+      species_list(species_id)%field_aligned_initialisation = &
+          as_logical_print(value, element, errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'x_perp_y_ignored_z_para') &
+        .OR. str_cmp(element, 'perpendicular_and_parallel')) THEN
+      species_list(species_id)%x_perp_y_ignored_z_para = &
           as_logical_print(value, element, errcode)
       RETURN
     END IF
@@ -595,6 +636,36 @@ CONTAINS
     IF (str_cmp(element, 'bc_z_max')) THEN
       species_list(species_id)%bc_particle(c_bd_z_max) = &
           species_bc_particle(c_bd_z_max)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'background_species') &
+        .OR. str_cmp(element, 'background')) THEN
+      species_list(species_id)%background_species = &
+          as_logical_print(value, element, errcode)
+      RETURN
+    END IF
+
+    ! *************************************************************
+    ! This section sets properties for bremsstrahlung emission
+    ! *************************************************************
+    IF (str_cmp(element, 'atomic_no') &
+        .OR. str_cmp(element, 'atomic_number')) THEN
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = species_atomic_number
+      species_list(species_id)%atomic_no_set = .TRUE.
+
+      ! Identify if the current species ionises to another species
+      j = species_list(species_id)%ionise_to_species
+      DO WHILE(j > 0)
+        species_list(j)%atomic_no = species_list(species_id)%atomic_no
+        species_list(j)%atomic_no_set = .TRUE.
+        j = species_list(j)%ionise_to_species
+      END DO
+#else
+      errcode = c_err_pp_options_wrong
+      extended_error_string = '-DBREMSSTRAHLUNG'
+#endif
       RETURN
     END IF
 
@@ -639,7 +710,8 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'npart_max')) THEN
+    IF (str_cmp(element, 'npart_max') &
+        .OR. str_cmp(element, 'nparticles_max')) THEN
       species_list(species_id)%npart_max = &
           as_long_integer_print(value, element, errcode)
       RETURN
@@ -716,7 +788,9 @@ CONTAINS
     END IF
 
     IF (str_cmp(element, 'density_back') &
-        .OR. str_cmp(element, 'number_density_back')) THEN
+        .OR. str_cmp(element, 'number_density_back') &
+        .OR. str_cmp(element, 'density_background') &
+        .OR. str_cmp(element, 'number_density_background')) THEN
       species_list(species_id)%initial_conditions%density_back = &
           as_real_print(value, element, errcode)
       RETURN
@@ -750,12 +824,13 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'drift_x')) THEN
+    IF (str_cmp(element, 'drift_x') .OR. str_cmp(element, 'drift_px')) THEN
       n = 1
       ic => species_list(species_id)%initial_conditions
       IF (got_file) THEN
         IF (.NOT. ALLOCATED(ic%drift)) THEN
           ALLOCATE(ic%drift(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,3))
+          ic%drift = 0.0_num
         END IF
         array => ic%drift(:,:,:,n)
       ELSE
@@ -767,12 +842,13 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'drift_y')) THEN
+    IF (str_cmp(element, 'drift_y') .OR. str_cmp(element, 'drift_py')) THEN
       n = 2
       ic => species_list(species_id)%initial_conditions
       IF (got_file) THEN
         IF (.NOT. ALLOCATED(ic%drift)) THEN
           ALLOCATE(ic%drift(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,3))
+          ic%drift = 0.0_num
         END IF
         array => ic%drift(:,:,:,n)
       ELSE
@@ -784,12 +860,13 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'drift_z')) THEN
+    IF (str_cmp(element, 'drift_z') .OR. str_cmp(element, 'drift_pz')) THEN
       n = 3
       ic => species_list(species_id)%initial_conditions
       IF (got_file) THEN
         IF (.NOT. ALLOCATED(ic%drift)) THEN
           ALLOCATE(ic%drift(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,3))
+          ic%drift = 0.0_num
         END IF
         array => ic%drift(:,:,:,n)
       ELSE
@@ -830,19 +907,28 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'drift_x_back')) THEN
+    IF (str_cmp(element, 'drift_x_back') &
+        .OR. str_cmp(element, 'drift_px_back') &
+        .OR. str_cmp(element, 'drift_x_background') &
+        .OR. str_cmp(element, 'drift_px_background')) THEN
       species_list(species_id)%initial_conditions%drift_back(1) = &
           as_real_print(value, element, errcode)
       RETURN
     END IF
 
-    IF (str_cmp(element, 'drift_y_back')) THEN
+    IF (str_cmp(element, 'drift_y_back') &
+        .OR. str_cmp(element, 'drift_py_back') &
+        .OR. str_cmp(element, 'drift_y_background') &
+        .OR. str_cmp(element, 'drift_py_background')) THEN
       species_list(species_id)%initial_conditions%drift_back(2) = &
           as_real_print(value, element, errcode)
       RETURN
     END IF
 
-    IF (str_cmp(element, 'drift_z_back')) THEN
+    IF (str_cmp(element, 'drift_z_back') &
+        .OR. str_cmp(element, 'drift_pz_back') &
+        .OR. str_cmp(element, 'drift_z_background') &
+        .OR. str_cmp(element, 'drift_pz_background')) THEN
       species_list(species_id)%initial_conditions%drift_back(3) = &
           as_real_print(value, element, errcode)
       RETURN
@@ -850,14 +936,20 @@ CONTAINS
 
     mult_string = '* ev / kb'
 
-    IF (str_cmp(element, 'temp') .OR. str_cmp(element, 'temp_k') &
-        .OR. str_cmp(element, 'temp_ev')) THEN
-      IF (str_cmp(element, 'temp_ev')) mult = ev / kb
+    IF (str_cmp(element, 'temp') &
+        .OR. str_cmp(element, 'temp_k') &
+        .OR. str_cmp(element, 'temp_ev') &
+        .OR. str_cmp(element, 'temperature') &
+        .OR. str_cmp(element, 'temperature_k') &
+        .OR. str_cmp(element, 'temperature_ev')) THEN
+      IF (str_cmp(element, 'temperature_ev') &
+          .OR. str_cmp(element, 'temp_ev')) mult = ev / kb
 
       ic => species_list(species_id)%initial_conditions
       IF (got_file) THEN
         IF (.NOT. ALLOCATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,3))
+          ic%temp = 0.0_num
         END IF
       ELSE
         array => dummy
@@ -880,9 +972,14 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'temp_back') .OR. str_cmp(element, 'temp_back_k') &
-         .OR. str_cmp(element, 'temp_back_ev')) THEN
-      IF (str_cmp(element, 'temp_back_ev')) mult = ev / kb
+    IF (str_cmp(element, 'temp_back') &
+        .OR. str_cmp(element, 'temp_back_k') &
+        .OR. str_cmp(element, 'temp_back_ev') &
+        .OR. str_cmp(element, 'temperature_background') &
+        .OR. str_cmp(element, 'temperature_background_k') &
+        .OR. str_cmp(element, 'temperature_background_ev')) THEN
+      IF (str_cmp(element, 'temperature_background_ev') &
+          .OR. str_cmp(element, 'temp_back_ev')) mult = ev / kb
 
       species_list(species_id)%initial_conditions%temp_back(1) = &
           as_real_print(value, element, errcode) * mult
@@ -894,8 +991,13 @@ CONTAINS
     END IF
 
     IF (str_cmp(element, 'temp_x_back') &
-         .OR. str_cmp(element, 'temp_x_back_ev')) THEN
-      IF (str_cmp(element, 'temp_x_back_ev')) mult = ev / kb
+        .OR. str_cmp(element, 'temp_x_back_k') &
+        .OR. str_cmp(element, 'temp_x_back_ev') &
+        .OR. str_cmp(element, 'temperature_x_background') &
+        .OR. str_cmp(element, 'temperature_x_background_k') &
+        .OR. str_cmp(element, 'temperature_x_background_ev')) THEN
+      IF (str_cmp(element, 'temperature_x_background_ev') &
+          .OR. str_cmp(element, 'temp_x_back_ev')) mult = ev / kb
 
       species_list(species_id)%initial_conditions%temp_back(1) = &
           as_real_print(value, element, errcode) * mult
@@ -903,8 +1005,13 @@ CONTAINS
     END IF
 
     IF (str_cmp(element, 'temp_y_back') &
-         .OR. str_cmp(element, 'temp_y_back_ev')) THEN
-      IF (str_cmp(element, 'temp_y_back_ev')) mult = ev / kb
+        .OR. str_cmp(element, 'temp_y_back_k') &
+        .OR. str_cmp(element, 'temp_y_back_ev') &
+        .OR. str_cmp(element, 'temperature_y_background') &
+        .OR. str_cmp(element, 'temperature_y_background_k') &
+        .OR. str_cmp(element, 'temperature_y_background_ev')) THEN
+      IF (str_cmp(element, 'temperature_y_background_ev') &
+          .OR. str_cmp(element, 'temp_y_back_ev')) mult = ev / kb
 
       species_list(species_id)%initial_conditions%temp_back(2) = &
           as_real_print(value, element, errcode) * mult
@@ -912,23 +1019,34 @@ CONTAINS
     END IF
 
     IF (str_cmp(element, 'temp_z_back') &
-         .OR. str_cmp(element, 'temp_z_back_ev')) THEN
-      IF (str_cmp(element, 'temp_z_back_ev')) mult = ev / kb
+        .OR. str_cmp(element, 'temp_z_back_k') &
+        .OR. str_cmp(element, 'temp_z_back_ev') &
+        .OR. str_cmp(element, 'temperature_z_background') &
+        .OR. str_cmp(element, 'temperature_z_background_k') &
+        .OR. str_cmp(element, 'temperature_z_background_ev')) THEN
+      IF (str_cmp(element, 'temperature_z_background_ev') &
+          .OR. str_cmp(element, 'temp_z_back_ev')) mult = ev / kb
 
       species_list(species_id)%initial_conditions%temp_back(3) = &
           as_real_print(value, element, errcode) * mult
       RETURN
     END IF
 
-    IF (str_cmp(element, 'temp_x') .OR. str_cmp(element, 'temp_x_k') &
-        .OR. str_cmp(element, 'temp_x_ev')) THEN
-      IF (str_cmp(element, 'temp_x_ev')) mult = ev / kb
+    IF (str_cmp(element, 'temp_x') &
+        .OR. str_cmp(element, 'temp_x_k') &
+        .OR. str_cmp(element, 'temp_x_ev') &
+        .OR. str_cmp(element, 'temperature_x') &
+        .OR. str_cmp(element, 'temperature_x_k') &
+        .OR. str_cmp(element, 'temperature_x_ev')) THEN
+      IF (str_cmp(element, 'temperature_x_ev') &
+          .OR. str_cmp(element, 'temp_x_ev')) mult = ev / kb
 
       n = 1
       ic => species_list(species_id)%initial_conditions
       IF (got_file) THEN
         IF (.NOT. ALLOCATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,3))
+          ic%temp = 0.0_num
         END IF
         array => ic%temp(:,:,:,n)
       ELSE
@@ -940,15 +1058,21 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'temp_y') .OR. str_cmp(element, 'temp_y_k') &
-        .OR. str_cmp(element, 'temp_y_ev')) THEN
-      IF (str_cmp(element, 'temp_y_ev')) mult = ev / kb
+    IF (str_cmp(element, 'temp_y') &
+        .OR. str_cmp(element, 'temp_y_k') &
+        .OR. str_cmp(element, 'temp_y_ev') &
+        .OR. str_cmp(element, 'temperature_y') &
+        .OR. str_cmp(element, 'temperature_y_k') &
+        .OR. str_cmp(element, 'temperature_y_ev')) THEN
+      IF (str_cmp(element, 'temperature_y_ev') &
+          .OR. str_cmp(element, 'temp_y_ev')) mult = ev / kb
 
       n = 2
       ic => species_list(species_id)%initial_conditions
       IF (got_file) THEN
         IF (.NOT. ALLOCATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,3))
+          ic%temp = 0.0_num
         END IF
         array => ic%temp(:,:,:,n)
       ELSE
@@ -960,15 +1084,21 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'temp_z') .OR. str_cmp(element, 'temp_z_k') &
-        .OR. str_cmp(element, 'temp_z_ev')) THEN
-      IF (str_cmp(element, 'temp_z_ev')) mult = ev / kb
+    IF (str_cmp(element, 'temp_z') &
+        .OR. str_cmp(element, 'temp_z_k') &
+        .OR. str_cmp(element, 'temp_z_ev') &
+        .OR. str_cmp(element, 'temperature_z') &
+        .OR. str_cmp(element, 'temperature_z_k') &
+        .OR. str_cmp(element, 'temperature_z_ev')) THEN
+      IF (str_cmp(element, 'temperature_z_ev') &
+          .OR. str_cmp(element, 'temp_z_ev')) mult = ev / kb
 
       n = 3
       ic => species_list(species_id)%initial_conditions
       IF (got_file) THEN
         IF (.NOT. ALLOCATED(ic%temp)) THEN
           ALLOCATE(ic%temp(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng,3))
+          ic%temp = 0.0_num
         END IF
         array => ic%temp(:,:,:,n)
       ELSE
@@ -1023,14 +1153,47 @@ CONTAINS
           DO iu = 1, nio_units ! Print to stdout and to file
             io = io_units(iu)
             WRITE(io,*) '*** WARNING ***'
-            WRITE(io,*) 'Two forms of npart used for particle species "', &
+            WRITE(io,*) 'Two forms of nparticles used for particle species "', &
                 TRIM(species_list(i)%name), '"'
-            WRITE(io,*) 'Just using "npart_per_cell".'
+            WRITE(io,*) 'Just using "nparticles_per_cell".'
           END DO
         END IF
         species_list(i)%count = INT(species_list(i)%npart_per_cell, i8)
       END IF
     END DO
+
+#ifdef BREMSSTRAHLUNG
+    IF (.NOT.use_bremsstrahlung) RETURN
+
+    ! Have all species been assigned an atomic number?
+    DO i = 1, n_species
+      IF (species_list(i)%atomic_no_set) CYCLE
+
+      ! Does this species ionise to another species? If so, the charge cannot
+      ! be the atomic number, and we cannot run the bremsstrahlung module
+      IF (species_list(i)%ionise_to_species > 0) THEN
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) '*** ERROR ***'
+            WRITE(io,*) TRIM(species_list(i)%name), ' missing atomic number'
+          END DO
+        END IF
+        errcode = c_err_missing_elements
+      ELSE
+        species_list(i)%atomic_no = NINT(species_list(i)%charge/q0)
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'No atomic number has been specified for species: ', &
+                TRIM(species_list(i)%name)
+            WRITE(io,*) 'Atomic number has been set to species particle charge'
+          END DO
+        END IF
+      END IF
+    END DO
+#endif
 
   END FUNCTION species_block_check
 
@@ -1250,6 +1413,10 @@ CONTAINS
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_electron
       species_list(species_id)%electron = .TRUE.
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
@@ -1258,6 +1425,10 @@ CONTAINS
       species_list(species_id)%mass = m0 * 1836.2_num
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_proton
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 1
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
@@ -1266,10 +1437,14 @@ CONTAINS
       species_list(species_id)%mass = m0
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_positron
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
       RETURN
     END IF
 
-#ifndef PHOTONS
+#if !defined(PHOTONS) && !defined(BREMSSTRAHLUNG)
     extended_error_string = 'Cannot identify species "' &
         // TRIM(species_list(species_id)%name) // '" as "' // TRIM(value) &
         // '" because' // CHAR(10) &
@@ -1293,13 +1468,18 @@ CONTAINS
 #if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
       trident_electron_species = species_id
 #else
-      errcode = c_err_generic_warning
+      IF (use_qed .OR. use_bremsstrahlung) errcode = c_err_generic_warning
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
 #endif
       RETURN
     END IF
 
     ! Breit Wheeler process electron
-    IF (str_cmp(value, 'bw_electron')) THEN
+    IF (str_cmp(value, 'bw_electron') &
+        .OR. str_cmp(value, 'breit_wheeler_electron')) THEN
       species_list(species_id)%charge = -q0
       species_list(species_id)%mass = m0
       species_list(species_id)%species_type = c_species_id_electron
@@ -1308,18 +1488,27 @@ CONTAINS
 #ifdef PHOTONS
       breit_wheeler_electron_species = species_id
 #else
-      errcode = c_err_generic_warning
+      IF (use_qed .OR. use_bremsstrahlung) errcode = c_err_generic_warning
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
 #endif
       RETURN
     END IF
 
-    IF (str_cmp(value, 'bw_positron')) THEN
+    IF (str_cmp(value, 'bw_positron') &
+        .OR. str_cmp(value, 'breit_wheeler_positron')) THEN
       species_list(species_id)%charge = q0
       species_list(species_id)%mass = m0
       species_charge_set(species_id) = .TRUE.
       species_list(species_id)%species_type = c_species_id_positron
 #ifdef PHOTONS
       breit_wheeler_positron_species = species_id
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
 #endif
       RETURN
     END IF
@@ -1333,7 +1522,11 @@ CONTAINS
 #if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
       trident_positron_species = species_id
 #else
-      errcode = c_err_generic_warning
+      IF (use_qed .OR. use_bremsstrahlung) errcode = c_err_generic_warning
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
 #endif
       RETURN
     END IF
@@ -1346,7 +1539,28 @@ CONTAINS
 #ifdef PHOTONS
       IF (photon_species == -1) photon_species = species_id
 #else
-      errcode = c_err_generic_warning
+      IF (use_qed .OR. use_bremsstrahlung) errcode = c_err_generic_warning
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
+      RETURN
+    END IF
+
+    ! Bremsstrahlung photon
+    IF (str_cmp(value, 'brem_photon')) THEN
+      species_list(species_id)%charge = 0.0_num
+      species_list(species_id)%mass = 0.0_num
+      species_list(species_id)%species_type = c_species_id_photon
+      species_charge_set(species_id) = .TRUE.
+#ifdef BREMSSTRAHLUNG
+      IF (bremsstrahlung_photon_species == -1) &
+          bremsstrahlung_photon_species = species_id
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#else
+      IF (use_bremsstrahlung) errcode = c_err_generic_warning
 #endif
       RETURN
     END IF

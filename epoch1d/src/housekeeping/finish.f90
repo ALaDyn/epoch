@@ -1,4 +1,4 @@
-! Copyright (C) 2014-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 
 MODULE finish
 
-  USE shared_data
+  USE constants
   USE diagnostics
   USE setup
   USE deck
@@ -55,10 +55,14 @@ CONTAINS
 
     DO i = 1, n_subsets
       sub => subset_list(i)
-      CALL MPI_TYPE_FREE(sub%subtype, errcode)
-      CALL MPI_TYPE_FREE(sub%subarray, errcode)
-      CALL MPI_TYPE_FREE(sub%subtype_r4, errcode)
-      CALL MPI_TYPE_FREE(sub%subarray_r4, errcode)
+      IF (sub%subtype /= MPI_DATATYPE_NULL) &
+          CALL MPI_TYPE_FREE(sub%subtype, errcode)
+      IF (sub%subarray /= MPI_DATATYPE_NULL) &
+          CALL MPI_TYPE_FREE(sub%subarray, errcode)
+      IF (sub%subtype_r4 /= MPI_DATATYPE_NULL) &
+          CALL MPI_TYPE_FREE(sub%subtype_r4, errcode)
+      IF (sub%subarray_r4 /= MPI_DATATYPE_NULL) &
+          CALL MPI_TYPE_FREE(sub%subarray_r4, errcode)
     END DO
 
     DEALLOCATE(x, xb, x_global, xb_global, xb_offset_global)
@@ -66,6 +70,8 @@ CONTAINS
 
     DEALLOCATE(npart_each_rank)
     DEALLOCATE(x_grid_mins, x_grid_maxs, cell_x_min, cell_x_max)
+
+    DEALLOCATE(total_particle_energy_species)
 
     CALL deallocate_probes
 
@@ -79,6 +85,8 @@ CONTAINS
       CALL destroy_partlist(species_list(i)%attached_list)
       DEALLOCATE(species_list(i)%ext_temp_x_min, STAT=stat)
       DEALLOCATE(species_list(i)%ext_temp_x_max, STAT=stat)
+      IF (ALLOCATED(species_list(i)%background_density)) &
+          DEALLOCATE(species_list(i)%background_density, STAT=stat)
     END DO
 
     DEALLOCATE(species_list, STAT=stat)

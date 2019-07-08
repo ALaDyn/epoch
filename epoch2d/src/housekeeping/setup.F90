@@ -1,6 +1,4 @@
-! Copyright (C) 2010-2015 Keith Bennett <K.Bennett@warwick.ac.uk>
-! Copyright (C) 2009-2012 Chris Brady <C.S.Brady@warwick.ac.uk>
-! Copyright (C) 2012      Martin Ramsay <M.G.Ramsay@warwick.ac.uk>
+! Copyright (C) 2009-2019 University of Warwick
 !
 ! This program is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -24,6 +22,7 @@ MODULE setup
   USE split_particle
   USE shunt
   USE laser
+  USE injectors
   USE window
   USE timer
   USE helper
@@ -40,6 +39,7 @@ MODULE setup
   PUBLIC :: open_files, close_files, flush_stat_file
   PUBLIC :: setup_species, after_deck_last, set_dt
   PUBLIC :: read_cpu_split, after_load, pre_load_balance
+  PUBLIC :: open_status_file, close_status_file
 
   TYPE(particle), POINTER, SAVE :: iterator_list
 #if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
@@ -249,7 +249,7 @@ CONTAINS
 
   SUBROUTINE setup_grid
 
-    INTEGER :: iproc, ix, iy
+    INTEGER :: ix, iy
     REAL(num) :: xb_min, yb_min
 
     length_x = x_max - x_min
@@ -286,31 +286,8 @@ CONTAINS
     END DO
     y_grid_max = y_global(ny_global)
 
-    DO iproc = 0, nprocx-1
-      x_grid_mins(iproc) = x_global(cell_x_min(iproc+1))
-      x_grid_maxs(iproc) = x_global(cell_x_max(iproc+1))
-    END DO
-    DO iproc = 0, nprocy-1
-      y_grid_mins(iproc) = y_global(cell_y_min(iproc+1))
-      y_grid_maxs(iproc) = y_global(cell_y_max(iproc+1))
-    END DO
-
-    x_grid_min_local = x_grid_mins(x_coords)
-    x_grid_max_local = x_grid_maxs(x_coords)
-    y_grid_min_local = y_grid_mins(y_coords)
-    y_grid_max_local = y_grid_maxs(y_coords)
-
-    x_min_local = x_grid_min_local + (cpml_x_min_offset - 0.5_num) * dx
-    x_max_local = x_grid_max_local - (cpml_x_max_offset - 0.5_num) * dx
-    y_min_local = y_grid_min_local + (cpml_y_min_offset - 0.5_num) * dy
-    y_max_local = y_grid_max_local - (cpml_y_max_offset - 0.5_num) * dy
-
-    ! Setup local grid
-    x(1-ng:nx+ng) = x_global(nx_global_min-ng:nx_global_max+ng)
-    y(1-ng:ny+ng) = y_global(ny_global_min-ng:ny_global_max+ng)
-
-    xb(1-ng:nx+ng) = xb_global(nx_global_min-ng:nx_global_max+ng)
-    yb(1-ng:ny+ng) = yb_global(ny_global_min-ng:ny_global_max+ng)
+    CALL setup_grid_x
+    CALL setup_grid_y
 
   END SUBROUTINE setup_grid
 
@@ -453,6 +430,8 @@ CONTAINS
       species_list(ispecies)%count_update_step = 0
       species_list(ispecies)%species_type = c_species_id_generic
       species_list(ispecies)%immobile = .FALSE.
+      species_list(ispecies)%field_aligned_initialisation = .FALSE.
+      species_list(ispecies)%x_perp_y_ignored_z_para = .FALSE.
       NULLIFY(species_list(ispecies)%next)
       NULLIFY(species_list(ispecies)%prev)
       species_list(ispecies)%bc_particle = c_bc_null
@@ -634,6 +613,31 @@ CONTAINS
 #endif
 
   END SUBROUTINE close_files
+
+
+
+  SUBROUTINE open_status_file
+
+#ifndef NO_IO
+    IF (rank == 0) THEN
+      OPEN(unit=du, status='OLD', position='APPEND', file=status_filename, &
+           iostat=errcode)
+    END IF
+#endif
+
+  END SUBROUTINE open_status_file
+
+
+
+  SUBROUTINE close_status_file
+
+#ifndef NO_IO
+    IF (rank == 0) THEN
+      CLOSE(du)
+    END IF
+#endif
+
+  END SUBROUTINE close_status_file
 
 
 
@@ -1198,6 +1202,15 @@ CONTAINS
         CALL read_laser_phases(sdf_handle, n_laser_y_max, laser_y_max, &
             block_id, ndims, 'laser_y_max_phase', 'y_max')
 
+        CALL read_injector_depths(sdf_handle, injector_x_min, &
+            block_id, ndims, 'injector_x_min_depths', c_dir_x, x_min_boundary)
+        CALL read_injector_depths(sdf_handle, injector_x_max, &
+            block_id, ndims, 'injector_x_max_depths', c_dir_x, x_max_boundary)
+        CALL read_injector_depths(sdf_handle, injector_y_min, &
+            block_id, ndims, 'injector_y_min_depths', c_dir_y, y_min_boundary)
+        CALL read_injector_depths(sdf_handle, injector_y_max, &
+            block_id, ndims, 'injector_y_max_depths', c_dir_y, y_max_boundary)
+
         CALL read_antenna_phases(sdf_handle, block_id, ndims)
 
         CALL read_id_starts(sdf_handle, block_id)
@@ -1468,14 +1481,14 @@ CONTAINS
 #endif
 
         ELSE IF (block_id(1:11) == 'qed energy/') THEN
-#ifdef PHOTONS
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
           CALL sdf_read_point_variable(sdf_handle, npart_local, &
               species_subtypes(ispecies), it_qed_energy)
 #else
           IF (rank == 0) THEN
             PRINT*, '*** ERROR ***'
             PRINT*, 'Cannot load dump file with QED energies.'
-            PRINT*, 'Please recompile with the -DPHOTONS option.'
+            PRINT*, 'Please recompile with -DPHOTONS or -DBREMSSTRAHLUNG.'
           END IF
           CALL abort_code(c_err_pp_options_missing)
           STOP
@@ -1490,6 +1503,20 @@ CONTAINS
             PRINT*, '*** ERROR ***'
             PRINT*, 'Cannot load dump file with Trident optical depths.'
             PRINT*, 'Please recompile with the -DTRIDENT_PHOTONS option.'
+          END IF
+          CALL abort_code(c_err_pp_options_missing)
+          STOP
+#endif
+
+        ELSE IF (block_id(1:21) == 'bremsstrahlung depth/') THEN
+#ifdef BREMSSTRAHLUNG
+          CALL sdf_read_point_variable(sdf_handle, npart_local, &
+              species_subtypes(ispecies), it_optical_depth_bremsstrahlung)
+#else
+          IF (rank == 0) THEN
+            PRINT*, '*** ERROR ***'
+            PRINT*, 'Cannot load dump file with bremsstrahlung optical depths.'
+            PRINT*, 'Please recompile with the -DBREMSSTRAHLUNG option.'
           END IF
           CALL abort_code(c_err_pp_options_missing)
           STOP
@@ -1590,6 +1617,62 @@ CONTAINS
     END IF
 
   END SUBROUTINE read_laser_phases
+
+
+
+  ! Read injector depths from restart and initialise
+  ! Requires the same injectors defined from the deck
+
+  SUBROUTINE read_injector_depths(sdf_handle, injector_base_pointer, &
+      block_id_in, ndims, block_id_compare, direction, runs_this_rank)
+
+    TYPE(sdf_file_handle), INTENT(INOUT) :: sdf_handle
+    TYPE(injector_block), POINTER :: injector_base_pointer
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_in
+    INTEGER, INTENT(IN) :: ndims
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_compare
+    INTEGER, INTENT(IN) :: direction
+    LOGICAL, INTENT(IN) :: runs_this_rank
+    REAL(num), DIMENSION(:,:), ALLOCATABLE :: depths
+    INTEGER :: inj_count
+    INTEGER, DIMENSION(4) :: dims
+    INTEGER :: n_els, sz, starts
+
+    IF (str_cmp(block_id_in, block_id_compare)) THEN
+      CALL sdf_read_array_info(sdf_handle, dims)
+
+      ! In 1-d there is one value, 2-d there is one strip (per bnd),
+      ! in 3-d one plane etc
+      IF (direction == c_dir_x) THEN
+        n_els = ny
+        sz = ny_global
+        starts = ny_global_min
+      ELSE
+        n_els = nx
+        sz = nx_global
+        starts = nx_global_min
+      END IF
+
+      ALLOCATE(depths(n_els, dims(c_ndims)))
+
+      CALL sdf_read_array(sdf_handle, depths, (/sz, dims(c_ndims)/), &
+          (/starts, 1/), null_proc=(.NOT. runs_this_rank))
+
+      CALL setup_injector_depths(injector_base_pointer, depths, inj_count)
+
+      ! Got count back so can now check and message
+      IF (ndims /= c_ndims .OR. dims(c_ndims) /= inj_count) THEN
+        PRINT*, '*** WARNING ***'
+        PRINT*, 'Number of depths on ', TRIM(block_id_in), &
+            ' does not match number of injectors.'
+        PRINT*, 'Injectors will be populated in order, but correct operation', &
+            ' is not guaranteed'
+      END IF
+
+      DEALLOCATE(depths)
+    END IF
+
+  END SUBROUTINE read_injector_depths
 
 
 
@@ -1703,7 +1786,7 @@ CONTAINS
           ALLOCATE(old_y_max(nprocy))
           CALL sdf_read_srl_cpu_split(sdf_handle, old_x_max, old_y_max)
         ELSE
-          IF (rank == 0) THEN
+          IF (rank == 0 .AND. use_exact_restart_set) THEN
             PRINT*, '*** WARNING ***'
             PRINT'('' SDF restart file was generated using'', &
                 & i4,'' CPUs.'')', npx * npy
@@ -1925,26 +2008,6 @@ CONTAINS
 
 
 
-  FUNCTION it_qed_energy(array, npart_this_it, start, param)
-
-    REAL(num) :: it_qed_energy
-    REAL(num), DIMENSION(:), INTENT(IN) :: array
-    INTEGER, INTENT(INOUT) :: npart_this_it
-    LOGICAL, INTENT(IN) :: start
-    INTEGER, INTENT(IN), OPTIONAL :: param
-    INTEGER :: ipart
-
-    DO ipart = 1, npart_this_it
-      iterator_list%particle_energy = array(ipart)
-      iterator_list => iterator_list%next
-    END DO
-
-    it_qed_energy = 0
-
-  END FUNCTION it_qed_energy
-
-
-
 #ifdef TRIDENT_PHOTONS
   FUNCTION it_optical_depth_trident(array, npart_this_it, start, param)
 
@@ -1964,6 +2027,50 @@ CONTAINS
 
   END FUNCTION it_optical_depth_trident
 #endif
+#endif
+
+
+
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
+  FUNCTION it_qed_energy(array, npart_this_it, start, param)
+
+    REAL(num) :: it_qed_energy
+    REAL(num), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      iterator_list%particle_energy = array(ipart)
+      iterator_list => iterator_list%next
+    END DO
+
+    it_qed_energy = 0
+
+  END FUNCTION it_qed_energy
+#endif
+
+
+
+#ifdef BREMSSTRAHLUNG
+  FUNCTION it_optical_depth_bremsstrahlung(array, npart_this_it, start, param)
+
+    REAL(num) :: it_optical_depth_bremsstrahlung
+    REAL(num), DIMENSION(:), INTENT(IN) :: array
+    INTEGER, INTENT(INOUT) :: npart_this_it
+    LOGICAL, INTENT(IN) :: start
+    INTEGER, INTENT(IN), OPTIONAL :: param
+    INTEGER :: ipart
+
+    DO ipart = 1, npart_this_it
+      iterator_list%optical_depth_bremsstrahlung = array(ipart)
+      iterator_list => iterator_list%next
+    END DO
+
+    it_optical_depth_bremsstrahlung = 0
+
+  END FUNCTION it_optical_depth_bremsstrahlung
 #endif
 
 
