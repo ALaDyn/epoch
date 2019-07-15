@@ -279,9 +279,8 @@ CONTAINS
 
     CALL destroy_partlist(partlist)
     IF (npart_this_proc_new > 0) THEN
-      CALL &
-        create_allocated_partlist(partlist, npart_this_proc_new, &
-        use_store_in=use_store_default)
+      CALL create_allocated_partlist(partlist, npart_this_proc_new, &
+          use_store_in=use_store_default)
     ELSE
       CALL create_empty_partlist(partlist, use_store_in=use_store_default)
     END IF
@@ -317,7 +316,7 @@ CONTAINS
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
     IF (ASSOCIATED(current)) THEN
-      !Destroy any unplaced particles
+      ! Destroy any unplaced particles
       DO WHILE(ASSOCIATED(current))
         next => current%next
         CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
@@ -509,14 +508,13 @@ CONTAINS
     partlist => species%attached_list
     partstore => species%attached_list%store
     IF (num_new_particles > 0) THEN
-      CALL &
-        create_allocated_partlist(partlist, num_new_particles, &
-        use_store_in=use_store_default)
+      CALL create_allocated_partlist(partlist, num_new_particles, &
+          use_store_in=use_store_default)
     ELSE
       CALL create_empty_partlist(partlist, use_store_in=use_store_default)
     END IF
-    !Now have a store with at least one chunk of memory allocated
-    !And all linking etc is done
+    ! Now have a store with at least one chunk of memory allocated
+    ! And all linking etc is done
     !NOTE that positions etc not yet set
 
     ! Randomly place npart_per_cell particles into each valid cell
@@ -599,7 +597,7 @@ CONTAINS
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
     IF (ASSOCIATED(current)) THEN
-      !Destroy any unplaced particles
+      ! Destroy any unplaced particles
       DO WHILE(ASSOCIATED(current))
         next => current%next
         CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)

@@ -1167,7 +1167,7 @@ CONTAINS
 
     id_starts(1) = n_cpu_bits
 
-    CALL sdf_write_srl(sdf_handle, "id_starts", "id_starts", id_starts, 0)
+    CALL sdf_write_srl(sdf_handle, 'id_starts', 'id_starts', id_starts, 0)
 
     DEALLOCATE(id_starts)
 #endif
