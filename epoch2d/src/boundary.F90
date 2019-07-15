@@ -1449,7 +1449,6 @@ CONTAINS
           IF (ABS(ix) + ABS(iy) == 0) CYCLE
           ixp = -ix
           iyp = -iy
-
           CALL partlist_sendrecv(send(ix, iy), recv(ixp, iyp), &
               neighbour(ix, iy), neighbour(ixp, iyp))
           !Since elements of recv are copies of sent particles,

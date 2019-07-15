@@ -348,7 +348,7 @@ CONTAINS
     species%count = npart_this_species
     species%weight = density_total_global * dx * dy / npart_this_species
 
-    IF (rank == 0) THEN
+    IF (rank == 0 .AND. npart_this_species > 0) THEN
       CALL integer_as_string(npart_this_species, string)
       DO iu = 1, nio_units
         io = ios_units(iu)
@@ -559,9 +559,8 @@ CONTAINS
     !And all linking etc is done
     !NOTE that positions etc not yet set
 
-    !Randomly place npart_per_cell particles into each valid cell
+    ! Randomly place npart_per_cell particles into each valid cell
     npart_left = num_new_particles
-
     current => partlist%head
 
     IF (npart_per_cell > 0) THEN

@@ -146,7 +146,6 @@ CONTAINS
   SUBROUTINE create_particle_store(partlist, n_els_min, &
       link_el_in, no_pad_store, live_state)
 
-
     TYPE(particle_list), INTENT(INOUT) :: partlist
     INTEGER(i8), INTENT(IN) :: n_els_min
     INTEGER(i8) :: actual_elements
@@ -292,15 +291,15 @@ CONTAINS
           .OR. i_part == link_upto) THEN
         current => substore%store(i_part)
         CALL init_particle(current)
-        substore%store(i_part)%live = live_state_set
         NULLIFY(substore%store(i_part)%prev, &
             substore%store(i_part)%next)
+        substore%store(i_part)%live = live_state_set
       ELSE
-        !Set not-live state
-        substore%store(i_part)%live = 0
         !Nullify pointers
         NULLIFY(substore%store(i_part)%prev, &
             substore%store(i_part)%next)
+        !Set not-live state
+        substore%store(i_part)%live = 0
       END IF
     END DO
 
@@ -545,6 +544,7 @@ CONTAINS
     DO WHILE (ASSOCIATED(current))
       IF (stop_check .AND. ASSOCIATED(current, TARGET=list%tail)) EXIT
       part_x  = current%part_pos
+
       IF( part_x .GT. x_max_local+dx/2  .OR. part_x .LT. x_min_local-dx/2) THEN
         ! Partly check the boundary conditions, but not exactly. It is unlikely
         ! that the positions are wrong but not so as to trip this
@@ -565,6 +565,7 @@ CONTAINS
           countd = countd + 1
         END IF
       END IF
+
       current => current%next
       b_pos = b_pos + 1
     END DO
@@ -659,8 +660,8 @@ CONTAINS
     LOGICAL, INTENT(IN), OPTIONAL :: use_store_in, holds_copies, make_live
     LOGICAL :: use_store
     TYPE(particle), POINTER :: new_particle
-    INTEGER(i4) :: live_state
     INTEGER(i8) :: ipart
+    INTEGER(i4) :: live_state
 
     IF(.NOT. PRESENT(use_store_in)) THEN
       use_store = .FALSE.
@@ -955,8 +956,8 @@ CONTAINS
     !Clean up newlist
     CALL create_empty_partlist(newlist)
 
-
   END SUBROUTINE append_partlist
+
 
 
   !Take a list and append its content to list-with-store
@@ -990,7 +991,6 @@ CONTAINS
 
 
 
-
   SUBROUTINE add_particle_to_partlist(partlist, new_particle)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
@@ -1020,6 +1020,7 @@ CONTAINS
     partlist%tail => new_particle
 
   END SUBROUTINE add_particle_to_partlist
+
 
 
   SUBROUTINE remove_particle_from_partlist(partlist, a_particle, &
@@ -1105,6 +1106,7 @@ CONTAINS
 
 
   END SUBROUTINE unlink_particle_from_partlist
+
 
 
   SUBROUTINE pack_particle(array, a_particle)
@@ -1312,12 +1314,11 @@ CONTAINS
     new_particle%optical_depth_tri = LOG(1.0_num / (1.0_num - random()))
 #endif
 #endif
+    new_particle%live = 1
 #ifdef BREMSSTRAHLUNG
     new_particle%optical_depth_bremsstrahlung = &
         LOG(1.0_num / (1.0_num - random()))
 #endif
-
-    new_particle%live = 1
 
   END SUBROUTINE init_particle
 
@@ -1358,7 +1359,6 @@ CONTAINS
     new_particle%live = src_particle%live
 
   END SUBROUTINE copy_particle
-
 
 
 
@@ -1413,7 +1413,6 @@ CONTAINS
     IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
 
   END SUBROUTINE create_particle_in_list
-
 
 
   SUBROUTINE destroy_particle(part, is_copy, no_dealloc)
@@ -1787,7 +1786,6 @@ CONTAINS
 
 
 
-
   !The following goes through the backing store as an array, packing
   ! particles into a contiguous chunk. This is done by wrapping
   ! particles from the tail of the list into empty spaces.
@@ -1897,10 +1895,9 @@ CONTAINS
 
     TYPE(particle_list), INTENT(INOUT) :: list
     TYPE(particle_sub_store), POINTER :: current, next
-    INTEGER(i8) :: length, st
+    INTEGER(i8) :: st
 
     current => list%store%head
-    length = list%store%total_length
     st = 0
     !Do nothing if only one sub
     IF (.NOT. ASSOCIATED(current%next)) RETURN
@@ -1931,7 +1928,6 @@ CONTAINS
           !Is tail of list
           list%store%tail => current%prev
         END IF
-
         list%store%total_length = list%store%total_length - current%length
         DEALLOCATE(current%store)
         DEALLOCATE(current)
@@ -2001,7 +1997,6 @@ CONTAINS
     END IF
 
   END SUBROUTINE set_next_slot
-
 
 
 END MODULE partlist

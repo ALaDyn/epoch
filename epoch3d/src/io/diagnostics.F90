@@ -789,7 +789,6 @@ CONTAINS
               CALL append_partlist(species_list(i)%attached_list, &
                   io_list(i)%attached_list)
             END IF
-
           END DO
           DO i = 1, n_species
             CALL create_empty_partlist(io_list(i)%attached_list)

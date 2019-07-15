@@ -110,9 +110,10 @@ CONTAINS
   END SUBROUTINE deallocate_partlists
 
 
+
   SUBROUTINE create_empty_partlist(partlist, use_store_in, holds_copies)
 
-     TYPE(particle_list), INTENT(INOUT) :: partlist
+    TYPE(particle_list), INTENT(INOUT) :: partlist
     LOGICAL, INTENT(IN), OPTIONAL :: use_store_in, holds_copies
     LOGICAL :: use_store
 
@@ -141,9 +142,9 @@ CONTAINS
   END SUBROUTINE create_empty_partlist
 
 
+
   SUBROUTINE create_particle_store(partlist, n_els_min, &
       link_el_in, no_pad_store, live_state)
-
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
     INTEGER(i8), INTENT(IN) :: n_els_min
@@ -688,11 +689,12 @@ CONTAINS
   END SUBROUTINE create_unsafe_partlist_by_tail
 
 
+
   SUBROUTINE create_allocated_partlist(partlist, n_elements, use_store_in, &
       holds_copies, make_live)
 
-     TYPE(particle_list), INTENT(INOUT) :: partlist
-     INTEGER(i8), INTENT(IN) :: n_elements
+    TYPE(particle_list), INTENT(INOUT) :: partlist
+    INTEGER(i8), INTENT(IN) :: n_elements
     LOGICAL, INTENT(IN), OPTIONAL :: use_store_in, holds_copies, make_live
     LOGICAL :: use_store
     TYPE(particle), POINTER :: new_particle
@@ -806,11 +808,11 @@ CONTAINS
         CALL remove_empty_subs(list)
         ! If that wasn't enough, compact completely
         IF (REAL(list%count)/REAL(list%store%total_length) < fill_factor) THEN
- !         IF (fold_compact) THEN
-  !          CALL fold_compact_backing_store(list%store, list)
-   !       ELSE
+          IF (fold_compact) THEN
+            CALL fold_compact_backing_store(list%store, list)
+          ELSE
             CALL compact_backing_store(list%store, list)
-    !      END IF
+          END IF
         END IF
       END IF
       IF(list%store%tail%first_free_element >= list%store%tail%length) THEN
@@ -1145,8 +1147,6 @@ CONTAINS
 
 
 
-
-
   SUBROUTINE pack_particle(array, a_particle)
 
     REAL(num), DIMENSION(:), INTENT(INOUT) :: array
@@ -1309,6 +1309,8 @@ CONTAINS
 
   END FUNCTION generate_id
 #endif
+
+
 
   SUBROUTINE init_particle(new_particle, no_gen_id)
 
@@ -1752,7 +1754,6 @@ CONTAINS
 
 
 
-
   !The following goes through the backing store as an array, packing
   ! particles into a contiguous chunk.
   SUBROUTINE compact_backing_store(store, list)
@@ -1820,6 +1821,110 @@ CONTAINS
     CALL set_next_slot(list)
 
   END SUBROUTINE compact_backing_store
+
+
+
+  !The following goes through the backing store as an array, packing
+  ! particles into a contiguous chunk. This is done by wrapping
+  ! particles from the tail of the list into empty spaces.
+  ! THIS DOES NOT preserve list ordering!
+  ! However, for various reasons it DOES preserve the tail particle
+
+  SUBROUTINE fold_compact_backing_store(store, list)
+
+    TYPE(particle_store), INTENT(INOUT) :: store
+    TYPE(particle_sub_store), POINTER :: dest_section
+    TYPE(particle_list), INTENT(INOUT) :: list
+    TYPE(particle), POINTER :: original, place_into
+    INTEGER(i8) :: i, d_count, offset
+    LOGICAL :: patched_tail
+
+    IF (store_debug) THEN
+      PRINT*, 'Folding backing store on ',  rank
+    END IF
+
+   ! THIS should only be called if compact is needed
+   ! Assume there is some space unused
+    dest_section => store%head
+
+    ! List can only have no tail if empty or corrupt
+    IF (.NOT. ASSOCIATED(list%tail) .AND. store_debug) THEN
+      PRINT*, "Error - list has no tail, cannot fold"
+    END IF
+
+    ! Below means only one element left in list, the head/tail
+    ! Folding makes no sense in that case
+    ! But that element may be in unhelpful position
+    ! So we do want to move it back to the first slot
+    IF (.NOT. ASSOCIATED(list%tail%prev)) THEN
+      place_into => store%head%store(1)
+      CALL copy_particle(list%tail, place_into)
+      list%tail%live = 0
+      NULLIFY(place_into%prev, place_into%next)
+      list%head => place_into
+      list%tail => list%head
+      store%head%first_free_element = 2
+      store%next_slot => store%head%store(2)
+      RETURN
+    END IF
+
+    patched_tail = .FALSE.
+    original => list%tail%prev
+    offset = 0
+    d_count = 0
+    outer: DO WHILE (offset <= list%count)
+      DO i = 1, dest_section%length
+        ! At worst we copy every particle
+        ! offset tracks the total of either live, or filled by copying
+        ! We're done when this is 1 below the list count as the
+        ! tail is handled separately
+        offset = offset + 1
+        IF (offset >= list%count) THEN
+          dest_section%first_free_element = i+1
+          place_into => dest_section%store(i)
+          CALL copy_particle(list%tail, place_into)
+          list%tail%live = 0
+          patched_tail = .TRUE.
+          EXIT outer
+        END IF
+        ! Find next empty slot
+        IF (dest_section%store(i)%live == 1) CYCLE
+        ! Got a slot, copy it and move on src
+        place_into => dest_section%store(i)
+        CALL copy_particle(original, place_into)
+        original%live = 0
+        original => original%prev
+      END DO
+      ! For all except the last filled segment, below is correct
+      dest_section%first_free_element = dest_section%length+1
+      dest_section => dest_section%next
+    END DO outer
+
+    IF (.NOT. patched_tail) THEN
+      ! Must have ended exactly on a section boundary
+      ! hence exited from WHILE cond, not EXIT outer
+      ! That cannot have been the last segment
+      dest_section => dest_section%next
+      place_into => dest_section%store(1)
+      CALL copy_particle(list%tail, place_into)
+      list%tail%live = 0
+      dest_section%first_free_element = 2
+    END IF
+
+    !Set first_free for any remaining sections
+    DO WHILE(ASSOCIATED(dest_section))
+      dest_section => dest_section%next
+      IF(ASSOCIATED(dest_section)) THEN
+        dest_section%first_free_element = 1
+      END IF
+    END DO
+
+    CALL remove_empty_subs(list)
+    CALL set_next_slot(list)
+
+    CALL relink_partlist(list, .FALSE.)
+
+  END SUBROUTINE fold_compact_backing_store
 
 
 

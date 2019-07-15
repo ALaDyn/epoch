@@ -846,7 +846,7 @@ CONTAINS
             CALL remove_particle_from_partlist(&
                 species_list(ispecies)%attached_list, cur)
             CALL add_particle_to_partlist(&
-                 ejected_list(ispecies)%attached_list, cur)
+                ejected_list(ispecies)%attached_list, cur)
           ELSE
             CALL remove_particle_from_partlist(&
                 species_list(ispecies)%attached_list, cur, destroy=.TRUE.)
@@ -868,8 +868,8 @@ CONTAINS
             neighbour(ix), neighbour(ixp))
         !Since elements of recv are copies of sent particles,
         !their live flag may be 0, so we override it in the add
-        CALL append_partlist(species_list(ispecies)%attached_list, &
-            recv(ixp), .TRUE.)
+        CALL append_partlist(&
+            species_list(ispecies)%attached_list, recv(ixp), .TRUE.)
       END DO
 
       DO ix = -1, 1, 2

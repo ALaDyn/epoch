@@ -352,7 +352,7 @@ CONTAINS
     ! called if the above routines worked correctly.
     IF (ASSOCIATED(current)) THEN
       !Destroy any unplaced particles
-     DO WHILE(ASSOCIATED(current))
+      DO WHILE(ASSOCIATED(current))
         next => current%next
         CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
         current => next
@@ -414,7 +414,6 @@ CONTAINS
           use_store_in=use_store_default)
       RETURN
     END IF
-
 
     ix_min = 1
     ix_max = nx
@@ -601,11 +600,10 @@ CONTAINS
     !NOTE that positions etc not yet set
 
     ! Randomly place npart_per_cell particles into each valid cell
-
     npart_left = num_new_particles
     current => partlist%head
-    IF (npart_per_cell > 0) THEN
 
+    IF (npart_per_cell > 0) THEN
       DO iz = iz_min, iz_max
       DO iy = iy_min, iy_max
       DO ix = ix_min, ix_max
@@ -715,7 +713,7 @@ CONTAINS
 
     species%count = npart_this_species
 
-    IF (rank == 0) THEN
+    IF (rank == 0 .AND. npart_this_species > 0) THEN
       CALL integer_as_string(npart_this_species, string)
       DO iu = 1, nio_units
         io = ios_units(iu)

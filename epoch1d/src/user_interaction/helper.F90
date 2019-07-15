@@ -331,7 +331,7 @@ CONTAINS
     species%count = npart_this_species
     species%weight = density_total_global * dx / npart_this_species
 
-    IF (rank == 0) THEN
+    IF (rank == 0 .AND. npart_this_species > 0) THEN
       CALL integer_as_string(npart_this_species, string)
       DO iu = 1, nio_units
         io = ios_units(iu)
@@ -507,8 +507,6 @@ CONTAINS
     END IF
 
     partlist => species%attached_list
-
-    CALL destroy_partlist(partlist)
     partstore => species%attached_list%store
     IF (num_new_particles > 0) THEN
       CALL &
@@ -524,8 +522,8 @@ CONTAINS
     ! Randomly place npart_per_cell particles into each valid cell
     npart_left = num_new_particles
     current => partlist%head
-    IF (npart_per_cell > 0) THEN
 
+    IF (npart_per_cell > 0) THEN
       DO ix = ix_min, ix_max
         IF (.NOT. load_list(ix)) CYCLE
 
@@ -590,6 +588,7 @@ CONTAINS
         current%pvol = npart_per_cell
 #endif
         current%part_pos = x(cell_x) + (random() - 0.5_num) * dx
+        current%live = 1
 
         current => current%next
       END DO

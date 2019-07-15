@@ -183,7 +183,6 @@ MODULE shared_data
     TYPE(particle_sub_store), POINTER :: head => NULL(), tail => NULL()
   END TYPE particle_store
 
-
   ! Object representing a collection of particles
   ! Used internally by the MPI particle transfer code
   TYPE particle_list
@@ -198,7 +197,6 @@ MODULE shared_data
     LOGICAL :: holds_copies
 
     TYPE(particle_list), POINTER :: next, prev
-
     LOGICAL :: use_store, locked_store
     TYPE(particle_store) :: store
   END TYPE particle_list

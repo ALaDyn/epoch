@@ -146,7 +146,6 @@ CONTAINS
   SUBROUTINE create_particle_store(partlist, n_els_min, &
       link_el_in, no_pad_store, live_state)
 
-
     TYPE(particle_list), INTENT(INOUT) :: partlist
     INTEGER(i8), INTENT(IN) :: n_els_min
     INTEGER(i8) :: actual_elements
@@ -299,6 +298,7 @@ CONTAINS
         !Nullify pointers
         NULLIFY(substore%store(i_part)%prev, &
             substore%store(i_part)%next)
+        !Set not-live state
         substore%store(i_part)%live = 0
       END IF
     END DO
@@ -545,6 +545,7 @@ CONTAINS
       IF (stop_check .AND. ASSOCIATED(current, TARGET=list%tail)) EXIT
       part_x  = current%part_pos(1)
       part_y  = current%part_pos(2)
+
       IF( part_x .GT. x_max_local+dx/2  .OR. part_x .LT. x_min_local-dx/2) THEN
         ! Partly check the boundary conditions, but not exactly. It is unlikely
         ! that the positions are wrong but not so as to trip this
@@ -583,6 +584,7 @@ CONTAINS
           countd = countd + 1
         END IF
       END IF
+
       current => current%next
       b_pos = b_pos + 1
     END DO
@@ -813,7 +815,6 @@ CONTAINS
 
 
 
-
   SUBROUTINE create_filled_partlist(partlist, data_in, n_elements, holds_copies)
 
     TYPE(particle_list), INTENT(INOUT) :: partlist
@@ -930,7 +931,6 @@ CONTAINS
     partlist2%holds_copies = partlist1%holds_copies
 
   END SUBROUTINE copy_partlist
-
 
 
 
@@ -1381,7 +1381,6 @@ CONTAINS
 
 
 
-
   SUBROUTINE create_particle(new_particle, no_gen_id)
 
     TYPE(particle), POINTER :: new_particle
@@ -1433,7 +1432,6 @@ CONTAINS
     IF (.NOT. ASSOCIATED(list%head)) list%head => new_particle
 
   END SUBROUTINE create_particle_in_list
-
 
 
   SUBROUTINE destroy_particle(part, is_copy, no_dealloc)
