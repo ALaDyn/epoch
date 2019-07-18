@@ -1453,8 +1453,8 @@ CONTAINS
               neighbour(ix, iy), neighbour(ixp, iyp))
           ! Since elements of recv are copies of sent particles,
           ! their live flag may be 0, so we override it in the add
-          CALL append_partlist(&
-              species_list(ispecies)%attached_list, recv(ixp, iyp), .TRUE.)
+          CALL append_partlist(species_list(ispecies)%attached_list, &
+              recv(ixp, iyp), ignore_live=.TRUE.)
         END DO
       END DO
 

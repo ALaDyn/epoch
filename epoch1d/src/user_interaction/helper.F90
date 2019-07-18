@@ -280,9 +280,9 @@ CONTAINS
     CALL destroy_partlist(partlist)
     IF (npart_this_proc_new > 0) THEN
       CALL create_allocated_partlist(partlist, npart_this_proc_new, &
-          use_store_in=use_store_default)
+          use_store=use_store_default)
     ELSE
-      CALL create_empty_partlist(partlist, use_store_in=use_store_default)
+      CALL create_empty_partlist(partlist, use_store=use_store_default)
     END IF
 
     ! Randomly place npart_per_cell particles into each valid cell
@@ -374,7 +374,7 @@ CONTAINS
     npart_this_species = species%count
     IF (npart_this_species <= 0) THEN
       CALL create_empty_partlist(species%attached_list, &
-          use_store_in=use_store_default)
+          use_store=use_store_default)
       RETURN
     END IF
 
@@ -509,9 +509,9 @@ CONTAINS
     partstore => species%attached_list%store
     IF (num_new_particles > 0) THEN
       CALL create_allocated_partlist(partlist, num_new_particles, &
-          use_store_in=use_store_default)
+          use_store=use_store_default)
     ELSE
-      CALL create_empty_partlist(partlist, use_store_in=use_store_default)
+      CALL create_empty_partlist(partlist, use_store=use_store_default)
     END IF
     ! Now have a store with at least one chunk of memory allocated
     ! And all linking etc is done
@@ -840,7 +840,7 @@ CONTAINS
 
       ! Just to be sure
       CALL destroy_partlist(partlist)
-      CALL create_empty_partlist(partlist, use_store_in=use_store_default)
+      CALL create_empty_partlist(partlist, use_store=use_store_default)
 
       ! MPI read files
       part_count = load_1d_real_array(curr_loader%x_data, xbuf, &
