@@ -416,10 +416,8 @@ CONTAINS
         CALL sdf_write_srl(sdf_handle, 'x_grid_min', &
             'Minimum grid position', x_grid_min)
 
-        CALL write_return_injectors(sdf_handle, 'return_injector_x_min', &
-             c_bd_x_min, x_min_boundary)
-        CALL write_return_injectors(sdf_handle, 'return_injector_x_max', &
-             c_bd_x_max, x_max_boundary)
+        CALL write_return_injectors(sdf_handle, c_bd_x_min)
+        CALL write_return_injectors(sdf_handle, c_bd_x_max)
 
         DO i = 1, 2 * c_ndims
           CALL write_laser_phases(sdf_handle, i)
@@ -1052,18 +1050,20 @@ CONTAINS
 
 
 
-  SUBROUTINE write_return_injectors(sdf_handle, block_name, boundary, &
-      runs_this_rank)
+  SUBROUTINE write_return_injectors(sdf_handle, boundary)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
-    CHARACTER(LEN=*), INTENT(IN) :: block_name
     INTEGER, INTENT(IN) :: boundary
-    LOGICAL, INTENT(IN) :: runs_this_rank
     REAL(num), DIMENSION(:,:), ALLOCATABLE :: values
     TYPE(particle_species), POINTER :: curr_species
     INTEGER :: ispecies, return_species
+    CHARACTER(LEN=21) :: block_name
+    CHARACTER(LEN=5), DIMENSION(6) :: direction_name = &
+        (/'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'/)
 
     IF (.NOT. any_return) RETURN
+
+    block_name = 'return_injector_' // direction_name(boundary)
 
     return_species = -1
     DO ispecies = 1, n_species
@@ -1084,7 +1084,7 @@ CONTAINS
 
       CALL sdf_write_array(sdf_handle, TRIM(block_name), TRIM(block_name),&
           values, (/ny_global, nz_global/), (/ny_global_min, nz_global_min/), &
-          null_proc=(.NOT. runs_this_rank))
+          null_proc=(.NOT. is_boundary(boundary)))
 
       DEALLOCATE(values)
     END IF

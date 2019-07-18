@@ -1168,10 +1168,8 @@ CONTAINS
           END IF
         END IF
 
-        CALL read_return_injectors(sdf_handle, block_id, ndims, &
-            c_bd_x_min, 'x_min')
-        CALL read_return_injectors(sdf_handle, block_id, ndims, &
-            c_bd_x_max, 'x_max')
+        CALL read_return_injectors(sdf_handle, block_id, ndims, c_bd_x_min)
+        CALL read_return_injectors(sdf_handle, block_id, ndims, c_bd_x_max)
 
         DO i = 1, 2 * c_ndims
           CALL read_laser_phases(sdf_handle, block_id, ndims, i)
@@ -1604,21 +1602,22 @@ CONTAINS
 
 
 
-  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims, &
-      boundary, direction_name)
+  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims, boundary)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
-    CHARACTER(LEN=*), INTENT(IN) :: block_id_in, direction_name
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_in
     INTEGER, INTENT(IN) :: ndims, boundary
     TYPE(particle_species), POINTER :: curr_species
-    INTEGER :: ispecies, return_species, lstr
+    INTEGER :: ispecies, return_species
     REAL(KIND=num), DIMENSION(:,:), ALLOCATABLE :: values
     INTEGER, DIMENSION(4) :: dims
+    CHARACTER(LEN=21) :: block_id_compare
+    CHARACTER(LEN=5), DIMENSION(6) :: direction_name = &
+        (/'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'/)
 
-    lstr = LEN('return_injector')
-    IF (str_cmp(block_id_in(1:lstr), 'return_injector') &
-        .AND. str_cmp(TRIM(block_id_in(lstr+2:LEN(block_id_in))), &
-                      TRIM(direction_name))) THEN
+    block_id_compare = 'return_injector_' // direction_name(boundary)
+
+    IF (str_cmp(block_id_in, block_id_compare)) THEN
       CALL sdf_read_array_info(sdf_handle, dims)
 
       ! In 1-d there is one value, 2-d there is one strip of drifts,
