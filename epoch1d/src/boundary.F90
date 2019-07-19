@@ -63,11 +63,6 @@ CONTAINS
         bc_error = 'Unrecognised "' // TRIM(boundary(i)) // '" boundary for ' &
             // 'species "' // TRIM(species_list(ispecies)%name) // '"'
         error = error .OR. setup_particle_boundary(bc, bc_error)
-
-        IF (bc == c_bc_heat_bath) THEN
-          CALL create_boundary_injector(ispecies, i)
-          species_list(ispecies)%bc_particle(i) = c_bc_open
-        END IF
       END DO
     END DO
 
@@ -77,6 +72,27 @@ CONTAINS
     END IF
 
   END SUBROUTINE setup_boundaries
+
+
+
+  SUBROUTINE setup_domain_dependent_boundaries
+
+    ! Any boundary condition setup that needs the domain to have already been
+    ! created should be added here
+
+    INTEGER :: ispecies, i, bc
+
+    DO ispecies = 1, n_species
+      DO i = 1, 2*c_ndims
+        bc = species_list(ispecies)%bc_particle(i)
+        IF (bc == c_bc_heat_bath) THEN
+          CALL create_boundary_injector(ispecies, i)
+          species_list(ispecies)%bc_particle(i) = c_bc_open
+        END IF
+      END DO
+    END DO
+
+  END SUBROUTINE setup_domain_dependent_boundaries
 
 
 
@@ -830,7 +846,7 @@ CONTAINS
             CALL remove_particle_from_partlist(&
                 species_list(ispecies)%attached_list, cur)
             CALL add_particle_to_partlist(&
-                 ejected_list(ispecies)%attached_list, cur)
+                ejected_list(ispecies)%attached_list, cur)
           ELSE
             CALL remove_particle_from_partlist(&
                 species_list(ispecies)%attached_list, cur, destroy=.TRUE.)
@@ -839,8 +855,8 @@ CONTAINS
           ! Particle has left processor, send it to its neighbour
           CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
-          !Live is now 0 and links are dead
-          !If we used stores, we've got a copy now
+          ! Live is now 0 and links are dead
+          ! If we used stores, we've got a copy now
           CALL add_particle_to_partlist(send(xbd), cur)
         END IF
       END DO
@@ -850,10 +866,10 @@ CONTAINS
         ixp = -ix
         CALL partlist_sendrecv(send(ix), recv(ixp), &
             neighbour(ix), neighbour(ixp))
-        !Since elements of recv are copies of sent particles,
-        !their live flag may be 0, so we override it in the add
+        ! Since elements of recv are copies of sent particles,
+        ! their live flag may be 0, so we override it in the add
         CALL append_partlist(species_list(ispecies)%attached_list, &
-            recv(ixp), .TRUE.)
+            recv(ixp), ignore_live=.TRUE.)
       END DO
 
       DO ix = -1, 1, 2
@@ -861,8 +877,8 @@ CONTAINS
         CALL destroy_partlist(recv(ix))
       END DO
 
-      IF(ASSOCIATED(bnd_part_last)) DEALLOCATE(bnd_part_last)
-      IF(ASSOCIATED(species_list(ispecies)%boundary_particles)) THEN
+      IF (ASSOCIATED(bnd_part_last)) DEALLOCATE(bnd_part_last)
+      IF (ASSOCIATED(species_list(ispecies)%boundary_particles)) THEN
         NULLIFY(species_list(ispecies)%boundary_particles)
       END IF
     END DO

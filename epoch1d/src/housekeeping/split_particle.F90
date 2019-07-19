@@ -88,8 +88,8 @@ CONTAINS
         CALL relink_partlist(species_list(ispecies)%attached_list, .TRUE.)
       END IF
       DEALLOCATE(species_list(ispecies)%secondary_list)
-      species_list(ispecies)%attached_list%locked_store = .FALSE.
     END DO
+    species_list(ispecies)%attached_list%locked_store = .FALSE.
 
     CALL setup_bc_lists
     CALL particle_bcs

@@ -118,7 +118,7 @@ CONTAINS
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
           WRITE(io,*)
-          IF(use_store_default) THEN
+          IF (use_store_default) THEN
             WRITE(io,*) '*** ERROR ***'
             WRITE(io,*) 'Trying to use particle memory addresses for ', &
                         'persistent subsets and particle backing stores'

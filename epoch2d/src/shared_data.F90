@@ -156,33 +156,39 @@ MODULE shared_data
   LOGICAL :: use_particle_migration = .FALSE.
   INTEGER :: particle_migration_interval = 1
 
-  !Backing store control
-  INTEGER(i8) :: sublist_size = 1000 !Size of a sublist. Grow ops allocate a new sublist of this size
-  REAL(num) :: fill_factor = 0.9  !Minimum fill level of list - will compact if lower
-  LOGICAL :: use_store_default = .TRUE.  !Default to using stores for lists; deck can override
+  ! Backing store control
+  ! Size of a sublist. Grow ops allocate a new sublist of this size
+  INTEGER(i8) :: sublist_size = 1000
+  ! Minimum fill level of list - will compact if lower
+  REAL(num) :: fill_factor = 0.9
+  ! Default to using stores for lists; deck can override
+  LOGICAL :: use_store_default = .TRUE.
   LOGICAL :: store_debug = .FALSE.
-  LOGICAL :: fold_compact =.FALSE. !Use alternative compaction which does not maintain list ordering
+  ! Use alternative compaction which does not maintain list ordering
+  LOGICAL :: fold_compact =.FALSE.
 
-  !Segment of memory storing particles
-  !Does not track number of valid particles, only its own length
+  ! Segment of memory storing particles
+  ! Does not track number of valid particles, only its own length
   TYPE particle_sub_store
     INTEGER(i8) :: length
     INTEGER(i8) :: first_free_element
     TYPE(particle_sub_store), POINTER :: prev, next
-    TYPE(particle), DIMENSION(:), POINTER :: store => NULL() !Actual memory
+    TYPE(particle), DIMENSION(:), POINTER :: store => NULL() ! Actual memory
   END TYPE particle_sub_store
 
-  !Type representing a contiguous block of memory
-  !Used to store particles
-  !Currently a single chunk, will extend to multiples
+  ! Type representing a contiguous block of memory used to store particles
+  ! Currently a single chunk, will extend to multiples
   TYPE particle_store
-    INTEGER(i8) :: total_length !Sum of sublist lengths, for convenience, ==number of potential slots
-    INTEGER(i8) :: n_subs ! n_subs stored for convenience
-    TYPE(particle), POINTER :: next_slot  !Next place to insert a new particle.
-    !Note next_slot is NOT necessarily the same as tail%store(first_free_element)
+    ! Sum of sublist lengths, for convenience, ==number of potential slots
+    INTEGER(i8) :: total_length
+    ! n_subs stored for convenience
+    INTEGER(i8) :: n_subs
+    ! Next place to insert a new particle.
+    TYPE(particle), POINTER :: next_slot
+    ! Note next_slot is NOT necessarily the same
+    ! as tail%store(first_free_element)
     TYPE(particle_sub_store), POINTER :: head => NULL(), tail => NULL()
   END TYPE particle_store
-
 
   ! Object representing a collection of particles
   ! Used internally by the MPI particle transfer code

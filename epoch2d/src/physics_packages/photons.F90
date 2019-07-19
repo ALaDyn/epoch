@@ -898,7 +898,6 @@ CONTAINS
     CALL remove_particle_from_partlist(species_list(iphoton)%attached_list, &
         generating_photon, destroy=.TRUE.)
 
-
   END SUBROUTINE generate_pair
 
 
@@ -931,7 +930,6 @@ CONTAINS
 
     new_electron%weight = generating_electron%weight
     new_positron%weight = generating_electron%weight
-
 
   END SUBROUTINE generate_pair_tri
 
