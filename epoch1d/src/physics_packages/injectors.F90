@@ -42,6 +42,7 @@ CONTAINS
     injector%density_max = HUGE(1.0_num)
     injector%use_flux_injector = .TRUE.
     injector%drift_perp = 0.0_num
+    injector_boundary(boundary) = .TRUE.
     NULLIFY(injector%next)
 
     injector%depth = 1.0_num
@@ -54,59 +55,30 @@ CONTAINS
   SUBROUTINE attach_injector(injector)
 
     TYPE(injector_block), POINTER :: injector
-    INTEGER :: boundary
+    TYPE(injector_block), POINTER :: current
 
-    boundary = injector%boundary
+    NULLIFY(injector%next)
 
-    IF (boundary == c_bd_x_min) THEN
-      CALL attach_injector_to_list(injector_x_min, injector)
-    ELSE IF (boundary == c_bd_x_max) THEN
-      CALL attach_injector_to_list(injector_x_max, injector)
+    IF (ASSOCIATED(injector_list)) THEN
+      current => injector_list
+      DO WHILE(ASSOCIATED(current%next))
+        current => current%next
+      END DO
+      current%next => injector
+    ELSE
+      injector_list => injector
     END IF
 
   END SUBROUTINE attach_injector
 
 
 
-  ! Actually does the attaching of the injector to the correct list
-  SUBROUTINE attach_injector_to_list(list, injector)
-
-    TYPE(injector_block), POINTER :: list
-    TYPE(injector_block), POINTER :: injector
-    TYPE(injector_block), POINTER :: current
-
-    NULLIFY(injector%next)
-
-    IF (ASSOCIATED(list)) THEN
-      current => list
-      DO WHILE(ASSOCIATED(current%next))
-        current => current%next
-      END DO
-      current%next => injector
-    ELSE
-      list => injector
-    END IF
-
-  END SUBROUTINE attach_injector_to_list
-
-
-
   SUBROUTINE deallocate_injectors
 
-    CALL deallocate_injector_list(injector_x_min)
-    CALL deallocate_injector_list(injector_x_max)
-
-  END SUBROUTINE deallocate_injectors
-
-
-
-  SUBROUTINE deallocate_injector_list(list)
-
-    TYPE(injector_block), POINTER :: list
     TYPE(injector_block), POINTER :: current, next
     INTEGER :: i
 
-    current => list
+    current => injector_list
     DO WHILE(ASSOCIATED(current))
       next => current%next
       IF (current%density_function%init) &
@@ -121,7 +93,7 @@ CONTAINS
       current => next
     END DO
 
-  END SUBROUTINE deallocate_injector_list
+  END SUBROUTINE deallocate_injectors
 
 
 
@@ -129,30 +101,19 @@ CONTAINS
 
     TYPE(injector_block), POINTER :: current
 
-    IF (x_min_boundary) THEN
-      current => injector_x_min
-      DO WHILE(ASSOCIATED(current))
-        CALL run_single_injector(current, c_bd_x_min)
-        current => current%next
-      END DO
-    END IF
-
-    IF (x_max_boundary) THEN
-      current => injector_x_max
-      DO WHILE(ASSOCIATED(current))
-        CALL run_single_injector(current, c_bd_x_max)
-        current => current%next
-      END DO
-    END IF
+    current => injector_list
+    DO WHILE(ASSOCIATED(current))
+      CALL run_single_injector(current)
+      current => current%next
+    END DO
 
   END SUBROUTINE run_injectors
 
 
 
-  SUBROUTINE run_single_injector(injector, direction)
+  SUBROUTINE run_single_injector(injector)
 
     TYPE(injector_block), POINTER :: injector
-    INTEGER, INTENT(IN) :: direction
     REAL(num) :: bdy_pos, cell_size
     TYPE(particle), POINTER :: new
     TYPE(particle_list) :: plist
@@ -165,6 +126,7 @@ CONTAINS
 #endif
     REAL(num), DIMENSION(3) :: temperature, drift
     INTEGER :: parts_this_time, ipart, idir, dir_index, flux_dir, flux_dir_cell
+    INTEGER :: direction
     TYPE(parameter_pack) :: parameters
     REAL(num), PARAMETER :: sqrt2 = SQRT(2.0_num)
     REAL(num), PARAMETER :: sqrt2_inv = 1.0_num / sqrt2
@@ -176,6 +138,8 @@ CONTAINS
     ! EXPLICITLY give a t_end value to the injector stop the injector
     IF (move_window .AND. window_started .AND. .NOT. injector%has_t_end) &
         RETURN
+
+    direction = injector%boundary
 
     IF (direction == c_bd_x_min) THEN
       bdy_pos = x_min
@@ -386,32 +350,21 @@ CONTAINS
 
     TYPE(injector_block), POINTER :: current
 
-    IF (x_min_boundary) THEN
-      current => injector_x_min
-      DO WHILE(ASSOCIATED(current))
-        CALL finish_single_injector_setup(current, c_bd_x_min)
-        current => current%next
-      END DO
-    END IF
-
-    IF (x_max_boundary) THEN
-      current => injector_x_max
-      DO WHILE(ASSOCIATED(current))
-        CALL finish_single_injector_setup(current, c_bd_x_max)
-        current => current%next
-      END DO
-    END IF
+    current => injector_list
+    DO WHILE(ASSOCIATED(current))
+      CALL finish_single_injector_setup(current)
+      current => current%next
+    END DO
 
   END SUBROUTINE finish_injector_setup
 
 
 
-  SUBROUTINE finish_single_injector_setup(injector, boundary)
+  SUBROUTINE finish_single_injector_setup(injector)
 
     TYPE(injector_block), POINTER :: injector
-    INTEGER, INTENT(IN) :: boundary
     TYPE(particle_species), POINTER :: species
-    INTEGER :: i, bc
+    INTEGER :: i, bc, boundary
 
     species => species_list(injector%species)
     IF (injector%npart_per_cell < 0.0_num) THEN
@@ -432,6 +385,7 @@ CONTAINS
       END IF
     END DO
 
+    boundary = injector%boundary
     bc = species%bc_particle(boundary)
     IF (bc == c_bc_return) THEN
       CALL update_return_injector(injector)
@@ -489,24 +443,28 @@ CONTAINS
 
 
 
-  SUBROUTINE setup_injector_depths(inj_init, depths, inj_count)
+  SUBROUTINE setup_injector_depths(boundary, depths, injector_count)
 
-    TYPE(injector_block), POINTER :: inj_init
+    INTEGER, INTENT(IN) :: boundary
     REAL(num), DIMENSION(:), INTENT(IN) :: depths
-    INTEGER, INTENT(OUT) :: inj_count
-    TYPE(injector_block), POINTER :: inj
-    INTEGER :: iinj
+    INTEGER, INTENT(OUT) :: injector_count
+    TYPE(injector_block), POINTER :: injector
+    INTEGER :: inj, bnd
 
-    iinj = 1
-    inj => inj_init
+    inj = 1
+    injector => injector_list
 
-    DO WHILE(ASSOCIATED(inj))
-      inj%depth = depths(iinj)
-      iinj = iinj + 1
-      inj => inj%next
+    DO WHILE(ASSOCIATED(injector))
+      bnd = injector%boundary
+      IF (bnd == boundary) THEN
+        ! Exclude ghost cells
+        injector%depth = depths(inj)
+        inj = inj + 1
+      END IF
+      injector => injector%next
     END DO
 
-    inj_count = iinj - 1
+    injector_count = inj - 1
 
   END SUBROUTINE setup_injector_depths
 

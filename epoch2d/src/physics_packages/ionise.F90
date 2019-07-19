@@ -60,59 +60,8 @@ CONTAINS
       laser_set = .FALSE.
       omega = -1
 
-      IF (ASSOCIATED(laser_x_min)) THEN
-        current_laser => laser_x_min
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
-          err_laser = 1
-        ELSE
-          omega = current_laser%omega
-          laser_set = .TRUE.
-        END IF
-        DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
-            err_laser = 1
-            EXIT
-          END IF
-          current_laser => current_laser%next
-        END DO
-      END IF
-
-      IF (ASSOCIATED(laser_x_max)) THEN
-        current_laser => laser_x_max
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
-          err_laser = 1
-        ELSE
-          omega = current_laser%omega
-          laser_set = .TRUE.
-        END IF
-        DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
-            err_laser = 1
-            EXIT
-          END IF
-          current_laser => current_laser%next
-        END DO
-      END IF
-
-      IF (ASSOCIATED(laser_y_min)) THEN
-        current_laser => laser_y_min
-        IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
-          err_laser = 1
-        ELSE
-          omega = current_laser%omega
-          laser_set = .TRUE.
-        END IF
-        DO WHILE (ASSOCIATED(current_laser%next))
-          IF (ABS(current_laser%omega - omega) > c_tiny) THEN
-            err_laser = 1
-            EXIT
-          END IF
-          current_laser => current_laser%next
-        END DO
-      END IF
-
-      IF (ASSOCIATED(laser_y_max)) THEN
-        current_laser => laser_y_max
+      IF (ASSOCIATED(lasers)) THEN
+        current_laser => lasers
         IF (laser_set .AND. ABS(current_laser%omega - omega) > c_tiny) THEN
           err_laser = 1
         ELSE
@@ -426,7 +375,7 @@ CONTAINS
     ! Ionise a species at a time
     DO i = 1, n_species
       ! Skip particle if it cannot be ionised
-      IF ( .NOT. species_list(i)%ionise) CYCLE
+      IF (.NOT. species_list(i)%ionise) CYCLE
       ! Start with first particle in the list
       current => species_list(i)%attached_list%head
 #ifdef PER_SPECIES_WEIGHT
@@ -708,7 +657,7 @@ CONTAINS
     ! Ionise a species at a time
     DO i = 1, n_species
       ! Skip particle if it cannot be ionised
-      IF ( .NOT. species_list(i)%ionise) CYCLE
+      IF (.NOT. species_list(i)%ionise) CYCLE
       ! Start with first particle in the list
       current => species_list(i)%attached_list%head
 #ifdef PER_SPECIES_WEIGHT
@@ -976,7 +925,7 @@ CONTAINS
     ! Ionise a species at a time
     DO i = 1, n_species
       ! Skip particle if it cannot be ionised
-      IF ( .NOT. species_list(i)%ionise) CYCLE
+      IF (.NOT. species_list(i)%ionise) CYCLE
       ! Start with first particle in the list
       current => species_list(i)%attached_list%head
 #ifdef PER_SPECIES_WEIGHT
@@ -1234,7 +1183,7 @@ CONTAINS
     ! Ionise a species at a time
     DO i = 1, n_species
       ! Skip particle if it cannot be ionised
-      IF ( .NOT. species_list(i)%ionise) CYCLE
+      IF (.NOT. species_list(i)%ionise) CYCLE
       ! Start with first particle in the list
       current => species_list(i)%attached_list%head
 #ifdef PER_SPECIES_WEIGHT
