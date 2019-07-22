@@ -29,6 +29,7 @@ MODULE setup
   USE balance
   USE mpi_routines
   USE sdf
+  USE boundary
 
   IMPLICIT NONE
 
@@ -104,9 +105,7 @@ CONTAINS
     laser_absorb_local = 0.0_num
     old_elapsed_time = 0.0_num
 
-    NULLIFY(laser_x_min)
-    NULLIFY(laser_x_max)
-
+    NULLIFY(lasers)
     NULLIFY(dist_fns)
     NULLIFY(io_block_list)
 
@@ -148,6 +147,7 @@ CONTAINS
 
     CALL setup_grid
     CALL set_initial_values
+    CALL setup_domain_dependent_boundaries
 
   END SUBROUTINE after_control
 
@@ -1029,20 +1029,13 @@ CONTAINS
           END IF
         END IF
 
-        CALL read_return_injectors(sdf_handle, block_id, ndims, &
-            c_bd_x_min, 'x_min')
-        CALL read_return_injectors(sdf_handle, block_id, ndims, &
-            c_bd_x_max, 'x_max')
+        CALL read_return_injectors(sdf_handle, block_id, ndims, c_bd_x_min)
+        CALL read_return_injectors(sdf_handle, block_id, ndims, c_bd_x_max)
 
-        CALL read_laser_phases(sdf_handle, n_laser_x_min, laser_x_min, &
-            block_id, ndims, 'laser_x_min_phase', 'x_min')
-        CALL read_laser_phases(sdf_handle, n_laser_x_max, laser_x_max, &
-            block_id, ndims, 'laser_x_max_phase', 'x_max')
-
-        CALL read_injector_depths(sdf_handle, injector_x_min, &
-            block_id, ndims, 'injector_x_min_depths', c_dir_x, x_min_boundary)
-        CALL read_injector_depths(sdf_handle, injector_x_max, &
-            block_id, ndims, 'injector_x_max_depths', c_dir_x, x_max_boundary)
+        DO i = 1, 2 * c_ndims
+          CALL read_laser_phases(sdf_handle, block_id, ndims, i)
+          CALL read_injector_depths(sdf_handle, block_id, ndims, i)
+        END DO
 
       CASE(c_blocktype_constant)
         IF (str_cmp(block_id, 'dt_plasma_frequency')) THEN
@@ -1355,6 +1348,7 @@ CONTAINS
 
     CALL set_thermal_bcs_all
     CALL setup_persistent_subsets
+    CALL setup_background_species
 
     IF (rank == 0) PRINT*, 'Load from restart dump OK'
 
@@ -1380,25 +1374,25 @@ CONTAINS
 
 
 
-  SUBROUTINE read_laser_phases(sdf_handle, laser_count, laser_base_pointer, &
-      block_id_in, ndims, block_id_compare, direction_name)
+  SUBROUTINE read_laser_phases(sdf_handle, block_id_in, ndims, boundary)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
-    INTEGER, INTENT(IN) :: laser_count
-    TYPE(laser_block), POINTER :: laser_base_pointer
     CHARACTER(LEN=*), INTENT(IN) :: block_id_in
-    INTEGER, INTENT(IN) :: ndims
-    CHARACTER(LEN=*), INTENT(IN) :: block_id_compare
-    CHARACTER(LEN=*), INTENT(IN) :: direction_name
+    INTEGER, INTENT(IN) :: ndims, boundary
     REAL(num), DIMENSION(:), ALLOCATABLE :: laser_phases
     INTEGER, DIMENSION(4) :: dims
+    CHARACTER(LEN=17) :: block_id_compare
+    CHARACTER(LEN=5), DIMENSION(6) :: direction_name = &
+        (/'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'/)
+
+    block_id_compare = 'laser_' // direction_name(boundary) // '_phase'
 
     IF (str_cmp(block_id_in, block_id_compare)) THEN
       CALL sdf_read_array_info(sdf_handle, dims)
 
-      IF (ndims /= 1 .OR. dims(1) /= laser_count) THEN
+      IF (ndims /= 1 .OR. dims(1) /= n_lasers(boundary)) THEN
         PRINT*, '*** WARNING ***'
-        PRINT*, 'Number of laser phases on ', TRIM(direction_name), &
+        PRINT*, 'Number of laser phases on ', TRIM(direction_name(boundary)), &
             ' does not match number of lasers.'
         PRINT*, 'Lasers will be populated in order, but correct operation ', &
             'is not guaranteed'
@@ -1406,7 +1400,7 @@ CONTAINS
 
       ALLOCATE(laser_phases(dims(1)))
       CALL sdf_read_srl(sdf_handle, laser_phases)
-      CALL setup_laser_phases(laser_base_pointer, laser_phases)
+      CALL setup_laser_phases(laser_phases)
       DEALLOCATE(laser_phases)
     END IF
 
@@ -1414,21 +1408,22 @@ CONTAINS
 
 
 
-  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims, &
-      boundary, direction_name)
+  SUBROUTINE read_return_injectors(sdf_handle, block_id_in, ndims, boundary)
 
     TYPE(sdf_file_handle), INTENT(IN) :: sdf_handle
-    CHARACTER(LEN=*), INTENT(IN) :: block_id_in, direction_name
+    CHARACTER(LEN=*), INTENT(IN) :: block_id_in
     INTEGER, INTENT(IN) :: ndims, boundary
     TYPE(particle_species), POINTER :: curr_species
-    INTEGER :: ispecies, return_species, lstr
+    INTEGER :: ispecies, return_species
     REAL(KIND=num), DIMENSION(:), ALLOCATABLE :: values
     INTEGER, DIMENSION(4) :: dims
+    CHARACTER(LEN=21) :: block_id_compare
+    CHARACTER(LEN=5), DIMENSION(6) :: direction_name = &
+        (/'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'/)
 
-    lstr = LEN('return_injector')
-    IF (str_cmp(block_id_in(1:lstr), 'return_injector') &
-        .AND. str_cmp(TRIM(block_id_in(lstr+2:LEN(block_id_in))), &
-                      TRIM(direction_name))) THEN
+    block_id_compare = 'return_injector_' // direction_name(boundary)
+
+    IF (str_cmp(block_id_in, block_id_compare)) THEN
       CALL sdf_read_array_info(sdf_handle, dims)
 
       ! In 1-d there is one value, 2-d there is one strip of drifts,
@@ -1469,19 +1464,19 @@ CONTAINS
   ! Read injector depths from restart and initialise
   ! Requires the same injectors defined from the deck
 
-  SUBROUTINE read_injector_depths(sdf_handle, injector_base_pointer, &
-      block_id_in, ndims, block_id_compare, direction, runs_this_rank)
+  SUBROUTINE read_injector_depths(sdf_handle, block_id_in, ndims, boundary)
 
     TYPE(sdf_file_handle), INTENT(INOUT) :: sdf_handle
-    TYPE(injector_block), POINTER :: injector_base_pointer
     CHARACTER(LEN=*), INTENT(IN) :: block_id_in
-    INTEGER, INTENT(IN) :: ndims
-    CHARACTER(LEN=*), INTENT(IN) :: block_id_compare
-    INTEGER, INTENT(IN) :: direction
-    LOGICAL, INTENT(IN) :: runs_this_rank
+    INTEGER, INTENT(IN) :: ndims, boundary
     REAL(num), DIMENSION(:), ALLOCATABLE :: depths
-    INTEGER :: inj_count
+    INTEGER :: injector_count
     INTEGER, DIMENSION(4) :: dims
+    CHARACTER(LEN=21) :: block_id_compare
+    CHARACTER(LEN=5), DIMENSION(6) :: direction_name = &
+        (/'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'/)
+
+    block_id_compare = 'injector_' // direction_name(boundary) // '_depths'
 
     IF (str_cmp(block_id_in, block_id_compare)) THEN
       CALL sdf_read_array_info(sdf_handle, dims)
@@ -1491,12 +1486,13 @@ CONTAINS
 
       ALLOCATE(depths(dims(c_ndims)))
 
-      CALL sdf_read_srl(sdf_handle, depths)
+      CALL sdf_read_array(sdf_handle, depths, (/dims(c_ndims)/), &
+          (/1/), null_proc=(.NOT. is_boundary(boundary)))
 
-      CALL setup_injector_depths(injector_base_pointer, depths, inj_count)
+      CALL setup_injector_depths(boundary, depths, injector_count)
 
       ! Got count back so can now check and message
-      IF (ndims /= c_ndims .OR. dims(c_ndims) /= inj_count) THEN
+      IF (ndims /= c_ndims .OR. dims(c_ndims) /= injector_count) THEN
         PRINT*, '*** WARNING ***'
         PRINT*, 'Number of depths on ', TRIM(block_id_in), &
             ' does not match number of injectors.'
