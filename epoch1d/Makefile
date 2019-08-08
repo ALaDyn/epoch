@@ -208,7 +208,7 @@ DEFINES += $(D)PARTICLE_ID
 
 # Calculate classical Landau-Lifshitz radiaion reaction (NOT TO BE USED WITH
 # PHOTONS)
-#DEFINES += $(D)LANDAU_LIFSHITZ
+DEFINES += $(D)LANDAU_LIFSHITZ
 
 # Include QED routines
 #DEFINES += $(D)PHOTONS

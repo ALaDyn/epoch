@@ -89,10 +89,6 @@ CONTAINS
             current%part_p(1) = new_p/total_p * current%part_p(1)
             current%part_p(2) = new_p/total_p * current%part_p(2)
             current%part_p(3) = new_p/total_p * current%part_p(3)
-          ELSE
-            current%part_p(1) = 0
-            current%part_p(2) = 0
-            current%part_p(3) = 0
           END IF
         END IF
 

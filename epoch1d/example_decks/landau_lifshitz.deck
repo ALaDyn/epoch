@@ -1,0 +1,118 @@
+begin:control
+
+  # size of domain
+  x_min = -35.0e-6
+  x_max = 35.0e-6
+
+  # global number of gridpoints
+  nx = 128
+
+  # final time of simulation
+  t_end = 1e-9
+
+  dt_multiplier = 0.8
+
+end:control
+
+
+begin:boundaries
+
+  bc_x_min = simple_outflow
+  bc_x_max = simple_outflow
+
+end:boundaries
+
+
+begin:landau_lifshitz
+
+  use_landau_lifshitz = T
+  start_time = 0.0
+
+end:landau_lifshitz
+
+
+begin:fields
+
+  ex = 0
+  ey = 0
+  ez = 0
+  bx = 0
+  by = 0
+  bz = -1000.0
+
+end:fields
+
+
+begin:constant
+
+  cell_volume = (x_max - x_min)/nx
+  cell_width = (x_max - x_min)/nx
+
+end:constant
+
+
+begin:species
+
+  name = Electron
+  npart = 3
+  dump = T
+
+  rho = 100/cell_volume
+  rho = if (x gt x_min + cell_width, 0, density(Electron))
+
+  drift_y = 5.341e-21      # 10 MeV/c
+
+  identify:electron  
+
+end:species
+
+
+begin:output
+
+  # If use_offset_grid is true then the code dumps a grid which displays
+  # positions relative to the left hand edge of the window
+  use_offset_grid = F
+
+  # number of timesteps between output dumps
+  dt_snapshot = 5.0e-12
+
+  # Number of dt_snapshot between full dumps
+  full_dump_every = 10
+  restart_dump_every = -1
+  force_final_to_be_restartable = F
+
+  # Properties at particle positions
+  particles = always
+  px = always
+  py = always
+  pz = always
+  vx = never
+  vy = never
+  vz = never
+  charge = never
+  mass = never
+  particle_weight = always
+  ejected_particles = never
+  id = always
+
+  # Properties on grid
+  grid = always
+  ex = never
+  ey = never
+  ez = never
+  bx = never
+  by = never
+  bz = never
+  jx = never
+  jy = never
+  jz = never
+  ekbar = never + species
+  mass_density = never + species
+  charge_density = never
+  number_density = never + species
+  temperature = never + species
+
+  # Further properties
+  absorption = never	# Total amount of laser energy in simulation
+
+end:output

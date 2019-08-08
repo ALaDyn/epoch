@@ -218,6 +218,10 @@ CONTAINS
     defines = IOR(defines, c_def_particle_id)
     WRITE(*,*) 'Particle ID tracking (8-bytes) -DPARTICLE_ID'
 #endif
+#ifdef LANDAU_LIFSHITZ
+    defines = IOR(defines, c_def_landau_lifshitz)
+    WRITE(*,*) 'Semi-classical radiation reaction -DLANDAU_LIFSHITZ'
+#endif
 #ifdef PHOTONS
     defines = IOR(defines, c_def_photons)
     WRITE(*,*) 'QED Effects -DPHOTONS'
