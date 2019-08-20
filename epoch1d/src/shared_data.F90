@@ -1040,9 +1040,28 @@ MODULE shared_data
   INTEGER :: bc_x_max_after_move
   REAL(num) :: window_shift
 
+#ifdef HYBRID
+  !----------------------------------------------------------------------------
+  ! Hybrid mode - Written by S. J. Morris
+  ! Based on Davies, J. R., et al, 1997. Phys. Rev. E, 56(6), p.7193.
+  !----------------------------------------------------------------------------
+  ! Offset fields used by the hybrid field solver
+  REAL(num), ALLOCATABLE, DIMENSION(:) :: bx_offset, by_offset, bz_offset
+  REAL(num), ALLOCATABLE, DIMENSION(:) :: ex_offset, ey_offset, ez_offset
+
+  ! Additional field variables
+  REAL(num), ALLOCATABLE, DIMENSION(:) :: resistivity, back_temp
+
+  ! Deck variables
+  LOGICAL :: use_hybrid_fields = .FALSE., use_hybrid_collisions = .FALSE.
+  REAL(num) :: hybrid_ni = 0.0, hybrid_ne = 0.0, hybrid_Tb_init = 0.0
+  INTEGER :: hybrid_Z = 0
+#endif
+  LOGICAL :: use_hybrid = .FALSE.
+
 #ifdef LANDAU_LIFSHITZ
   !----------------------------------------------------------------------------
-  ! Landau Lifshitz classical radiation reaction - written by S. J. Morris
+  ! Landau Lifshitz classical radiation reaction - Written by S. J. Morris
   !----------------------------------------------------------------------------
   REAL(num) :: landau_lifshitz_start_time = 0.0_num
 #endif
