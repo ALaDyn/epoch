@@ -1043,18 +1043,22 @@ MODULE shared_data
 #ifdef HYBRID
   !----------------------------------------------------------------------------
   ! Hybrid mode - Written by S. J. Morris
-  ! Based on Davies, J. R., et al, 1997. Phys. Rev. E, 56(6), p.7193.
+  ! Based on J. R. Davies, et al, 1997. Phys. Rev. E, 56(6), p.7193.
   !----------------------------------------------------------------------------
-  ! Offset fields used by the hybrid field solver
-  REAL(num), ALLOCATABLE, DIMENSION(:) :: bx_offset, by_offset, bz_offset
-  REAL(num), ALLOCATABLE, DIMENSION(:) :: ex_offset, ey_offset, ez_offset
+  ! Additional constants
+  REAL(num) :: hybrid_const_dx, hybrid_const_K_to_eV, hybrid_const_dt_by_dx
+  REAL(num) :: hybrid_D, hybrid_ln_S, hybrid_const_ZeV
 
-  ! Additional field variables
-  REAL(num), ALLOCATABLE, DIMENSION(:) :: resistivity, back_temp
+  ! Offset fields used by the hybrid field solver
+  REAL(num), ALLOCATABLE, DIMENSION(:) :: bx_save, by_save, bz_save
+
+  ! Additional field variables, resisitivity and temperatures of the background
+  REAL(num), ALLOCATABLE, DIMENSION(:) :: resistivity, hybrid_Tb
 
   ! Deck variables
   LOGICAL :: use_hybrid_fields = .FALSE., use_hybrid_collisions = .FALSE.
-  REAL(num) :: hybrid_ni = 0.0, hybrid_ne = 0.0, hybrid_Tb_init = 0.0
+  REAL(num) :: hybrid_ni = 0.0_num, hybrid_ne = 0.0_num
+  REAL(num) :: hybrid_Tb_init = 0.0_num, hybrid_Iex = 0.0_num
   INTEGER :: hybrid_Z = 0
 #endif
   LOGICAL :: use_hybrid = .FALSE.

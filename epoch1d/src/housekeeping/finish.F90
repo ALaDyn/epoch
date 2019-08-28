@@ -55,6 +55,14 @@ CONTAINS
     DEALLOCATE(x, xb, x_global, xb_global, xb_offset_global)
     DEALLOCATE(ex, ey, ez, bx, by, bz, jx, jy, jz)
 
+#ifdef HYBRID
+    ! Deallocate extra arrays used when running in hybrid mode
+    ! Note for 2D/3D - change from finish.f90 to finish.F90
+    IF (use_hybrid) THEN
+      DEALLOCATE(resistivity, hybrid_Tb, bx_save, by_save, bz_save)
+    END IF
+#endif
+
     DEALLOCATE(npart_each_rank)
     DEALLOCATE(x_grid_mins, x_grid_maxs, cell_x_min, cell_x_max)
 

@@ -212,10 +212,10 @@ DEFINES += $(D)HYBRID
 
 # Calculate classical Landau-Lifshitz radiaion reaction (NOT TO BE USED WITH
 # PHOTONS)
-DEFINES += $(D)LANDAU_LIFSHITZ
+#DEFINES += $(D)LANDAU_LIFSHITZ
 
 # Include QED routines
-#DEFINES += $(D)PHOTONS
+DEFINES += $(D)PHOTONS
 
 # Include bremsstrahlung routines
 DEFINES += $(D)BREMSSTRAHLUNG
@@ -304,7 +304,7 @@ SRCFILES = balance.F90 boundary.f90 bremsstrahlung.F90 calc_df.F90 \
 	deck_particle_probe_block.F90 deck_qed_block.F90 deck_species_block.F90 \
 	deck_stencil_block.f90 deck_subset_block.f90 deck_window_block.f90 \
 	deltaf_loader.F90 diagnostics.F90 dist_fn.F90 epoch1d.F90 evaluate.F90 \
-	evaluator_blocks.F90 fields.f90 finish.f90 helper.F90 hybrid.F90 \
+	evaluator_blocks.F90 fields.f90 finish.F90 helper.F90 hybrid.F90 \
 	ic_module.f90 injectors.F90 ionise.F90 iterators.F90 landau_lifshitz.F90 \
 	laser.f90 mpi_routines.F90 mpi_subtype_control.f90 numerics.f90 \
 	particle_migration.F90 particle_pointer_advance.f90 particle_temperature.F90 \
@@ -496,11 +496,12 @@ evaluate.o: evaluate.F90 evaluator_blocks.o shunt.o utilities.o
 evaluator_blocks.o: evaluator_blocks.F90 custom_parser.o stack.o strings.o
 fields.o: fields.f90 boundary.o
 	$(FC) -c $(FFLAGS) $(FLTCONS) -o $(OBJDIR)/$@ $(PREPROFLAGS) $<
-finish.o: finish.f90 collisions.o deck.o diagnostics.o dist_fn.o injectors.o \
+finish.o: finish.F90 collisions.o deck.o diagnostics.o dist_fn.o injectors.o \
   ionise.o laser.o partlist.o probes.o setup.o shared_data.o shunt.o window.o
 helper.o: helper.F90 balance.o boundary.o calc_df.o deltaf_loader.o partlist.o \
   simple_io.o strings.o
-hybrid.o: shared_data.o
+hybrid.o: hybrid.F90 balance.o current_smooth.o diagnostics.o injectors.o \
+	particles.o particle_migration.o landau_lifshitz.o photons.o bremsstrahlung.o
 ic_module.o: ic_module.f90 helper.o shared_data.o
 injectors.o: injectors.F90 evaluate.o particle_temperature.o partlist.o \
   random_generator.o shared_data.o

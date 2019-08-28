@@ -128,6 +128,13 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'I') &
+        .OR. str_cmp(element, 'I_ex') &
+        .OR. str_cmp(element, 'excitation_energy')) THEN
+      hybrid_Iex = as_real_print(value, element, errcode)
+      RETURN
+    END IF
+
     errcode = c_err_unknown_element
 #endif
 

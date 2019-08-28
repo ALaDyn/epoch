@@ -239,6 +239,18 @@ CONTAINS
     ALLOCATE(jy(1-jng:nx+jng))
     ALLOCATE(jz(1-jng:nx+jng))
 
+
+#ifdef HYBRID
+    ! Allocate additional arrays for running in hybrid mode
+    IF (use_hybrid) THEN
+      ALLOCATE(resistivity(1-ng:nx+ng))
+      ALLOCATE(hybrid_Tb(1-ng:nx+ng))
+      ALLOCATE(bx_save(1-ng:nx+ng))
+      ALLOCATE(by_save(1-ng:nx+ng))
+      ALLOCATE(bz_save(1-ng:nx+ng))
+    END IF
+#endif
+
     ! Setup the particle lists
     IF (n_species > 0) &
         NULLIFY(species_list(1)%prev, species_list(n_species)%next)
