@@ -294,7 +294,7 @@ SRCFILES = balance.F90 boundary.f90 bremsstrahlung.F90 calc_df.F90 \
 	custom_parser.f90 deck.F90 deck_boundaries_block.f90 \
 	deck_bremsstrahlung_block.F90 deck_collision_block.F90 \
   deck_constant_block.f90 deck_control_block.F90 deck_dist_fn_block.f90 \
-  deck_fields_block.f90 deck_injector_block.f90 deck_io_block.F90 \
+  deck_fields_block.f90 deck_injector_block.F90 deck_io_block.F90 \
   deck_io_global_block.F90 deck_landau_lifshitz_block.F90 deck_laser_block.f90 \
 	deck_part_from_file_block.F90 deck_particle_probe_block.F90 \
 	deck_qed_block.F90 deck_species_block.F90 deck_stencil_block.f90 \
@@ -459,7 +459,7 @@ deck_control_block.o: deck_control_block.F90 fields.o strings_advanced.o \
 deck_dist_fn_block.o: deck_dist_fn_block.f90 dist_fn.o strings_advanced.o \
   utilities.o
 deck_fields_block.o: deck_fields_block.f90 simple_io.o strings_advanced.o
-deck_injector_block.o: deck_injector_block.f90 evaluate.o injectors.o shunt.o \
+deck_injector_block.o: deck_injector_block.F90 evaluate.o injectors.o shunt.o \
   strings_advanced.o utilities.o
 deck_io_block.o: deck_io_block.F90 strings_advanced.o utilities.o
 deck_io_global_block.o: deck_io_global_block.F90 strings_advanced.o utilities.o

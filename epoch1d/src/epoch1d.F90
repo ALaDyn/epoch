@@ -186,9 +186,11 @@ PROGRAM pic
   IF (timer_collect) CALL timer_start(c_timer_step)
 
   IF (use_hybrid) THEN
+#ifdef HYBRID
     ! Pass control to hybrid.F90 if running in hybrid mode, otherwise run as
     ! normal
     CALL run_hybrid_PIC(push, halt, force_dump)
+#endif
   ELSE
     ! Normal PIC loop
     DO

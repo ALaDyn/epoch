@@ -208,7 +208,7 @@ DEFINES += $(D)PARTICLE_ID
 
 # Compile with the option to run in hybrid mode, to simulate hot electrons
 # traversing solid targets
-DEFINES += $(D)HYBRID
+#DEFINES += $(D)HYBRID
 
 # Calculate classical Landau-Lifshitz radiaion reaction (NOT TO BE USED WITH
 # PHOTONS)
@@ -298,7 +298,7 @@ SRCFILES = balance.F90 boundary.f90 bremsstrahlung.F90 calc_df.F90 \
 	custom_parser.f90 deck.F90 deck_boundaries_block.f90 \
 	deck_bremsstrahlung_block.F90 deck_collision_block.F90 \
   deck_constant_block.f90 deck_control_block.F90 deck_dist_fn_block.f90 \
-  deck_fields_block.f90 deck_hybrid_block.F90 deck_injector_block.f90 \
+  deck_fields_block.f90 deck_hybrid_block.F90 deck_injector_block.F90 \
 	deck_io_block.F90 deck_io_global_block.F90 deck_landau_lifshitz_block.F90 \
 	deck_laser_block.f90 deck_part_from_file_block.F90 \
 	deck_particle_probe_block.F90 deck_qed_block.F90 deck_species_block.F90 \
@@ -464,7 +464,7 @@ deck_dist_fn_block.o: deck_dist_fn_block.f90 dist_fn.o strings_advanced.o \
   utilities.o
 deck_fields_block.o: deck_fields_block.f90 simple_io.o strings_advanced.o
 deck_hybrid_block.o: deck_hybrid_block.F90 strings_advanced.o utilities.o
-deck_injector_block.o: deck_injector_block.f90 evaluate.o injectors.o shunt.o \
+deck_injector_block.o: deck_injector_block.F90 evaluate.o injectors.o shunt.o \
   strings_advanced.o utilities.o
 deck_io_block.o: deck_io_block.F90 strings_advanced.o utilities.o
 deck_io_global_block.o: deck_io_global_block.F90 strings_advanced.o utilities.o
@@ -501,7 +501,8 @@ finish.o: finish.F90 collisions.o deck.o diagnostics.o dist_fn.o injectors.o \
 helper.o: helper.F90 balance.o boundary.o calc_df.o deltaf_loader.o partlist.o \
   simple_io.o strings.o
 hybrid.o: hybrid.F90 balance.o current_smooth.o diagnostics.o injectors.o \
-	particles.o particle_migration.o landau_lifshitz.o photons.o bremsstrahlung.o
+	particles.o particle_migration.o random_generator.o landau_lifshitz.o \
+	photons.o bremsstrahlung.o
 ic_module.o: ic_module.f90 helper.o shared_data.o
 injectors.o: injectors.F90 evaluate.o particle_temperature.o partlist.o \
   random_generator.o shared_data.o

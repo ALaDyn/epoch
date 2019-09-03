@@ -23,6 +23,7 @@ MODULE hybrid
   USE injectors
   USE particles
   USE particle_migration
+  USE random_generator
 #ifdef LANDAU_LIFSHITZ
   USE landau_lifshitz
 #endif
@@ -77,27 +78,6 @@ CONTAINS
       ! The following scripts will only be executed if particles can move
       IF (push) THEN
 
-        ! Radiation scripts
-#ifdef LANDAU_LIFSHITZ
-        ! Landau-Lifshitz classical radiation reaction
-        IF (use_landau_lifshitz .AND. time > landau_lifshitz_start_time) THEN
-          CALL classical_radiation_reaction()
-        END IF
-#endif
-#ifdef PHOTONS
-        ! Non-linear Compton scatter/synchrotron radiation calculation (photons
-        ! can be generated)
-        IF (use_qed .AND. time > qed_start_time) THEN
-          CALL qed_update_optical_depth()
-        END IF
-#endif
-#ifdef BREMSSTRAHLUNG
-        ! Bremsstrahlung radiation calculation (photons can be generated)
-        IF (use_bremsstrahlung .AND. time > bremsstrahlung_start_time) THEN
-          CALL bremsstrahlung_update_optical_depth()
-        END IF
-#endif
-
         ! Inject particles into the simulation
         CALL run_injectors
 
@@ -151,6 +131,30 @@ CONTAINS
 
       ! Calculate E at B
       CALL calculate_E
+
+      ! Now the fields are evaulated at the same time as the particles, so we
+      ! would be using the correct fields for the NCS module
+#ifdef LANDAU_LIFSHITZ
+      ! Landau-Lifshitz classical radiation reaction
+      IF (use_landau_lifshitz .AND. time > landau_lifshitz_start_time &
+          .AND. push) THEN
+        CALL classical_radiation_reaction()
+      END IF
+#endif
+#ifdef PHOTONS
+      ! Non-linear Compton scatter/synchrotron radiation calculation (photons
+      ! can be generated)
+      IF (use_qed .AND. time > qed_start_time .AND. push) THEN
+        CALL qed_update_optical_depth()
+      END IF
+#endif
+#ifdef BREMSSTRAHLUNG
+      ! Bremsstrahlung radiation calculation (photons can be generated)
+      IF (use_bremsstrahlung .AND. time > bremsstrahlung_start_time &
+          .AND. push) THEN
+        CALL bremsstrahlung_update_optical_depth()
+      END IF
+#endif
 
       ! This will make B half a timestep behind E and the particle position
       CALL swap_B
@@ -367,16 +371,9 @@ CONTAINS
         delta_p = - 0.5_num * hybrid_D / (m0 * v**2) * ln_lambda_L * dt
 
         ! Generate a normally distributed random number for the scatter angle.
-        ! For efficiency, we use the Box-Muller transform method, which
-        ! generates two independent random numbers at a time
-        IF (odd_scatter) THEN
-          CALL rand_gauss(rand1, rand2)
-          rand_scatter = rand1
-          odd_scatter = .FALSE.
-        ELSE
-          rand_scatter = rand2
-          odd_scatter = .TRUE.
-        END IF
+        ! The argument here refers to the standard deviation. The mean is
+        ! assumed zero.
+        rand_scatter = random_box_muller(1.0_num)
 
         ! Calculate scattering angles
         ln_lambda_S = LOG(hybrid_ln_S * p)
@@ -497,27 +494,6 @@ CONTAINS
     bz_save(:) = bz_copy(:)
 
   END SUBROUTINE
-
-
-
-  SUBROUTINE rand_gauss(x1, x2)
-
-    ! Draws a pair of independent random numbers from a normal distribution
-    ! (Gaussian with mean 0 and variance 1) using the Box-Muller transform.
-    ! These values are written to x1 and x2
-
-    REAL(num), INTENT(OUT) :: x1, x2
-    REAL(num) :: rand1, rand2, fac1, fac2
-
-    rand1 = random()
-    rand2 = random()
-    fac1 = SQRT(-2.0_num * LOG(rand1))
-    fac2 = 2.0_num * pi
-
-    x1 = fac1 * COS(fac2 * rand1)
-    x2 = fac1 * SIN(fac2 * rand2)
-
-  END SUBROUTINE rand_gauss
 
 
 

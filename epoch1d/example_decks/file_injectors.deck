@@ -1,0 +1,96 @@
+begin:control
+  nx = 4096
+  # final time of simulation
+  t_end = 100.0e-15
+
+  # size of domain
+  x_min = 0
+  x_max = 50.0e-6
+  stdout_frequency = 30
+end:control
+
+
+begin:boundaries
+  bc_x_min = periodic
+  bc_x_max = periodic
+end:boundaries
+
+
+begin:injector
+  boundary = x_min
+  species = Beam
+  
+  inject_from_file = T   # If F, the code will attempt to inject particles 
+                         # following a Maxwellian distribution based on     
+                         # parameters which should be included in this block
+  
+  # Ensure the inject_from_file folder is present in the same directory as your
+  # input.deck file when running
+  px_data = "inject_from_file/test_px.txt"
+  w_data = "inject_from_file/test_w.txt"
+  t_data = "inject_from_file/test_t.txt"
+
+end:injector
+
+
+begin:injector
+  boundary = x_max
+  species = Beam2
+  
+  inject_from_file = T
+  px_data = "inject_from_file/test_px2.txt"
+  w_data = "inject_from_file/test_w2.txt"
+  t_data = "inject_from_file/test_t2.txt"
+end:injector
+
+
+begin:species
+  # Beam
+  name = Beam
+  charge = -1
+  mass = 1.0
+  dump = T
+  bc_x_min = simple_outflow
+  bc_x_max = simple_outflow
+end:species
+
+
+begin:species
+  # Beam
+  name = Beam2
+  charge = -1
+  mass = 1.0
+  dump = T
+  bc_x_min = simple_outflow
+  bc_x_max = simple_outflow
+end:species
+
+
+begin:output
+  # number of timesteps between output dumps
+  dt_snapshot = 1.0e-15
+  # Number of dt_snapshot between full dumps
+  full_dump_every = 1
+  dump_last = T
+
+  # Properties at particle positions
+  particles = always
+  px = always
+  weight = always
+
+  # Properties on grid
+  grid = always
+  ex = always
+  ey = always
+  ez = always
+  bx = always
+  by = always
+  bz = always
+  jx = always
+  ppc = always + species
+  #ekbar = always
+  #mass_density = never + species
+  charge_density = always
+  number_density = always + species
+  #temperature = always + species
+end:output

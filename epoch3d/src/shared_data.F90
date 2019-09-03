@@ -55,6 +55,24 @@ MODULE constants
 #endif
   INTEGER, PARAMETER :: nio_units = SIZE(io_units)
 
+  ! File units for the custom particle injector. This injector opens files
+  ! containing each of the particle parameters (up to 9 in 3D). We can have
+  ! multiple unique injectors, with an upper limit arbitrarily set to 1.0e6.
+  ! Hence the file unit numbers between 10000000 and 18999999 are reserved for
+  ! this routine. These files must remain open for as long as there are still
+  ! particles to inject into the simulation.
+  INTEGER, PARAMETER :: custom_injector_limit = 1.0e6
+  INTEGER, PARAMETER :: custom_base_unit = 1.0e7
+  INTEGER, PARAMETER :: unit_px = 0
+  INTEGER, PARAMETER :: unit_py = 1
+  INTEGER, PARAMETER :: unit_pz = 2
+  INTEGER, PARAMETER :: unit_t  = 3
+  INTEGER, PARAMETER :: unit_w  = 4
+  INTEGER, PARAMETER :: unit_id = 5
+  INTEGER, PARAMETER :: unit_x = 6
+  INTEGER, PARAMETER :: unit_y = 7
+  INTEGER, PARAMETER :: unit_z = 8
+
   ! Boundary type codes
   INTEGER, PARAMETER :: c_bc_null = -1
   INTEGER, PARAMETER :: c_bc_periodic = 1
@@ -1204,6 +1222,27 @@ MODULE shared_data
   !----------------------------------------------------------------------------
   ! Particle injectors
   !----------------------------------------------------------------------------
+  TYPE injector_files
+    ! Position data
+    CHARACTER(LEN=string_length) :: x_data
+    CHARACTER(LEN=string_length) :: y_data
+    CHARACTER(LEN=string_length) :: z_data
+    ! Momentum Data
+    CHARACTER(LEN=string_length) :: px_data
+    CHARACTER(LEN=string_length) :: py_data
+    CHARACTER(LEN=string_length) :: pz_data
+    ! Temporal injection data
+    CHARACTER(LEN=string_length) :: t_data
+    ! Weight data
+#ifndef PER_SPECIES_WEIGHT
+    CHARACTER(LEN=string_length) :: w_data
+#endif
+#if defined(PARTICLE_ID4) || defined(PARTICLE_ID)
+    ! ID data
+    CHARACTER(LEN=string_length) :: id_data
+#endif
+  END TYPE injector_files
+
   TYPE injector_block
 
     INTEGER :: boundary
@@ -1221,12 +1260,38 @@ MODULE shared_data
     LOGICAL :: has_t_end
     REAL(num), DIMENSION(:,:), POINTER :: depth, dt_inject
 
+    LOGICAL :: inject_from_file
+    LOGICAL :: file_finished
+    INTEGER :: custom_id
+    REAL(num) :: next_time
+    ! Position data
+    LOGICAL :: x_data_given
+    LOGICAL :: y_data_given
+    LOGICAL :: z_data_given
+    ! Momentum Data
+    LOGICAL :: px_data_given
+    LOGICAL :: py_data_given
+    LOGICAL :: pz_data_given
+    ! Temporal injection data
+    LOGICAL :: t_data_given
+    ! Weight data
+#ifndef PER_SPECIES_WEIGHT
+    LOGICAL :: w_data_given
+#endif
+#if defined(PARTICLE_ID4) || defined(PARTICLE_ID)
+    ! ID data
+    LOGICAL :: id_data_given
+#endif
+
     TYPE(injector_block), POINTER :: next
   END TYPE injector_block
 
   TYPE(injector_block), POINTER :: injector_x_min, injector_x_max
   TYPE(injector_block), POINTER :: injector_y_min, injector_y_max
   TYPE(injector_block), POINTER :: injector_z_min, injector_z_max
+  TYPE(injector_files) :: injector_filenames
+
+  INTEGER :: custom_injector_count = 0
 
   !----------------------------------------------------------------------------
   ! laser boundaries
