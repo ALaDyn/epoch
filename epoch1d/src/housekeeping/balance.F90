@@ -360,7 +360,7 @@ CONTAINS
 #ifdef HYBRID
 
     ! Remap arrays for hybrid mode onto the new processor layout
-    
+
     IF (use_hybrid) THEN
 
       CALL remap_field(resistivity, temp)
@@ -373,20 +373,20 @@ CONTAINS
       ALLOCATE(hybrid_Tb(1-ng:nx_new+ng))
       hybrid_Tb = temp
 
-      CALL remap_field(bx_save, temp)
-      DEALLOCATE(bx_save)
-      ALLOCATE(bx_save(1-ng:nx_new+ng))
-      bx_save = temp
+      CALL remap_field(ion_charge, temp)
+      DEALLOCATE(ion_charge)
+      ALLOCATE(ion_charge(1-ng:nx_new+ng))
+      ion_charge = temp
 
-      CALL remap_field(by_save, temp)
-      DEALLOCATE(by_save)
-      ALLOCATE(by_save(1-ng:nx_new+ng))
-      by_save = temp
+      CALL remap_field(ion_density, temp)
+      DEALLOCATE(ion_density)
+      ALLOCATE(ion_density(1-ng:nx_new+ng))
+      ion_density = temp
 
-      CALL remap_field(bz_save, temp)
-      DEALLOCATE(bz_save)
-      ALLOCATE(bz_save(1-ng:nx_new+ng))
-      bz_save = temp
+      CALL remap_field(ion_temp, temp)
+      DEALLOCATE(ion_temp)
+      ALLOCATE(ion_temp(1-ng:nx_new+ng))
+      ion_temp = temp
 
     END IF
 #endif

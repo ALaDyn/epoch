@@ -1064,11 +1064,11 @@ MODULE shared_data
   REAL(num) :: hybrid_const_dx, hybrid_const_K_to_eV, hybrid_const_dt_by_dx
   REAL(num) :: hybrid_D, hybrid_ln_S, hybrid_const_ZeV
 
-  ! Offset fields used by the hybrid field solver
-  REAL(num), ALLOCATABLE, DIMENSION(:) :: bx_save, by_save, bz_save
-
   ! Additional field variables, resisitivity and temperatures of the background
   REAL(num), ALLOCATABLE, DIMENSION(:) :: resistivity, hybrid_Tb
+
+  ! Arrays for ionisation routines
+  REAL(num), ALLOCATABLE, DIMENSION(:) :: ion_charge, ion_density, ion_temp
 
   ! Deck variables
   LOGICAL :: use_hybrid_fields = .FALSE., use_hybrid_collisions = .FALSE.

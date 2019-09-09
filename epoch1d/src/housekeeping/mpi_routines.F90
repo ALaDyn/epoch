@@ -245,9 +245,9 @@ CONTAINS
     IF (use_hybrid) THEN
       ALLOCATE(resistivity(1-ng:nx+ng))
       ALLOCATE(hybrid_Tb(1-ng:nx+ng))
-      ALLOCATE(bx_save(1-ng:nx+ng))
-      ALLOCATE(by_save(1-ng:nx+ng))
-      ALLOCATE(bz_save(1-ng:nx+ng))
+      ALLOCATE(ion_charge(1-ng:nx+ng))
+      ALLOCATE(ion_density(1-ng:nx+ng))
+      ALLOCATE(ion_temp(1-ng:nx+ng))
     END IF
 #endif
 

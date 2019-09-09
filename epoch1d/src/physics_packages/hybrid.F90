@@ -47,11 +47,6 @@ CONTAINS
     ! of certain constants to speed up code
     CALL initialise_hybrid
 
-    ! We first evaluate the magnetic field at t = dt/2, to obtain an electric
-    ! field at the half-timestep point, which we can later use to do a full step
-    ! in B
-    CALL first_half_B_step
-
     ! A copy of the EPOCH PIC loop, modified to run in the hybrid scheme
     DO
       ! Check we have not passed the end condition
@@ -66,11 +61,34 @@ CONTAINS
         timer_first(c_timer_step) = timer_walltime
       END IF
 
-      ! At this point, we have J and resistivity evaluated half a timestep
-      ! behind B. We will treat these as constant over the half timestep. This
-      ! gets us B and E at the same point in time, so we can then do a particle
-      ! push
-      CALL calculate_E
+      ! Radiation scripts
+#ifdef LANDAU_LIFSHITZ
+      ! Landau-Lifshitz classical radiation reaction
+      IF (use_landau_lifshitz .AND. time > landau_lifshitz_start_time &
+          .AND. push) THEN
+        CALL classical_radiation_reaction()
+      END IF
+#endif
+#ifdef PHOTONS
+      ! Non-linear Compton scatter/synchrotron radiation calculation (photons
+      ! can be generated)
+      IF (use_qed .AND. time > qed_start_time .AND. push) THEN
+        CALL qed_update_optical_depth()
+      END IF
+#endif
+#ifdef BREMSSTRAHLUNG
+      ! Bremsstrahlung radiation calculation (photons can be generated)
+      IF (use_bremsstrahlung .AND. time > bremsstrahlung_start_time &
+          .AND. push) THEN
+        CALL bremsstrahlung_update_optical_depth()
+      END IF
+#endif
+
+      ! Evaluate fields a half timestep ahead of the particles
+      IF (use_hybrid_fields) THEN
+        CALL half_B_step
+        CALL calculate_E
+      END IF
 
       ! Logical flag set to true when particles can start to move
       push = (time >= particle_push_start_time)
@@ -84,7 +102,7 @@ CONTAINS
         ! .FALSE. this time to use load balancing threshold
         IF (use_balance) CALL balance_workload(.FALSE.)
 
-        ! Move particles
+        ! Move particles, leapfrogging over E and B
         CALL push_particles
 
         ! Obtain heat capacity to calculate the temperature change in
@@ -121,46 +139,13 @@ CONTAINS
       CALL output_routines(step)
       time = time + dt / 2.0_num
 
-      ! B_save is 1 timestep behind the particle positions, and half a timestep
-      ! behind E and B. This swaps arrays B and B_saved
-      CALL swap_B
-
-      ! B is now 1 timestep behind particle positon, with E half a timestep
-      ! ahead. Leapfrog B over E to the particle position
-      CALL full_step_B
-
-      ! Calculate E at B
-      CALL calculate_E
-
-      ! Now the fields are evaulated at the same time as the particles, so we
-      ! would be using the correct fields for the NCS module
-#ifdef LANDAU_LIFSHITZ
-      ! Landau-Lifshitz classical radiation reaction
-      IF (use_landau_lifshitz .AND. time > landau_lifshitz_start_time &
-          .AND. push) THEN
-        CALL classical_radiation_reaction()
+      ! Iterate B and E, such that they are evaluated at the same time as the
+      ! particles
+      IF (use_hybrid_fields) THEN
+        CALL half_B_step
+        CALL calculate_E
       END IF
-#endif
-#ifdef PHOTONS
-      ! Non-linear Compton scatter/synchrotron radiation calculation (photons
-      ! can be generated)
-      IF (use_qed .AND. time > qed_start_time .AND. push) THEN
-        CALL qed_update_optical_depth()
-      END IF
-#endif
-#ifdef BREMSSTRAHLUNG
-      ! Bremsstrahlung radiation calculation (photons can be generated)
-      IF (use_bremsstrahlung .AND. time > bremsstrahlung_start_time &
-          .AND. push) THEN
-        CALL bremsstrahlung_update_optical_depth()
-      END IF
-#endif
 
-      ! This will make B half a timestep behind E and the particle position
-      CALL swap_B
-
-      ! This pushes B to half a timestep ahead of E and the particle positon
-      CALL full_step_B
     END DO
 
   END SUBROUTINE run_hybrid_PIC
@@ -179,15 +164,16 @@ CONTAINS
 
     ! Initialise arrays
     DO ix = 1, nx
-      ! First B_save should be set to B
-      bx_save(ix) = bx(ix)
-      by_save(ix) = by(ix)
-      bz_save(ix) = bz(ix)
-
       ! Set background temperature and resistivity to those matching
       ! hybrid_Tb_init, which is read in from input.deck
       hybrid_Tb(ix) = hybrid_Tb_init
       resistivity(ix) = resistivity_init
+
+      ! These arrays currently serve no purpose, but will be used when
+      ! ionisation routines are added
+      ion_charge(ix) = 0.0_num
+      ion_density(ix) = 0.0_num
+      ion_temp(ix) = 0.0_num
     END DO
 
     ! Preset useful constants
@@ -224,18 +210,15 @@ CONTAINS
 
 
 
-  SUBROUTINE first_half_B_step
+  SUBROUTINE half_B_step
 
     ! This subroutine performs a half-step in the magnetic field, assuming a
-    ! constant electric field (evaluated using the initial conditions), and
-    ! using:
+    ! constant electric field and using:
     !
     ! dB/dt = -curl(E)
 
     ! Calculate the initial electric field
     INTEGER :: ix
-
-    CALL calculate_E
 
     ! Update B by half a timestep
     DO ix = 1, nx
@@ -246,28 +229,7 @@ CONTAINS
           - 0.5_num * hybrid_const_dt_by_dx * (ey(ix+1) - ey(ix))
     END DO
 
-  END SUBROUTINE first_half_B_step
-
-
-
-  SUBROUTINE full_step_B
-
-    ! This subroutine performs a full step in the magnetic field, assuming a
-    ! an averaged electric field (evaluated half-way along the step), and using:
-    !
-    ! dB/dt = -curl(E)
-
-    ! Update B by a full timestep
-
-    INTEGER :: ix
-
-    DO ix = 1, nx
-      by(ix) = by(ix) + hybrid_const_dt_by_dx * (ez(ix+1) - ez(ix))
-
-      bz(ix) = bz(ix) - hybrid_const_dt_by_dx * (ey(ix+1) - ey(ix))
-    END DO
-
-  END SUBROUTINE full_step_B
+  END SUBROUTINE half_B_step
 
 
 
@@ -342,7 +304,7 @@ CONTAINS
     REAL(num) :: rand1, rand2, rand_scatter, ln_lambda_S, delta_theta, delta_phi
     REAL(num) :: frac_p, ux, uy, uz, frac_uz, frac
     REAL(num) :: sin_t, cos_t, cos_p, sin_t_cos_p, sin_t_sin_p
-    REAL(num) :: p_new_2, dE, part_x, part_C, delta_Tb
+    REAL(num) :: p_new_2, weight, dE, part_x, part_C, delta_Tb
     TYPE(particle), POINTER :: current, next
     LOGICAL :: odd_scatter = .TRUE.
 
@@ -358,7 +320,7 @@ CONTAINS
       DO ipart = 1, species_list(ispecies)%attached_list%count
         next => current%next
 
-        ! Collisional drag energy loss
+        ! Find collisional drag momentum loss
         px = current%part_p(1)
         py = current%part_p(2)
         pz = current%part_p(3)
@@ -411,7 +373,19 @@ CONTAINS
         ! Calculate energy change due to collisions
         p_new_2 = current%part_p(1)**2 + current%part_p(2)**2 &
             + current%part_p(3)**2
-        dE = SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)
+#ifndef PER_SPECIES_WEIGHT
+        weight = current%weight
+#else
+        IF(rank == 0) THEN
+          PRINT*,'*** ERROR ***'
+          PRINT*,'Currently, the code uses particle weight to calculate ' &
+              'energy loss in the hybrid collisions. This cannot be accessed ' &
+              'if the precompiler flag -DPER_SPECIES_WEIGHT is switched on.'
+          PRINT*,'Code will terminate'
+          CALL abort_code(c_err_bad_value)
+        END IF
+#endif
+        dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
 
         ! Get heat capacity at the particle position
         part_x = current%part_pos - x_grid_min_local
@@ -419,8 +393,8 @@ CONTAINS
 
         ! Calculate the temperature increase, and add this to Tb. We use -dE, as
         ! the energy gain for temperature is equal to the energy loss of the
-        ! electron. We use T[K] = T[J] / kb. Final term is energy per unit
-        ! volume, so needs to be modified for 2D and 3D with dy and dz
+        ! electron. We use T[Kelvin] = T[Joule] / kb. Final term is energy per
+        ! unit volume, so needs to be modified for 2D and 3D with dy and dz
         delta_Tb = 1.0_num/(hybrid_ne * part_C * kb)*(-dE / dx)
 
         ! Write temperature change to the grid
@@ -472,28 +446,6 @@ CONTAINS
     END DO
 
   END SUBROUTINE update_resistivity
-
-
-
-  SUBROUTINE swap_B
-
-    ! Swaps the values stored by b and b_save. This allows us to use the
-    ! existing push_particles subroutine (which reads global variable B)
-    REAL(num) :: bx_copy(1-ng:nx+ng), by_copy(1-ng:nx+ng), bz_copy(1-ng:nx+ng)
-
-    bx_copy(:) = bx(:)
-    by_copy(:) = by(:)
-    bz_copy(:) = bz(:)
-
-    bx(:) = bx_save(:)
-    by(:) = by_save(:)
-    bz(:) = bz_save(:)
-
-    bx_save(:) = bx_copy(:)
-    by_save(:) = by_copy(:)
-    bz_save(:) = bz_copy(:)
-
-  END SUBROUTINE
 
 
 
