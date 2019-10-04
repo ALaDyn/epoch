@@ -160,6 +160,16 @@ CONTAINS
     REAL(num) :: resistivity_init
     INTEGER :: ix
 
+    ! Allocate additional arrays for running in hybrid mode. These require extra
+    ! remapping scripts in balance.F90 (for domain change in load-balance)
+    IF (use_hybrid) THEN
+      ALLOCATE(resistivity(1-ng:nx+ng))
+      ALLOCATE(hybrid_Tb(1-ng:nx+ng))
+      ALLOCATE(ion_charge(1-ng:nx+ng))
+      ALLOCATE(ion_density(1-ng:nx+ng))
+      ALLOCATE(ion_temp(1-ng:nx+ng))
+    END IF
+
     resistivity_init = calc_resistivity(hybrid_Tb_init)
 
     ! Initialise arrays
@@ -308,6 +318,13 @@ CONTAINS
     TYPE(particle), POINTER :: current, next
     LOGICAL :: odd_scatter = .TRUE.
 
+    ! Generate a normally distributed random number for the scatter angle.
+    ! The argument here refers to the standard deviation. The mean is
+    ! assumed zero. In Davies (2002) - "How wrong is collisional Monte Carlo",
+    ! this random number is of the form Gamma(t), which I assume means constant
+    ! for all particles at a given timestep, t.
+    rand_scatter = random_box_muller(1.0_num)
+
     ! Cycle over all non-photon species
     DO ispecies = 1, n_species
       current => species_list(ispecies)%attached_list%head
@@ -332,15 +349,10 @@ CONTAINS
             + 0.909_num/gamma**2 - 0.818_num/gamma - 0.246_num
         delta_p = - 0.5_num * hybrid_D / (m0 * v**2) * ln_lambda_L * dt
 
-        ! Generate a normally distributed random number for the scatter angle.
-        ! The argument here refers to the standard deviation. The mean is
-        ! assumed zero.
-        rand_scatter = random_box_muller(1.0_num)
-
         ! Calculate scattering angles
         ln_lambda_S = LOG(hybrid_ln_S * p)
         delta_theta = SQRT(hybrid_Z * hybrid_D * ln_lambda_S  * dt / v) &
-            * rand_scatter
+            * rand_scatter / p
         delta_phi = 2.0_num * pi * random()
 
         ! Apply scattering angles delta_theta and delta_phi to rotate p
@@ -352,20 +364,20 @@ CONTAINS
         IF (ABS(1.0_num - uz) < 1.0e-5_num) THEN
           px = p * sin_t * COS(delta_phi)
           py = p * sin_t * SIN(delta_phi)
-          pz = uz / ABS(uz) * COS(delta_theta)
+          pz = p * uz / ABS(uz) * COS(delta_theta)
         ELSE
           frac_uz = 1.0_num/SQRT(1 - uz**2)
           cos_t = COS(delta_theta)
           cos_p = COS(delta_phi)
           sin_t_cos_p = sin_t*cos_p
           sin_t_sin_p = sin_t*SIN(delta_phi)
-          px = ux*cos_t + sin_t_cos_p*ux*uz*frac_uz - sin_t_sin_p*uy*frac_uz
-          py = uy*cos_t + sin_t_cos_p*uy*uz*frac_uz + sin_t_sin_p*ux*frac_uz
-          pz = uz*cos_t + cos_p*sin_t*(uz**2 - 1.0_num)*frac_uz
+          px = p*(ux*cos_t + sin_t_cos_p*ux*uz*frac_uz - sin_t_sin_p*uy*frac_uz)
+          py = p*(uy*cos_t + sin_t_cos_p*uy*uz*frac_uz + sin_t_sin_p*ux*frac_uz)
+          pz = p*(uz*cos_t + cos_p*sin_t*(uz**2 - 1.0_num)*frac_uz)
         END IF
 
         ! Reduce particle momentum
-        frac = MAX(1.0_num - delta_p / ABS(p), 0.0_num)
+        frac = MAX(1.0_num + delta_p / ABS(p), 0.0_num)
         current%part_p(1) = px * frac
         current%part_p(2) = py * frac
         current%part_p(3) = pz * frac

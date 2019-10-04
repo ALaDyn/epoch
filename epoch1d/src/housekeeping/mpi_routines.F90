@@ -239,18 +239,6 @@ CONTAINS
     ALLOCATE(jy(1-jng:nx+jng))
     ALLOCATE(jz(1-jng:nx+jng))
 
-
-#ifdef HYBRID
-    ! Allocate additional arrays for running in hybrid mode
-    IF (use_hybrid) THEN
-      ALLOCATE(resistivity(1-ng:nx+ng))
-      ALLOCATE(hybrid_Tb(1-ng:nx+ng))
-      ALLOCATE(ion_charge(1-ng:nx+ng))
-      ALLOCATE(ion_density(1-ng:nx+ng))
-      ALLOCATE(ion_temp(1-ng:nx+ng))
-    END IF
-#endif
-
     ! Setup the particle lists
     IF (n_species > 0) &
         NULLIFY(species_list(1)%prev, species_list(n_species)%next)

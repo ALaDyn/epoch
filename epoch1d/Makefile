@@ -208,7 +208,7 @@ DEFINES += $(D)PARTICLE_ID
 
 # Compile with the option to run in hybrid mode, to simulate hot electrons
 # traversing solid targets
-#DEFINES += $(D)HYBRID
+DEFINES += $(D)HYBRID
 
 # Calculate classical Landau-Lifshitz radiaion reaction (NOT TO BE USED WITH
 # PHOTONS)

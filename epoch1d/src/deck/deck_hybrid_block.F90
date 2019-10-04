@@ -123,7 +123,8 @@ CONTAINS
 
     IF (str_cmp(element, 'temperature') &
         .OR. str_cmp(element, 'background_temp') &
-        .OR. str_cmp(element, 'hybrid_temp')) THEN
+        .OR. str_cmp(element, 'hybrid_temp') &
+        .OR. str_cmp(element, 'start_temp')) THEN
       hybrid_Tb_init = as_real_print(value, element, errcode)
       RETURN
     END IF
