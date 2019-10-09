@@ -178,6 +178,9 @@ PROGRAM pic
 #ifdef BREMSSTRAHLUNG
   IF (use_bremsstrahlung) CALL setup_bremsstrahlung_module()
 #endif
+#ifdef HYBRID
+  IF (use_hybrid) CALL initialise_hybrid
+#endif
 
   walltime_started = MPI_WTIME()
   IF (.NOT.ic_from_restart) CALL output_routines(step) ! diagnostics.f90

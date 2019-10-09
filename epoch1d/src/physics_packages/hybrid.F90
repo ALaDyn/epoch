@@ -43,10 +43,6 @@ CONTAINS
     REAL(num), ALLOCATABLE :: heat_capacity(:)
     LOGICAL :: push, halt, force_dump
 
-    ! Sets initial values of the hybrid grid variables, and presets the values
-    ! of certain constants to speed up code
-    CALL initialise_hybrid
-
     ! A copy of the EPOCH PIC loop, modified to run in the hybrid scheme
     DO
       ! Check we have not passed the end condition
@@ -140,12 +136,11 @@ CONTAINS
       time = time + dt / 2.0_num
 
       ! Iterate B and E, such that they are evaluated at the same time as the
-      ! particles
+      ! particles (note: main PIC loop also does this after the output dump)
       IF (use_hybrid_fields) THEN
         CALL half_B_step
         CALL calculate_E
       END IF
-
     END DO
 
   END SUBROUTINE run_hybrid_PIC
@@ -160,15 +155,22 @@ CONTAINS
     REAL(num) :: resistivity_init
     INTEGER :: ix
 
+    ! Preset useful constants
+    hybrid_const_dx = 1.0_num / (mu0 * dx)
+    hybrid_const_K_to_eV = kb / q0
+    hybrid_const_dt_by_dx = dt / dx
+    hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
+    hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
+        / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
+    hybrid_const_ZeV = hybrid_Z**(-4.0_num/3.0_num) * hybrid_const_K_to_eV
+
     ! Allocate additional arrays for running in hybrid mode. These require extra
     ! remapping scripts in balance.F90 (for domain change in load-balance)
-    IF (use_hybrid) THEN
-      ALLOCATE(resistivity(1-ng:nx+ng))
-      ALLOCATE(hybrid_Tb(1-ng:nx+ng))
-      ALLOCATE(ion_charge(1-ng:nx+ng))
-      ALLOCATE(ion_density(1-ng:nx+ng))
-      ALLOCATE(ion_temp(1-ng:nx+ng))
-    END IF
+    ALLOCATE(resistivity(1-ng:nx+ng))
+    ALLOCATE(hybrid_Tb(1-ng:nx+ng))
+    ALLOCATE(ion_charge(1-ng:nx+ng))
+    ALLOCATE(ion_density(1-ng:nx+ng))
+    ALLOCATE(ion_temp(1-ng:nx+ng))
 
     resistivity_init = calc_resistivity(hybrid_Tb_init)
 
@@ -185,15 +187,6 @@ CONTAINS
       ion_density(ix) = 0.0_num
       ion_temp(ix) = 0.0_num
     END DO
-
-    ! Preset useful constants
-    hybrid_const_dx = 1.0_num / (mu0 * dx)
-    hybrid_const_K_to_eV = kb / q0
-    hybrid_const_dt_by_dx = dt / dx
-    hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
-    hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
-        / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
-    hybrid_const_ZeV = hybrid_Z**(-4.0_num/3.0_num) * hybrid_const_K_to_eV
 
   END SUBROUTINE initialise_hybrid
 
@@ -252,23 +245,22 @@ CONTAINS
     !
     ! We have precalculated hybrid_const_dx = 1/(mu_0*dx)
 
-    ! Calculate electric fields. Note that B is staggered from E, whereas J
-    ! is evaulated at the same point as E. Resistivity is a cell centred
-    ! variable.
+    ! Note that B is staggered from E, whereas J is evaulated at the same point
+    ! as E. Resistivity is a cell centred variable.
 
     INTEGER :: ix
 
     DO ix = 1, nx
-      ex(ix) = ex(ix) &
+      ex(ix) = &
           - 0.5_num * (resistivity(ix+1) + resistivity(ix)) &
           * jx(ix)
 
-      ey(ix) = ey(ix) &
+      ey(ix) = &
           + resistivity(ix) &
           * (- hybrid_const_dx * (bz(ix) - bz(ix-1)) &
           - jy(ix))
 
-      ez(ix) = ez(ix) &
+      ez(ix) = &
           + resistivity(ix) &
           * (+ hybrid_const_dx * (by(ix) - by(ix-1)) &
           - jy(ix))
@@ -285,7 +277,7 @@ CONTAINS
     !
     ! C = 0.3 + 1.2*T'*(2.2 + T')/(1.1 + T')^2
     !
-    ! Where T' = Z^(-4/3) * Tb, where Tb is measured in eV
+    ! Where T' = Z^(-4/3) * Tb, and Tb is measured in eV
 
     REAL(num), INTENT(OUT) :: heat_capacity(1-ng:nx+ng)
     REAL(num) :: T_prime, hybrid_const_ZeV
@@ -320,9 +312,9 @@ CONTAINS
 
     ! Generate a normally distributed random number for the scatter angle.
     ! The argument here refers to the standard deviation. The mean is
-    ! assumed zero. In Davies (2002) - "How wrong is collisional Monte Carlo",
-    ! this random number is of the form Gamma(t), which I assume means constant
-    ! for all particles at a given timestep, t.
+    ! assumed zero. In Davies, et al, (2002). Phys. Rev. E, 65(2), 026407, this
+    ! random number is a function of time, which might mean constant for all
+    ! particles at a given timestep, t.
     rand_scatter = random_box_muller(1.0_num)
 
     ! Cycle over all non-photon species
@@ -439,8 +431,11 @@ CONTAINS
       ! Tb is a cell-centred variable, but E has stagger - need to average
       E2 = (0.5_num*(ex(ix) + ex(ix-1)))**2 + ey(ix)**2 + ez(ix)**2
 
-      hybrid_Tb(ix) = hybrid_Tb(ix) &
-          + E2*fac/(resistivity(ix) * heat_capacity(ix))
+      ! Calculate Ohmic heating, avoiding the 0/0 NaN
+      IF (resistivity(ix) > 0.0_num) THEN
+        hybrid_Tb(ix) = hybrid_Tb(ix) &
+            + E2*fac/(resistivity(ix) * heat_capacity(ix))
+      END IF
     END DO
 
   END SUBROUTINE ohmic_heating

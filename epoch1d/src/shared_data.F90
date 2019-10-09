@@ -795,16 +795,21 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_part_power_eta    = 51
   INTEGER, PARAMETER :: c_dump_part_ex_at_part   = 52
   INTEGER, PARAMETER :: c_dump_part_start_x      = 53
+  INTEGER, PARAMETER :: c_dump_hybrid_resist     = 54
+  INTEGER, PARAMETER :: c_dump_hybrid_Tb         = 55
+  INTEGER, PARAMETER :: c_dump_hybrid_ion_charge = 56
+  INTEGER, PARAMETER :: c_dump_hybrid_ni         = 57
+  INTEGER, PARAMETER :: c_dump_hybrid_ion_temp   = 58
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 54
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 55
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 56
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 57
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 58
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 59
-  INTEGER, PARAMETER :: num_vars_to_dump         = 59
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 59
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 60
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 61
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 62
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 63
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 64
+  INTEGER, PARAMETER :: num_vars_to_dump         = 64
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 53
+  INTEGER, PARAMETER :: num_vars_to_dump         = 59
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
