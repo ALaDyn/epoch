@@ -435,6 +435,40 @@ CONTAINS
     ALLOCATE(bz(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
     bz = temp
 
+#ifdef HYBRID
+
+    ! Remap arrays for hybrid mode onto the new processor layout
+
+    IF (use_hybrid) THEN
+
+      CALL remap_field(resistivity, temp)
+      DEALLOCATE(resistivity)
+      ALLOCATE(resistivity(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      resistivity = temp
+
+      CALL remap_field(hybrid_Tb, temp)
+      DEALLOCATE(hybrid_Tb)
+      ALLOCATE(hybrid_Tb(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      hybrid_Tb = temp
+
+      CALL remap_field(ion_charge, temp)
+      DEALLOCATE(ion_charge)
+      ALLOCATE(ion_charge(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      ion_charge = temp
+
+      CALL remap_field(ion_density, temp)
+      DEALLOCATE(ion_density)
+      ALLOCATE(ion_density(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      ion_density = temp
+
+      CALL remap_field(ion_temp, temp)
+      DEALLOCATE(ion_temp)
+      ALLOCATE(ion_temp(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      ion_temp = temp
+
+    END IF
+#endif
+
     DO ispecies = 1, n_species
       IF (species_list(ispecies)%migrate%fluid) THEN
         CALL remap_field(species_list(ispecies)%migrate%fluid_energy, temp)

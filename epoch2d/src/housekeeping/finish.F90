@@ -54,20 +54,23 @@ CONTAINS
 
     DEALLOCATE(x, xb, x_global, xb_global, xb_offset_global)
     DEALLOCATE(y, yb, y_global, yb_global, yb_offset_global)
-    DEALLOCATE(z, zb, z_global, zb_global, zb_offset_global)
     DEALLOCATE(ex, ey, ez, bx, by, bz, jx, jy, jz)
+
+#ifdef HYBRID
+    ! Deallocate extra arrays used when running in hybrid mode
+    IF (use_hybrid) THEN
+      DEALLOCATE(resistivity, hybrid_Tb, ion_charge, ion_density, ion_temp)
+    END IF
+#endif
 
     DEALLOCATE(npart_each_rank)
     DEALLOCATE(x_grid_mins, x_grid_maxs, cell_x_min, cell_x_max)
     DEALLOCATE(y_grid_mins, y_grid_maxs, cell_y_min, cell_y_max)
-    DEALLOCATE(z_grid_mins, z_grid_maxs, cell_z_min, cell_z_max)
 
     DEALLOCATE(ex_x_min, ex_x_max, ey_x_min, ey_x_max, ez_x_min, ez_x_max)
     DEALLOCATE(bx_x_min, bx_x_max, by_x_min, by_x_max, bz_x_min, bz_x_max)
     DEALLOCATE(ex_y_min, ex_y_max, ey_y_min, ey_y_max, ez_y_min, ez_y_max)
     DEALLOCATE(bx_y_min, bx_y_max, by_y_min, by_y_max, bz_y_min, bz_y_max)
-    DEALLOCATE(ex_z_min, ex_z_max, ey_z_min, ey_z_max, ez_z_min, ez_z_max)
-    DEALLOCATE(bx_z_min, bx_z_max, by_z_min, by_z_max, bz_z_min, bz_z_max)
 
     CALL deallocate_probes
 
@@ -82,8 +85,6 @@ CONTAINS
       DEALLOCATE(species_list(i)%ext_temp_x_max, STAT=stat)
       DEALLOCATE(species_list(i)%ext_temp_y_min, STAT=stat)
       DEALLOCATE(species_list(i)%ext_temp_y_max, STAT=stat)
-      DEALLOCATE(species_list(i)%ext_temp_z_min, STAT=stat)
-      DEALLOCATE(species_list(i)%ext_temp_z_max, STAT=stat)
     END DO
 
     DEALLOCATE(species_list, STAT=stat)

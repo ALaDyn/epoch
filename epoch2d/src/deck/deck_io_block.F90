@@ -135,6 +135,11 @@ CONTAINS
     io_block_name (c_dump_cpml_psi_bzy     ) = 'cpml_psi_bzy'
     io_block_name (c_dump_absorption       ) = 'absorption'
     io_block_name (c_dump_total_energy_sum ) = 'total_energy_sum'
+    io_block_name (c_dump_hybrid_resist    ) = 'resistivity'
+    io_block_name (c_dump_hybrid_Tb        ) = 'background_temperature'
+    io_block_name (c_dump_hybrid_ion_charge) = 'background_ion_charge'
+    io_block_name (c_dump_hybrid_ni        ) = 'background_ni'
+    io_block_name (c_dump_hybrid_ion_temp  ) = 'background_ion_temp'
 
     i = num_vars_to_dump
     o1 = 1
@@ -740,6 +745,13 @@ CONTAINS
         IF (mask_element == c_dump_jx) bad = .FALSE.
         IF (mask_element == c_dump_jy) bad = .FALSE.
         IF (mask_element == c_dump_jz) bad = .FALSE.
+#ifdef HYBRID
+        IF (mask_element == c_dump_hybrid_resist) bad = .FALSE.
+        IF (mask_element == c_dump_hybrid_Tb) bad = .FALSE.
+        IF (mask_element == c_dump_hybrid_ni) bad = .FALSE.
+        IF (mask_element == c_dump_hybrid_ion_temp) bad = .FALSE.
+        IF (mask_element == c_dump_hybrid_ion_charge) bad = .FALSE.
+#endif
 
         ! Unset 'no_sum' dumpmask for grid variables
         IF (.NOT.bad) mask = IAND(mask, NOT(c_io_no_sum))
@@ -974,6 +986,10 @@ CONTAINS
         IOR(io_block%dumpmask(c_dump_jy), c_io_restartable)
     io_block%dumpmask(c_dump_jz) = &
         IOR(io_block%dumpmask(c_dump_jz), c_io_restartable)
+#ifdef HYBRID
+    io_block%dumpmask(c_dump_hybrid_Tb) = &
+        IOR(io_block%dumpmask(c_dump_hybrid_Tb), c_io_restartable)
+#endif
     ! CPML boundaries
     io_block%dumpmask(c_dump_cpml_psi_eyx) = &
         IOR(io_block%dumpmask(c_dump_cpml_psi_eyx), c_io_restartable)

@@ -259,6 +259,7 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_hc_push = 2**23
   INTEGER(i8), PARAMETER :: c_def_bremsstrahlung = 2**24
   INTEGER(i8), PARAMETER :: c_def_landau_lifshitz = 2**25
+  INTEGER(i8), PARAMETER :: c_def_hybrid = 2**26
 
   ! Stagger types
   INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
@@ -808,16 +809,21 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_part_power_eta    = 59
   INTEGER, PARAMETER :: c_dump_part_ex_at_part   = 60
   INTEGER, PARAMETER :: c_dump_part_start_x      = 61
+  INTEGER, PARAMETER :: c_dump_hybrid_resist     = 62
+  INTEGER, PARAMETER :: c_dump_hybrid_Tb         = 63
+  INTEGER, PARAMETER :: c_dump_hybrid_ion_charge = 64
+  INTEGER, PARAMETER :: c_dump_hybrid_ni         = 65
+  INTEGER, PARAMETER :: c_dump_hybrid_ion_temp   = 66
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 62
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 63
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 64
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 65
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 66
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 67
-  INTEGER, PARAMETER :: num_vars_to_dump         = 67
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 67
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 68
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 69
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 70
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 71
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 72
+  INTEGER, PARAMETER :: num_vars_to_dump         = 72
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 61
+  INTEGER, PARAMETER :: num_vars_to_dump         = 66
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -1111,6 +1117,31 @@ MODULE shared_data
   INTEGER :: bc_z_min_after_move
   INTEGER :: bc_z_max_after_move
   REAL(num), DIMENSION(3) :: window_shift
+
+#ifdef HYBRID
+  !----------------------------------------------------------------------------
+  ! Hybrid mode - Written by S. J. Morris
+  ! Based on J. R. Davies, et al, 1997. Phys. Rev. E, 56(6), p.7193.
+  !----------------------------------------------------------------------------
+  ! Additional constants
+  REAL(num) :: hybrid_const_dx, hybrid_const_dy, hybrid_const_dz
+  REAL(num) :: hybrid_const_dt_by_dx, hybrid_const_dt_by_dy
+  REAL(num) :: hybrid_const_dt_by_dz
+  REAL(num) :: hybrid_const_K_to_eV, hybrid_D, hybrid_ln_S, hybrid_const_ZeV
+
+  ! Additional field variables, resisitivity and temperatures of the background
+  REAL(num), ALLOCATABLE, DIMENSION(:,:,:) :: resistivity, hybrid_Tb
+
+  ! Arrays for ionisation routines
+  REAL(num), ALLOCATABLE, DIMENSION(:,:,:) :: ion_charge, ion_density, ion_temp
+
+  ! Deck variables
+  LOGICAL :: use_hybrid_fields = .FALSE., use_hybrid_collisions = .FALSE.
+  REAL(num) :: hybrid_ni = 0.0_num, hybrid_ne = 0.0_num
+  REAL(num) :: hybrid_Tb_init = 0.0_num, hybrid_Iex = 0.0_num
+  INTEGER :: hybrid_Z = 0
+#endif
+  LOGICAL :: use_hybrid = .FALSE.
 
 #ifdef LANDAU_LIFSHITZ
   !----------------------------------------------------------------------------

@@ -123,6 +123,9 @@ CONTAINS
 #ifdef PARTICLE_ID
     found = .TRUE.
 #endif
+#ifdef HYBRID
+    found = .TRUE.
+#endif
 #ifdef LANDAU_LIFSHITZ
     found = .TRUE.
 #endif
@@ -217,6 +220,10 @@ CONTAINS
 #ifdef PARTICLE_ID
     defines = IOR(defines, c_def_particle_id)
     WRITE(*,*) 'Particle ID tracking (8-bytes) -DPARTICLE_ID'
+#endif
+#ifdef HYBRID
+    defines = IOR(defines, c_def_hybrid)
+    WRITE(*,*) 'Option to run with an electron-transport PIC loop -DHYBRID'
 #endif
 #ifdef LANDAU_LIFSHITZ
     defines = IOR(defines, c_def_landau_lifshitz)

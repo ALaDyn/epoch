@@ -256,6 +256,7 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_hc_push = 2**23
   INTEGER(i8), PARAMETER :: c_def_bremsstrahlung = 2**24
   INTEGER(i8), PARAMETER :: c_def_landau_lifshitz = 2**25
+  INTEGER(i8), PARAMETER :: c_def_hybrid = 2**26
 
   ! Stagger types
   INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
@@ -809,7 +810,7 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_part_work_z_total = 64
   INTEGER, PARAMETER :: num_vars_to_dump         = 64
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 59
+  INTEGER, PARAMETER :: num_vars_to_dump         = 58
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -1066,8 +1067,9 @@ MODULE shared_data
   ! Based on J. R. Davies, et al, 1997. Phys. Rev. E, 56(6), p.7193.
   !----------------------------------------------------------------------------
   ! Additional constants
-  REAL(num) :: hybrid_const_dx, hybrid_const_K_to_eV, hybrid_const_dt_by_dx
-  REAL(num) :: hybrid_D, hybrid_ln_S, hybrid_const_ZeV
+  REAL(num) :: hybrid_const_dx
+  REAL(num) :: hybrid_const_dt_by_dx
+  REAL(num) :: hybrid_const_K_to_eV, hybrid_D, hybrid_ln_S, hybrid_const_ZeV
 
   ! Additional field variables, resisitivity and temperatures of the background
   REAL(num), ALLOCATABLE, DIMENSION(:) :: resistivity, hybrid_Tb

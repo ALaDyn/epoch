@@ -40,7 +40,7 @@ CONTAINS
 
   SUBROUTINE run_hybrid_PIC(push, halt, force_dump)
 
-    REAL(num), ALLOCATABLE :: heat_capacity(:)
+    REAL(num), ALLOCATABLE :: heat_capacity(:,:,:)
     LOGICAL :: push, halt, force_dump
 
     ! A copy of the EPOCH PIC loop, modified to run in the hybrid scheme
@@ -103,7 +103,7 @@ CONTAINS
 
         ! Obtain heat capacity to calculate the temperature change in
         ! hybrid_collisions and ohmic_heating
-        ALLOCATE(heat_capacity(1-ng:nx+ng))
+        ALLOCATE(heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
         CALL get_heat_capacity(heat_capacity)
 
         ! Calculates collisional drag/scattering, and updates grid temperature
@@ -153,12 +153,16 @@ CONTAINS
     ! constants, to speed up the code
 
     REAL(num) :: resistivity_init
-    INTEGER :: ix
+    INTEGER :: ix, iy, iz
 
     ! Preset useful constants
     hybrid_const_dx = 1.0_num / (mu0 * dx)
+    hybrid_const_dy = 1.0_num / (mu0 * dy)
+    hybrid_const_dz = 1.0_num / (mu0 * dz)
     hybrid_const_K_to_eV = kb / q0
-    hybrid_const_dt_by_dx = 0.5_num * dt / dx
+    hybrid_const_dt_by_dx = dt / dx
+    hybrid_const_dt_by_dy = dt / dy
+    hybrid_const_dt_by_dz = dt / dz
     hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
     hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
         / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
@@ -166,26 +170,30 @@ CONTAINS
 
     ! Allocate additional arrays for running in hybrid mode. These require extra
     ! remapping scripts in balance.F90 (for domain change in load-balance)
-    ALLOCATE(resistivity(1-ng:nx+ng))
-    ALLOCATE(hybrid_Tb(1-ng:nx+ng))
-    ALLOCATE(ion_charge(1-ng:nx+ng))
-    ALLOCATE(ion_density(1-ng:nx+ng))
-    ALLOCATE(ion_temp(1-ng:nx+ng))
+    ALLOCATE(resistivity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    ALLOCATE(hybrid_Tb(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    ALLOCATE(ion_charge(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    ALLOCATE(ion_density(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+    ALLOCATE(ion_temp(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
 
     resistivity_init = calc_resistivity(hybrid_Tb_init)
 
     ! Initialise arrays
-    DO ix = 1, nx
-      ! Set background temperature and resistivity to those matching
-      ! hybrid_Tb_init, which is read in from input.deck
-      hybrid_Tb(ix) = hybrid_Tb_init
-      resistivity(ix) = resistivity_init
+    DO iz = 1, nz
+      DO iy = 1, ny
+        DO ix = 1, nx
+          ! Set background temperature and resistivity to those matching
+          ! hybrid_Tb_init, which is read in from input.deck
+          hybrid_Tb(ix,iy,iz) = hybrid_Tb_init
+          resistivity(ix,iy,iz) = resistivity_init
 
-      ! These arrays currently serve no purpose, but will be used when
-      ! ionisation routines are added
-      ion_charge(ix) = 0.0_num
-      ion_density(ix) = 0.0_num
-      ion_temp(ix) = 0.0_num
+          ! These arrays currently serve no purpose, but will be used when
+          ! ionisation routines are added
+          ion_charge(ix,iy,iz) = 0.0_num
+          ion_density(ix,iy,iz) = 0.0_num
+          ion_temp(ix,iy,iz) = 0.0_num
+        END DO
+      END DO
     END DO
 
   END SUBROUTINE initialise_hybrid
@@ -221,15 +229,25 @@ CONTAINS
     ! dB/dt = -curl(E)
 
     ! Calculate the initial electric field
-    INTEGER :: ix
+    INTEGER :: ix, iy, iz
 
     ! Update B by half a timestep
-    DO ix = 1, nx
-      by(ix) = by(ix) &
-          + hybrid_const_dt_by_dx * (ez(ix+1) - ez(ix))
+    DO iz = 1, nz
+      DO iy = 1, ny
+        DO ix = 1, nx
+          bx(ix, iy, iz) = bx(ix, iy, iz) &
+              - hybrid_const_dt_by_dy * (ez(ix  , iy+1, iz  ) - ez(ix,iy,iz)) &
+              + hybrid_const_dt_by_dz * (ey(ix  , iy  , iz+1) - ey(ix,iy,iz))
 
-      bz(ix) = bz(ix) &
-          - hybrid_const_dt_by_dx * (ey(ix+1) - ey(ix))
+          by(ix, iy, iz) = by(ix, iy, iz) &
+              - hybrid_const_dt_by_dz * (ex(ix  , iy  , iz+1) - ex(ix,iy,iz)) &
+              + hybrid_const_dt_by_dx * (ez(ix+1, iy  , iz  ) - ez(ix,iy,iz))
+
+          bz(ix, iy, iz) = bz(ix, iy, iz) &
+              - hybrid_const_dt_by_dx * (ey(ix+1, iy  , iz  ) - ey(ix,iy,iz)) &
+              + hybrid_const_dt_by_dy * (ex(ix  , iy+1, iz  ) - ex(ix,iy,iz))
+        END DO
+      END DO
     END DO
 
   END SUBROUTINE half_B_step
@@ -248,22 +266,30 @@ CONTAINS
     ! Note that B is staggered from E, whereas J is evaulated at the same point
     ! as E. Resistivity is a cell centred variable.
 
-    INTEGER :: ix
+    INTEGER :: ix, iy, iz
 
-    DO ix = 1, nx
-      ex(ix) = &
-          - 0.5_num * (resistivity(ix+1) + resistivity(ix)) &
-          * jx(ix)
+    DO iz = 1,nz
+      DO iy = 1, ny
+        DO ix = 1, nx
+          ex(ix,iy,iz) = &
+              + 0.5_num * (resistivity(ix+1,iy,iz) + resistivity(ix,iy,iz)) &
+              * (+ hybrid_const_dy * (bz(ix,iy,iz) - bz(ix,iy-1,iz)) &
+                 - hybrid_const_dz * (by(ix,iy,iz) - by(ix,iy,iz-1)) &
+                 - jx(ix,iy,iz))
 
-      ey(ix) = &
-          + resistivity(ix) &
-          * (- hybrid_const_dx * (bz(ix) - bz(ix-1)) &
-          - jy(ix))
+          ey(ix,iy,iz) = &
+              + 0.5_num * (resistivity(ix,iy+1,iz) + resistivity(ix,iy,iz)) &
+              * (+ hybrid_const_dz * (bx(ix,iy,iz) - bx(ix,iy,iz-1)) &
+                 - hybrid_const_dx * (bz(ix,iy,iz) - bz(ix-1,iy,iz)) &
+                 - jy(ix,iy,iz))
 
-      ez(ix) = &
-          + resistivity(ix) &
-          * (+ hybrid_const_dx * (by(ix) - by(ix-1)) &
-          - jz(ix))
+          ez(ix,iy,iz) = &
+              + 0.5_num * (resistivity(ix,iy,iz) + resistivity(ix,iy,iz+1)) &
+              * (+ hybrid_const_dx * (by(ix,iy,iz) - by(ix-1,iy,iz)) &
+                 - hybrid_const_dy * (bx(ix,iy,iz) - bx(ix,iy-1,iz)) &
+                 - jz(ix,iy,iz))
+        END DO
+      END DO
     END DO
 
   END SUBROUTINE calculate_E
@@ -279,14 +305,18 @@ CONTAINS
     !
     ! Where T' = Z^(-4/3) * Tb, and Tb is measured in eV
 
-    REAL(num), INTENT(OUT) :: heat_capacity(1-ng:nx+ng)
+    REAL(num), INTENT(OUT) :: heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
     REAL(num) :: T_prime, hybrid_const_ZeV
-    INTEGER :: ix
+    INTEGER :: ix, iy, iz
 
-    DO ix = 1, nx
-      T_prime = hybrid_const_ZeV * hybrid_Tb(ix)
-      heat_capacity(ix) = 0.3_num &
-          + 1.2_num * T_prime * (2.2_num + T_prime)/(1.1_num + T_prime)**2
+    DO iz = 1, nz
+      DO iy = 1, ny
+        DO ix = 1, nx
+          T_prime = hybrid_const_ZeV * hybrid_Tb(ix,iy,iz)
+          heat_capacity(ix,iy,iz) = 0.3_num &
+              + 1.2_num * T_prime * (2.2_num + T_prime)/(1.1_num + T_prime)**2
+        END DO
+      END DO
     END DO
 
   END SUBROUTINE get_heat_capacity
@@ -298,7 +328,7 @@ CONTAINS
     ! Calculates collisional drag/scattering, and updates grid temperature based
     ! on energy lost by the particles
 
-    REAL(num), INTENT(IN) :: heat_capacity(1-ng:nx+ng)
+    REAL(num), INTENT(IN) :: heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
     INTEGER :: ispecies
     INTEGER(i8) :: ipart
     REAL(num) :: ipart_mc, m2c4
@@ -306,7 +336,7 @@ CONTAINS
     REAL(num) :: rand1, rand2, rand_scatter, ln_lambda_S, delta_theta, delta_phi
     REAL(num) :: frac_p, ux, uy, uz, frac_uz, frac
     REAL(num) :: sin_t, cos_t, cos_p, sin_t_cos_p, sin_t_sin_p
-    REAL(num) :: p_new_2, weight, dE, part_x, part_C, delta_Tb
+    REAL(num) :: p_new_2, weight, dE, part_x, part_y, part_z, part_C, delta_Tb
     TYPE(particle), POINTER :: current, next
 
     ! Generate a normally distributed random number for the scatter angle.
@@ -391,17 +421,21 @@ CONTAINS
         dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
 
         ! Get heat capacity at the particle position
-        part_x = current%part_pos - x_grid_min_local
-        CALL hy_grid_centred_var_at_particle(part_x, part_C, heat_capacity)
+        part_x = current%part_pos(1) - x_grid_min_local
+        part_y = current%part_pos(2) - y_grid_min_local
+        part_z = current%part_pos(3) - z_grid_min_local
+        CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, part_C, &
+            heat_capacity)
 
         ! Calculate the temperature increase, and add this to Tb. We use -dE, as
         ! the energy gain for temperature is equal to the energy loss of the
         ! electron. We use T[Kelvin] = T[Joule] / kb. Final term is energy per
-        ! unit volume, and dy & dz = 1m in epoch1d
-        delta_Tb = 1.0_num/(hybrid_ne * part_C * kb)*(-dE / dx)
+        ! unit volume
+        delta_Tb = 1.0_num/(hybrid_ne * part_C * kb)*(-dE / (dx*dy*dz))
 
         ! Write temperature change to the grid
-        CALL add_particle_var_to_grid(part_x, delta_Tb, hybrid_Tb)
+        CALL add_particle_var_to_grid(part_x, part_y, part_z, delta_Tb, &
+            hybrid_Tb)
 
         current => next
 
@@ -420,21 +454,27 @@ CONTAINS
     ! middle of this timestep. Assuming this is the average electric field over
     ! the timestep, we have a power per unit volume of E**2/resistivity
 
-    REAL(num), INTENT(IN) :: heat_capacity(1-ng:nx+ng)
+    REAL(num), INTENT(IN) :: heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
     REAL(num) :: E2, fac
-    INTEGER :: ix
+    INTEGER :: ix, iy, iz
 
     fac = dt/(hybrid_ne*kb)
 
-    DO ix = 1, nx
-      ! Tb is a cell-centred variable, but E has stagger - need to average
-      E2 = (0.5_num*(ex(ix) + ex(ix-1)))**2 + ey(ix)**2 + ez(ix)**2
+    DO iz = 1, nz
+      DO iy = 1, ny
+        DO ix = 1, nx
+          ! Tb is a cell-centred variable, but E has stagger - need to average
+          E2 = (0.5_num*(ex(ix,iy,iz) + ex(ix-1,iy,iz)))**2 &
+              +(0.5_num*(ey(ix,iy,iz) + ey(ix,iy-1,iz)))**2 &
+              +(0.5_num*(ez(ix,iy,iz) + ez(ix,iy,iz-1)))**2
 
-      ! Calculate Ohmic heating, avoiding the 0/0 NaN
-      IF (resistivity(ix) > 0.0_num) THEN
-        hybrid_Tb(ix) = hybrid_Tb(ix) &
-            + E2*fac/(resistivity(ix) * heat_capacity(ix))
-      END IF
+          ! Calculate Ohmic heating, avoiding the 0/0 NaN
+          IF (resistivity(ix,iy,iz) > 0.0_num) THEN
+            hybrid_Tb(ix,iy,iz) = hybrid_Tb(ix,iy,iz) &
+                + E2*fac/(resistivity(ix,iy,iz) * heat_capacity(ix,iy,iz))
+          END IF
+        END DO
+      END DO
     END DO
 
   END SUBROUTINE ohmic_heating
@@ -445,28 +485,36 @@ CONTAINS
 
     ! Loops over the local resistivity grid and updates each point
 
-    INTEGER :: ix
+    INTEGER :: ix, iy, iz
 
-    DO ix = 1, nx
-       resistivity(ix) = calc_resistivity(hybrid_Tb(ix))
+    DO iz = 1, nz
+      DO iy = 1, ny
+        DO ix = 1, nx
+          resistivity(ix, iy, iz) = calc_resistivity(hybrid_Tb(ix, iy, iz))
+        END DO
+      END DO
     END DO
 
   END SUBROUTINE update_resistivity
 
 
 
-  SUBROUTINE hy_grid_centred_var_at_particle(part_x, part_var, grid_var)
+  SUBROUTINE hy_grid_centred_var_at_particle(part_x, part_y, part_z, part_var, &
+      grid_var)
 
     ! Calculates the value of a grid-centred variable "part_var" stored in the
-    ! grid "grid_var", averaged over the particle shape for a particle at part_x
+    ! grid "grid_var", averaged over the particle shape for a particle at
+    ! position (part_x, part_y, part_z)
 
-    REAL(num), INTENT(IN) :: part_x
-    REAL(num), INTENT(IN) :: grid_var(1-ng:nx+ng)
-    REAL(num), INTENT(OUT) :: part_var
-    INTEGER :: cell_x1
-    REAL(num) :: cell_x_r
-    REAL(num) :: cell_frac_x
-    REAL(num), DIMENSION(sf_min:sf_max) :: gx
+    REAL(num), INTENT(in) :: part_x, part_y, part_z
+    REAL(num), INTENT(in) :: grid_var(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng)
+    REAL(num), INTENT(out) :: part_var
+    INTEGER :: cell_x1, cell_y1, cell_z1
+    REAL(num) :: cell_x_r, cell_y_r, cell_z_r
+    REAL(num) :: cell_frac_x, cell_frac_y, cell_frac_z
+    REAL(num), DIMENSION(sf_min:sf_max) :: gx, gy, gz
+
+    ! Particle weighting multiplication factor
 #ifdef PARTICLE_SHAPE_BSPLINE3
     REAL(num) :: cf2
     REAL(num), PARAMETER :: fac = (1.0_num / 24.0_num)**c_ndims
@@ -481,32 +529,32 @@ CONTAINS
     ! the cell-centered fields, taking into account the various particle shapes
 #ifdef PARTICLE_SHAPE_TOPHAT
     cell_x_r = part_x / dx - 0.5_num
+    cell_y_r = part_y / dy - 0.5_num
+    cell_z_r = part_z / dz - 0.5_num
 #else
     cell_x_r = part_x / dx
+    cell_y_r = part_y / dy
+    cell_z_r = part_z / dz
 #endif
     cell_x1 = FLOOR(cell_x_r + 0.5_num)
     cell_frac_x = REAL(cell_x1, num) - cell_x_r
     cell_x1 = cell_x1 + 1
+    cell_y1 = FLOOR(cell_y_r + 0.5_num)
+    cell_frac_y = REAL(cell_y1, num) - cell_y_r
+    cell_y1 = cell_y1 + 1
+    cell_z1 = FLOOR(cell_z_r + 0.5_num)
+    cell_frac_z = REAL(cell_z1, num) - cell_z_r
+    cell_z1 = cell_z1 + 1
 
 #ifdef PARTICLE_SHAPE_BSPLINE3
 #include "bspline3/gx.inc"
-    part_var = &
-          gx(-2) * grid_var(cell_x1-2) &
-        + gx(-1) * grid_var(cell_x1-1) &
-        + gx( 0) * grid_var(cell_x1  ) &
-        + gx( 1) * grid_var(cell_x1+1) &
-        + gx( 2) * grid_var(cell_x1+2)
+#include "bspline3/part_var.inc"
 #elif  PARTICLE_SHAPE_TOPHAT
 #include "tophat/gx.inc"
-    part_var = &
-          gx(0) * grid_var(cell_x1  ) &
-        + gx(1) * grid_var(cell_x1+1)
+#include "tophat/part_var.inc"
 #else
 #include "triangle/gx.inc"
-    part_var = &
-          gx(-1) * grid_var(cell_x1-1) &
-        + gx( 0) * grid_var(cell_x1  ) &
-        + gx( 1) * grid_var(cell_x1+1)
+#include "triangle/part_var.inc"
 #endif
     part_var = fac*part_var
 
@@ -514,21 +562,24 @@ CONTAINS
 
 
 
-  SUBROUTINE add_particle_var_to_grid(part_x, part_var, grid)
+  SUBROUTINE add_particle_var_to_grid(part_x, part_y, part_z, part_var, grid)
 
     ! Adds the value of a variable (part_var), which is evaluated on a particle
-    ! at position part_x, to the grid (grid). Particle weighting assumes we are
-    ! summing to a cell-centred variable (no stagger). This uses the same cell
-    ! indices and weighting as "hy_grid_centred_var_at_particle".
+    ! at position (part_x, part_y, part_z), to the grid (grid). Particle
+    ! weighting assumes we are summing to a cell-centred variable (no stagger).
+    ! This uses the same cell indices and weighting as
+    ! "hy_grid_centred_var_at_particle".
 
-    REAL(num), INTENT(IN) :: part_x
-    REAL(num), INTENT(INOUT) :: grid(1-ng:nx+ng)
+    REAL(num), INTENT(IN) :: part_x, part_y, part_z
+    REAL(num), INTENT(INOUT) :: grid(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng)
     REAL(num), INTENT(IN) :: part_var
-    INTEGER :: cell_x1
-    REAL(num) :: cell_x_r
-    REAL(num) :: cell_frac_x
+    INTEGER :: cell_x1, cell_y1, cell_z1
+    REAL(num) :: cell_x_r, cell_y_r, cell_z_r
+    REAL(num) :: cell_frac_x, cell_frac_y, cell_frac_z
+    REAL(num), DIMENSION(sf_min:sf_max) :: gx, gy, gz
+    REAL(num), ALLOCATABLE :: gzy(:,:)
+    INTEGER :: igz, igy
     REAL(num) :: scaled_part_var
-    REAL(num), DIMENSION(sf_min:sf_max) :: gx
 #ifdef PARTICLE_SHAPE_BSPLINE3
     REAL(num) :: cf2
     REAL(num), PARAMETER :: fac = (1.0_num / 24.0_num)**c_ndims
@@ -541,31 +592,60 @@ CONTAINS
 
 #ifdef PARTICLE_SHAPE_TOPHAT
     cell_x_r = part_x / dx - 0.5_num
+    cell_y_r = part_y / dy - 0.5_num
+    cell_z_r = part_z / dz - 0.5_num
 #else
     cell_x_r = part_x / dx
+    cell_y_r = part_y / dy
+    cell_z_r = part_z / dz
 #endif
     cell_x1 = FLOOR(cell_x_r + 0.5_num)
     cell_frac_x = REAL(cell_x1, num) - cell_x_r
     cell_x1 = cell_x1 + 1
+    cell_y1 = FLOOR(cell_y_r + 0.5_num)
+    cell_frac_y = REAL(cell_y1, num) - cell_y_r
+    cell_y1 = cell_y1 + 1
+    cell_z1 = FLOOR(cell_z_r + 0.5_num)
+    cell_frac_z = REAL(cell_z1, num) - cell_z_r
+    cell_z1 = cell_z1 + 1
 
     scaled_part_var = fac*part_var
 
 #ifdef PARTICLE_SHAPE_BSPLINE3
 #include "bspline3/gx.inc"
-    grid(cell_x1-2) = grid(cell_x1-2) + gx(-2) * scaled_part_var
-    grid(cell_x1-1) = grid(cell_x1-1) + gx(-1) * scaled_part_var
-    grid(cell_x1  ) = grid(cell_x1  ) + gx( 0) * scaled_part_var
-    grid(cell_x1+1) = grid(cell_x1+1) + gx( 1) * scaled_part_var
-    grid(cell_x1+2) = grid(cell_x1+2) + gx( 2) * scaled_part_var
+    ! Pre-calculate gz(i)*gy(j) for speed
+    ALLOCATE(gzy(1:5,1:5))
+    DO igy = 1,5
+      DO igz = 1,5
+        gzy(igz,igy) = gz(igz) * gy(igy)
+      END DO
+    END DO
+#include "bspline3/part_to_grid.inc"
+    DEALLOCATE (gzy)
+
 #elif  PARTICLE_SHAPE_TOPHAT
 #include "tophat/gx.inc"
-    grid(cell_x1  ) = grid(cell_x1  ) + gx( 0) * scaled_part_var
-    grid(cell_x1+1) = grid(cell_x1+1) + gx( 1) * scaled_part_var
+    ! Pre-calculate gz(i)*gy(j) for speed
+    ALLOCATE(gzy(1:2,1:2))
+    DO igy = 1,2
+      DO igz = 1,2
+        gzy(igz,igy) = gz(igz) * gy(igy)
+      END DO
+    END DO
+#include "tophat/part_to_grid.inc"
+    DEALLOCATE (gzy)
+
 #else
 #include "triangle/gx.inc"
-    grid(cell_x1-1) = grid(cell_x1-1) + gx(-1) * scaled_part_var
-    grid(cell_x1  ) = grid(cell_x1  ) + gx( 0) * scaled_part_var
-    grid(cell_x1+1) = grid(cell_x1+1) + gx( 1) * scaled_part_var
+    ! Pre-calculate gz(i)*gy(j) for speed
+    ALLOCATE(gzy(1:2,1:2))
+    DO igy = 1,2
+      DO igz = 1,2
+        gzy(igz,igy) = gz(igz) * gy(igy)
+      END DO
+    END DO
+#include "triangle/part_to_grid.inc"
+    DEALLOCATE (gzy)
 #endif
 
   END SUBROUTINE add_particle_var_to_grid

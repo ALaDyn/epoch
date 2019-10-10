@@ -57,7 +57,6 @@ CONTAINS
 
 #ifdef HYBRID
     ! Deallocate extra arrays used when running in hybrid mode
-    ! Note for 2D/3D - change from finish.f90 to finish.F90
     IF (use_hybrid) THEN
       DEALLOCATE(resistivity, hybrid_Tb, ion_charge, ion_density, ion_temp)
     END IF

@@ -469,6 +469,13 @@ CONTAINS
       CALL write_field(c_dump_jz, code, 'jz', 'Current/Jz', 'A/m^2', &
           c_stagger_jz, jz)
 
+#ifdef HYBRID
+      CALL write_field(c_dump_hybrid_resist, code, 'resistivity', &
+          'Background/Resistivity', 'V.m/A', c_stagger_cell_centre, resistivity)
+      CALL write_field(c_dump_hybrid_Tb, code, 'Tb', &
+          'Background/Temperature', 'K', c_stagger_cell_centre, hybrid_Tb)
+#endif
+
       IF (cpml_boundaries) THEN
         CALL sdf_write_srl(sdf_handle, 'boundary_thickness', &
             'Boundary thickness', cpml_thickness)
