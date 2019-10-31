@@ -474,14 +474,7 @@ CONTAINS
 #ifndef PER_SPECIES_WEIGHT
         weight = current%weight
 #else
-        IF(rank == 0) THEN
-          PRINT*,'*** ERROR ***'
-          PRINT*,'Currently, the code uses particle weight to calculate ' &
-              'energy loss in the hybrid collisions. This cannot be accessed ' &
-              'if the precompiler flag -DPER_SPECIES_WEIGHT is switched on.'
-          PRINT*,'Code will terminate'
-          CALL abort_code(c_err_bad_value)
-        END IF
+        weight = species_list(ispecies)%weight
 #endif
         dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
 
