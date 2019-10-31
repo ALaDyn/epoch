@@ -500,9 +500,9 @@ finish.o: finish.F90 collisions.o deck.o diagnostics.o dist_fn.o injectors.o \
   ionise.o laser.o partlist.o probes.o setup.o shared_data.o shunt.o window.o
 helper.o: helper.F90 balance.o boundary.o calc_df.o deltaf_loader.o partlist.o \
   simple_io.o strings.o
-hybrid.o: hybrid.F90 balance.o current_smooth.o diagnostics.o injectors.o \
-	particles.o particle_migration.o random_generator.o landau_lifshitz.o \
-	photons.o bremsstrahlung.o
+hybrid.o: hybrid.F90 balance.o boundary.o current_smooth.o diagnostics.o \
+	injectors.o particles.o particle_migration.o random_generator.o \
+	landau_lifshitz.o photons.o bremsstrahlung.o
 ic_module.o: ic_module.f90 helper.o shared_data.o
 injectors.o: injectors.F90 evaluate.o particle_temperature.o partlist.o \
   random_generator.o shared_data.o

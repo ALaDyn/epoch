@@ -32,6 +32,7 @@ MODULE deck
   USE deck_subset_block
   USE deck_collision_block
   USE deck_part_from_file_block
+  USE deck_hybrid_block
   USE deck_landau_lifshitz_block
 #ifdef PHOTONS
   USE photons
@@ -100,6 +101,7 @@ CONTAINS
 #ifndef NO_PARTICLE_PROBES
     CALL probe_deck_initialise
 #endif
+    CALL hybrid_deck_initialise
     CALL landau_lifshitz_deck_initialise
     CALL qed_deck_initialise
     CALL bremsstrahlung_deck_initialise
@@ -131,6 +133,7 @@ CONTAINS
 #ifndef NO_PARTICLE_PROBES
     CALL probe_deck_finalise
 #endif
+    CALL hybrid_deck_finalise
     CALL landau_lifshitz_deck_finalise
     CALL qed_deck_finalise
     CALL bremsstrahlung_deck_finalise
@@ -177,6 +180,8 @@ CONTAINS
     ELSE IF (str_cmp(block_name, 'probe')) THEN
       CALL probe_block_start
 #endif
+    ELSE IF (str_cmp(block_name, 'hybrid')) THEN
+      CALL hybrid_block_start
     ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
       CALL landau_lifshitz_block_start
     ELSE IF (str_cmp(block_name, 'qed')) THEN
@@ -230,6 +235,8 @@ CONTAINS
     ELSE IF (str_cmp(block_name, 'probe')) THEN
       CALL probe_block_end
 #endif
+    ELSE IF (str_cmp(block_name, 'hybrid')) THEN
+      CALL hybrid_block_end
     ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
       CALL landau_lifshitz_block_end
     ELSE IF (str_cmp(block_name, 'qed')) THEN
@@ -316,6 +323,9 @@ CONTAINS
       extended_error_string = '-DNO_PARTICLE_PROBES'
 #endif
       RETURN
+    ELSE IF (str_cmp(block_name, 'hybrid')) THEN
+      handle_block = hybrid_block_handle_element(block_element, block_value)
+      RETURN
     ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
       handle_block = &
           landau_lifshitz_block_handle_element(block_element, block_value)
@@ -363,6 +373,9 @@ CONTAINS
 
     errcode_deck = c_err_none
     errcode_deck = IOR(errcode_deck, boundary_block_check())
+    IF (use_hybrid) THEN
+      errcode_deck = IOR(errcode_deck, hybrid_block_check())
+    END IF
     IF (use_qed) THEN
 #ifdef PHOTONS
       errcode_deck = IOR(errcode_deck, check_qed_variables())

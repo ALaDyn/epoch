@@ -179,7 +179,7 @@ PROGRAM pic
   IF (use_bremsstrahlung) CALL setup_bremsstrahlung_module()
 #endif
 #ifdef HYBRID
-  IF (use_hybrid) CALL initialise_hybrid
+  CALL initialise_hybrid
 #endif
 
   walltime_started = MPI_WTIME()

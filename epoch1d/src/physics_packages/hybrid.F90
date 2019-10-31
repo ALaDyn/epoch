@@ -18,6 +18,7 @@ MODULE hybrid
 #ifdef HYBRID
 
   USE balance
+  USE boundary
   USE current_smooth
   USE diagnostics
   USE injectors
@@ -83,7 +84,9 @@ CONTAINS
       ! Evaluate fields a half timestep ahead of the particles
       IF (use_hybrid_fields) THEN
         CALL half_B_step
+        CALL hybrid_B_bc
         CALL calculate_E
+        CALL hybrid_E_bc
       END IF
 
       ! Logical flag set to true when particles can start to move
@@ -121,7 +124,7 @@ CONTAINS
         ! Migrate particle species if they pass the migration criteria
         IF (use_particle_migration) CALL migrate_particles(step)
 
-        ! For current smoothing, see housekeeping/current_smooth.F90
+        ! Pass current to neighbouring ranks (housekeeping/current_smooth.F90)
         CALL current_finish
 
         ! See housekeeping/partlist.F90
@@ -139,7 +142,9 @@ CONTAINS
       ! particles (note: main PIC loop also does this after the output dump)
       IF (use_hybrid_fields) THEN
         CALL half_B_step
+        CALL hybrid_B_bc
         CALL calculate_E
+        CALL hybrid_E_bc
       END IF
     END DO
 
@@ -155,38 +160,56 @@ CONTAINS
     REAL(num) :: resistivity_init
     INTEGER :: ix
 
-    ! Preset useful constants
-    hybrid_const_dx = 1.0_num / (mu0 * dx)
-    hybrid_const_K_to_eV = kb / q0
-    hybrid_const_dt_by_dx = 0.5_num * dt / dx
-    hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
-    hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
-        / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
-    hybrid_const_ZeV = hybrid_Z**(-4.0_num/3.0_num) * hybrid_const_K_to_eV
+    IF (use_hybrid) THEN
+      ! Preset useful constants
+      hybrid_const_dx = 1.0_num / (mu0 * dx)
+      hybrid_const_K_to_eV = kb / q0
+      hybrid_const_dt_by_dx = 0.5_num * dt / dx
+      hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
+      hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
+          / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
+      hybrid_const_ZeV = hybrid_Z**(-4.0_num/3.0_num) * hybrid_const_K_to_eV
 
-    ! Allocate additional arrays for running in hybrid mode. These require extra
-    ! remapping scripts in balance.F90 (for domain change in load-balance)
-    ALLOCATE(resistivity(1-ng:nx+ng))
-    ALLOCATE(hybrid_Tb(1-ng:nx+ng))
-    ALLOCATE(ion_charge(1-ng:nx+ng))
-    ALLOCATE(ion_density(1-ng:nx+ng))
-    ALLOCATE(ion_temp(1-ng:nx+ng))
+      ! Allocate additional arrays for running in hybrid mode. These require
+      ! extra remapping scripts in balance.F90 (for domain change in
+      ! load-balance)
+      ALLOCATE(resistivity(1-ng:nx+ng))
+      ALLOCATE(hybrid_Tb(1-ng:nx+ng))
+      ALLOCATE(ion_charge(1-ng:nx+ng))
+      ALLOCATE(ion_density(1-ng:nx+ng))
+      ALLOCATE(ion_temp(1-ng:nx+ng))
 
-    resistivity_init = calc_resistivity(hybrid_Tb_init)
+      resistivity_init = calc_resistivity(hybrid_Tb_init)
 
-    ! Initialise arrays
-    DO ix = 1, nx
-      ! Set background temperature and resistivity to those matching
-      ! hybrid_Tb_init, which is read in from input.deck
-      hybrid_Tb(ix) = hybrid_Tb_init
-      resistivity(ix) = resistivity_init
+      ! Initialise arrays
+      DO ix = 1-ng, nx+ng
+        ! Set background temperature and resistivity to those matching
+        ! hybrid_Tb_init, which is read in from input.deck
+        hybrid_Tb(ix) = hybrid_Tb_init
+        resistivity(ix) = resistivity_init
 
-      ! These arrays currently serve no purpose, but will be used when
-      ! ionisation routines are added
-      ion_charge(ix) = 0.0_num
-      ion_density(ix) = 0.0_num
-      ion_temp(ix) = 0.0_num
-    END DO
+        ! These arrays currently serve no purpose, but will be used when
+        ! ionisation routines are added
+        ion_charge(ix) = 0.0_num
+        ion_density(ix) = 0.0_num
+        ion_temp(ix) = 0.0_num
+      END DO
+
+      IF (rank == 0) PRINT*, 'Code is running in hybrid mode'
+
+    ELSE
+      ! Do not try to output hybrid variables if we aren't running in hybrid
+      ! mode
+      IF (rank == 0) THEN
+        PRINT*, ''
+        PRINT*, 'Code is not running in hybrid mode'
+        PRINT*, 'Any attempts to output hybrid-only variables (like ', &
+           'resistivity) will be ignored'
+        PRINT*, 'Switch off the -DHYBRID pre-processor flag to stop this ', &
+            'message from printing'
+        PRINT*, ''
+      END IF
+    END IF
 
   END SUBROUTINE initialise_hybrid
 
@@ -219,12 +242,14 @@ CONTAINS
     ! constant electric field and using:
     !
     ! dB/dt = -curl(E)
+    !
+    ! We calculate into 1 ghost cell to allow non-zero curls across simulation
+    ! boundaries
 
-    ! Calculate the initial electric field
     INTEGER :: ix
 
     ! Update B by half a timestep
-    DO ix = 1, nx
+    DO ix = 0, nx+1
       by(ix) = by(ix) &
           + hybrid_const_dt_by_dx * (ez(ix+1) - ez(ix))
 
@@ -233,6 +258,30 @@ CONTAINS
     END DO
 
   END SUBROUTINE half_B_step
+
+
+
+  SUBROUTINE hybrid_B_bc
+
+    ! This script updates the ghost cells on the local processor, by either
+    ! passing over those from the neighbouring processor, or by ensuring the
+    ! curls beyond the boundary are zero
+
+    INTEGER :: i
+
+    ! Pass neighbouring ghost cells
+    CALL field_bc(bx, ng)
+    CALL field_bc(by, ng)
+    CALL field_bc(bz, ng)
+
+    ! Special cases for boundary processors
+    DO i = 1, 2*c_ndims
+      CALL field_zero_curl(bx, i)
+      CALL field_zero_curl(by, i)
+      CALL field_zero_curl(bz, i)
+    END DO
+
+  END SUBROUTINE hybrid_B_bc
 
 
 
@@ -246,11 +295,12 @@ CONTAINS
     ! We have precalculated hybrid_const_dx = 1/(mu_0*dx)
 
     ! Note that B is staggered from E, whereas J is evaulated at the same point
-    ! as E. Resistivity is a cell centred variable.
+    ! as E. Resistivity is a cell centred variable. We calculate into 1 ghost
+    ! cell to allow non-zero curls across simulation boundaries
 
     INTEGER :: ix
 
-    DO ix = 1, nx
+    DO ix = 0, nx+1
       ex(ix) = &
           - 0.5_num * (resistivity(ix+1) + resistivity(ix)) &
           * jx(ix)
@@ -270,6 +320,30 @@ CONTAINS
 
 
 
+  SUBROUTINE hybrid_E_bc
+
+    ! This script updates the ghost cells on the local processor, by either
+    ! passing over those from the neighbouring processor, or by ensuring the
+    ! curls beyond the boundary are zero
+
+    INTEGER :: i
+
+    ! Pass neighbouring ghost cells
+    CALL field_bc(ex, ng)
+    CALL field_bc(ey, ng)
+    CALL field_bc(ez, ng)
+
+    ! Special cases for boundary processors
+    DO i = 1, 2*c_ndims
+      CALL field_zero_curl(ex, i)
+      CALL field_zero_curl(ey, i)
+      CALL field_zero_curl(ez, i)
+    END DO
+
+  END SUBROUTINE hybrid_E_bc
+
+
+
   SUBROUTINE get_heat_capacity(heat_capacity)
 
     ! Calculates heat capacity as described by Davies, et al, (2002). Phys. Rev.
@@ -283,7 +357,7 @@ CONTAINS
     REAL(num) :: T_prime, hybrid_const_ZeV
     INTEGER :: ix
 
-    DO ix = 1, nx
+    DO ix = 1-ng, nx+ng
       T_prime = hybrid_const_ZeV * hybrid_Tb(ix)
       heat_capacity(ix) = 0.3_num &
           + 1.2_num * T_prime * (2.2_num + T_prime)/(1.1_num + T_prime)**2
@@ -307,7 +381,11 @@ CONTAINS
     REAL(num) :: frac_p, ux, uy, uz, frac_uz, frac
     REAL(num) :: sin_t, cos_t, cos_p, sin_t_cos_p, sin_t_sin_p
     REAL(num) :: p_new_2, weight, dE, part_x, part_C, delta_Tb
+    REAL(num) :: idx
+    INTEGER :: ix
     TYPE(particle), POINTER :: current, next
+
+    idx = 1.0_num/dx
 
     ! Generate a normally distributed random number for the scatter angle.
     ! The argument here refers to the standard deviation. The mean is
@@ -316,7 +394,7 @@ CONTAINS
     ! particles at a given timestep, t.
     rand_scatter = random_box_muller(1.0_num)
 
-    ! Cycle over all non-photon species
+    ! Loop over all non-photon species
     DO ispecies = 1, n_species
       current => species_list(ispecies)%attached_list%head
       IF (species_list(ispecies)%species_type == c_species_id_photon) CYCLE
@@ -400,13 +478,17 @@ CONTAINS
         ! unit volume, and dy & dz = 1m in epoch1d
         delta_Tb = 1.0_num/(hybrid_ne * part_C * kb)*(-dE / dx)
 
-        ! Write temperature change to the grid
-        CALL add_particle_var_to_grid(part_x, delta_Tb, hybrid_Tb)
+        ! Write temperature change to the grid (ignores particle shape)
+        ix = MAX(1,CEILING(part_x*idx))
+        hybrid_Tb(ix) = hybrid_Tb(ix) + delta_Tb
 
         current => next
 
       END DO
     END DO
+
+    ! Pass new temperature values to ghost cells of neighbouring processors
+    CALL field_bc(hybrid_Tb, ng)
 
   END SUBROUTINE hybrid_collisions
 
@@ -431,11 +513,15 @@ CONTAINS
       E2 = (0.5_num*(ex(ix) + ex(ix-1)))**2 + ey(ix)**2 + ez(ix)**2
 
       ! Calculate Ohmic heating, avoiding the 0/0 NaN
-      IF (resistivity(ix) > 0.0_num) THEN
+      IF (resistivity(ix) > 0.0_num .AND. &
+          heat_capacity(ix) > 0.0_num) THEN
         hybrid_Tb(ix) = hybrid_Tb(ix) &
             + E2*fac/(resistivity(ix) * heat_capacity(ix))
       END IF
     END DO
+
+    ! Pass new temperature values to ghost cells of neighbouring processors
+    CALL field_bc(hybrid_Tb, ng)
 
   END SUBROUTINE ohmic_heating
 
@@ -447,11 +533,35 @@ CONTAINS
 
     INTEGER :: ix
 
-    DO ix = 1, nx
+    DO ix = 1-ng, nx+ng
        resistivity(ix) = calc_resistivity(hybrid_Tb(ix))
     END DO
 
   END SUBROUTINE update_resistivity
+
+
+
+  SUBROUTINE field_zero_curl(field, boundary)
+
+    ! If we are on the simulation boundary, let the ghost cells match those of
+    ! the first ghost cell (e.g. by(nx+2:nx+ng) = by(nx+1)). This forces
+    ! the gradient across the first two ghost cells to be zero
+
+    INTEGER, INTENT(IN) :: boundary
+    REAL(num), DIMENSION(1-ng:), INTENT(INOUT) :: field
+    INTEGER :: i, nn
+
+    IF (boundary == c_bd_x_min .AND. x_min_boundary) THEN
+      DO i = 1, ng-1
+        field(-i) = field(0)
+      END DO
+    ELSE IF (boundary == c_bd_x_max .AND. x_max_boundary) THEN
+      DO i = 1, ng-1
+        field(nx+1+i) = field(nx+1)
+      END DO
+    END IF
+
+  END SUBROUTINE field_zero_curl
 
 
 
@@ -511,64 +621,6 @@ CONTAINS
     part_var = fac*part_var
 
   END SUBROUTINE hy_grid_centred_var_at_particle
-
-
-
-  SUBROUTINE add_particle_var_to_grid(part_x, part_var, grid)
-
-    ! Adds the value of a variable (part_var), which is evaluated on a particle
-    ! at position part_x, to the grid (grid). Particle weighting assumes we are
-    ! summing to a cell-centred variable (no stagger). This uses the same cell
-    ! indices and weighting as "hy_grid_centred_var_at_particle".
-
-    REAL(num), INTENT(IN) :: part_x
-    REAL(num), INTENT(INOUT) :: grid(1-ng:nx+ng)
-    REAL(num), INTENT(IN) :: part_var
-    INTEGER :: cell_x1
-    REAL(num) :: cell_x_r
-    REAL(num) :: cell_frac_x
-    REAL(num) :: scaled_part_var
-    REAL(num), DIMENSION(sf_min:sf_max) :: gx
-#ifdef PARTICLE_SHAPE_BSPLINE3
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (1.0_num / 24.0_num)**c_ndims
-#elif  PARTICLE_SHAPE_TOPHAT
-    REAL(num), PARAMETER :: fac = (1.0_num)**c_ndims
-#else
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (0.5_num)**c_ndims
-#endif
-
-#ifdef PARTICLE_SHAPE_TOPHAT
-    cell_x_r = part_x / dx - 0.5_num
-#else
-    cell_x_r = part_x / dx
-#endif
-    cell_x1 = FLOOR(cell_x_r + 0.5_num)
-    cell_frac_x = REAL(cell_x1, num) - cell_x_r
-    cell_x1 = cell_x1 + 1
-
-    scaled_part_var = fac*part_var
-
-#ifdef PARTICLE_SHAPE_BSPLINE3
-#include "bspline3/gx.inc"
-    grid(cell_x1-2) = grid(cell_x1-2) + gx(-2) * scaled_part_var
-    grid(cell_x1-1) = grid(cell_x1-1) + gx(-1) * scaled_part_var
-    grid(cell_x1  ) = grid(cell_x1  ) + gx( 0) * scaled_part_var
-    grid(cell_x1+1) = grid(cell_x1+1) + gx( 1) * scaled_part_var
-    grid(cell_x1+2) = grid(cell_x1+2) + gx( 2) * scaled_part_var
-#elif  PARTICLE_SHAPE_TOPHAT
-#include "tophat/gx.inc"
-    grid(cell_x1  ) = grid(cell_x1  ) + gx( 0) * scaled_part_var
-    grid(cell_x1+1) = grid(cell_x1+1) + gx( 1) * scaled_part_var
-#else
-#include "triangle/gx.inc"
-    grid(cell_x1-1) = grid(cell_x1-1) + gx(-1) * scaled_part_var
-    grid(cell_x1  ) = grid(cell_x1  ) + gx( 0) * scaled_part_var
-    grid(cell_x1+1) = grid(cell_x1+1) + gx( 1) * scaled_part_var
-#endif
-
-  END SUBROUTINE add_particle_var_to_grid
 
 #endif
 END MODULE hybrid

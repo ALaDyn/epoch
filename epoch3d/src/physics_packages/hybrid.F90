@@ -18,6 +18,7 @@ MODULE hybrid
 #ifdef HYBRID
 
   USE balance
+  USE boundary
   USE current_smooth
   USE diagnostics
   USE injectors
@@ -83,7 +84,9 @@ CONTAINS
       ! Evaluate fields a half timestep ahead of the particles
       IF (use_hybrid_fields) THEN
         CALL half_B_step
+        CALL hybrid_B_bc
         CALL calculate_E
+        CALL hybrid_E_bc
       END IF
 
       ! Logical flag set to true when particles can start to move
@@ -121,7 +124,7 @@ CONTAINS
         ! Migrate particle species if they pass the migration criteria
         IF (use_particle_migration) CALL migrate_particles(step)
 
-        ! For current smoothing, see housekeeping/current_smooth.F90
+        ! Pass current to neighbouring ranks (housekeeping/current_smooth.F90)
         CALL current_finish
 
         ! See housekeeping/partlist.F90
@@ -139,7 +142,9 @@ CONTAINS
       ! particles (note: main PIC loop also does this after the output dump)
       IF (use_hybrid_fields) THEN
         CALL half_B_step
+        CALL hybrid_B_bc
         CALL calculate_E
+        CALL hybrid_E_bc
       END IF
     END DO
 
@@ -155,46 +160,64 @@ CONTAINS
     REAL(num) :: resistivity_init
     INTEGER :: ix, iy, iz
 
-    ! Preset useful constants
-    hybrid_const_dx = 1.0_num / (mu0 * dx)
-    hybrid_const_dy = 1.0_num / (mu0 * dy)
-    hybrid_const_dz = 1.0_num / (mu0 * dz)
-    hybrid_const_K_to_eV = kb / q0
-    hybrid_const_dt_by_dx = dt / dx
-    hybrid_const_dt_by_dy = dt / dy
-    hybrid_const_dt_by_dz = dt / dz
-    hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
-    hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
-        / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
-    hybrid_const_ZeV = hybrid_Z**(-4.0_num/3.0_num) * hybrid_const_K_to_eV
+    IF (use_hybrid) THEN
+      ! Preset useful constants
+      hybrid_const_dx = 1.0_num / (mu0 * dx)
+      hybrid_const_dy = 1.0_num / (mu0 * dy)
+      hybrid_const_dz = 1.0_num / (mu0 * dz)
+      hybrid_const_K_to_eV = kb / q0
+      hybrid_const_dt_by_dx = 0.5_num * dt / dx
+      hybrid_const_dt_by_dy = 0.5_num * dt / dy
+      hybrid_const_dt_by_dz = 0.5_num * dt / dz
+      hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
+      hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
+          / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
+      hybrid_const_ZeV = hybrid_Z**(-4.0_num/3.0_num) * hybrid_const_K_to_eV
 
-    ! Allocate additional arrays for running in hybrid mode. These require extra
-    ! remapping scripts in balance.F90 (for domain change in load-balance)
-    ALLOCATE(resistivity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-    ALLOCATE(hybrid_Tb(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-    ALLOCATE(ion_charge(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-    ALLOCATE(ion_density(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-    ALLOCATE(ion_temp(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+      ! Allocate additional arrays for running in hybrid mode. These require
+      ! extra remapping scripts in balance.F90 (for domain change in
+      ! load-balance)
+      ALLOCATE(resistivity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+      ALLOCATE(hybrid_Tb(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+      ALLOCATE(ion_charge(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+      ALLOCATE(ion_density(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+      ALLOCATE(ion_temp(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
 
-    resistivity_init = calc_resistivity(hybrid_Tb_init)
+      resistivity_init = calc_resistivity(hybrid_Tb_init)
 
-    ! Initialise arrays
-    DO iz = 1, nz
-      DO iy = 1, ny
-        DO ix = 1, nx
-          ! Set background temperature and resistivity to those matching
-          ! hybrid_Tb_init, which is read in from input.deck
-          hybrid_Tb(ix,iy,iz) = hybrid_Tb_init
-          resistivity(ix,iy,iz) = resistivity_init
+      ! Initialise arrays
+      DO iz = 1-ng, nz+ng
+        DO iy = 1-ng, ny+ng
+          DO ix = 1-ng, nx+ng
+            ! Set background temperature and resistivity to those matching
+            ! hybrid_Tb_init, which is read in from input.deck
+            hybrid_Tb(ix,iy,iz) = hybrid_Tb_init
+            resistivity(ix,iy,iz) = resistivity_init
 
-          ! These arrays currently serve no purpose, but will be used when
-          ! ionisation routines are added
-          ion_charge(ix,iy,iz) = 0.0_num
-          ion_density(ix,iy,iz) = 0.0_num
-          ion_temp(ix,iy,iz) = 0.0_num
+            ! These arrays currently serve no purpose, but will be used when
+            ! ionisation routines are added
+            ion_charge(ix,iy,iz) = 0.0_num
+            ion_density(ix,iy,iz) = 0.0_num
+            ion_temp(ix,iy,iz) = 0.0_num
+          END DO
         END DO
       END DO
-    END DO
+
+      IF (rank == 0) PRINT*, 'Code is running in hybrid mode'
+
+    ELSE
+      ! Do not try to output hybrid variables if we aren't running in hybrid
+      ! mode
+      IF (rank == 0) THEN
+        PRINT*, ''
+        PRINT*, 'Code is not running in hybrid mode'
+        PRINT*, 'Any attempts to output hybrid-only variables (like ', &
+           'resistivity) will be ignored'
+        PRINT*, 'Switch off the -DHYBRID pre-processor flag to stop this ', &
+            'message from printing'
+        PRINT*, ''
+      END IF
+    END IF
 
   END SUBROUTINE initialise_hybrid
 
@@ -227,14 +250,16 @@ CONTAINS
     ! constant electric field and using:
     !
     ! dB/dt = -curl(E)
+    !
+    ! We calculate into 1 ghost cell to allow non-zero curls across simulation
+    ! boundaries
 
-    ! Calculate the initial electric field
     INTEGER :: ix, iy, iz
 
     ! Update B by half a timestep
-    DO iz = 1, nz
-      DO iy = 1, ny
-        DO ix = 1, nx
+    DO iz = 0, nz+1
+      DO iy = 0, ny+1
+        DO ix = 0, nx+1
           bx(ix, iy, iz) = bx(ix, iy, iz) &
               - hybrid_const_dt_by_dy * (ez(ix  , iy+1, iz  ) - ez(ix,iy,iz)) &
               + hybrid_const_dt_by_dz * (ey(ix  , iy  , iz+1) - ey(ix,iy,iz))
@@ -254,6 +279,30 @@ CONTAINS
 
 
 
+  SUBROUTINE hybrid_B_bc
+
+    ! This script updates the ghost cells on the local processor, by either
+    ! passing over those from the neighbouring processor, or by ensuring the
+    ! curls beyond the boundary are zero
+
+    INTEGER :: i
+
+    ! Pass neighbouring ghost cells
+    CALL field_bc(bx, ng)
+    CALL field_bc(by, ng)
+    CALL field_bc(bz, ng)
+
+    ! Special cases for boundary processors
+    DO i = 1, 2*c_ndims
+      CALL field_zero_curl(bx, i)
+      CALL field_zero_curl(by, i)
+      CALL field_zero_curl(bz, i)
+    END DO
+
+  END SUBROUTINE hybrid_B_bc
+
+
+
   SUBROUTINE calculate_E
 
     ! Calculates the electric field for the current values of global variables
@@ -264,13 +313,14 @@ CONTAINS
     ! We have precalculated hybrid_const_dx = 1/(mu_0*dx)
 
     ! Note that B is staggered from E, whereas J is evaulated at the same point
-    ! as E. Resistivity is a cell centred variable.
+    ! as E. Resistivity is a cell centred variable. We calculate into 1 ghost
+    ! cell to allow non-zero curls across simulation boundaries
 
     INTEGER :: ix, iy, iz
 
-    DO iz = 1,nz
-      DO iy = 1, ny
-        DO ix = 1, nx
+    DO iz = 0, nz+1
+      DO iy = 0, ny+1
+        DO ix = 0, nx+1
           ex(ix,iy,iz) = &
               + 0.5_num * (resistivity(ix+1,iy,iz) + resistivity(ix,iy,iz)) &
               * (+ hybrid_const_dy * (bz(ix,iy,iz) - bz(ix,iy-1,iz)) &
@@ -284,7 +334,7 @@ CONTAINS
                  - jy(ix,iy,iz))
 
           ez(ix,iy,iz) = &
-              + 0.5_num * (resistivity(ix,iy,iz) + resistivity(ix,iy,iz+1)) &
+              + 0.5_num * (resistivity(ix,iy,iz+1) + resistivity(ix,iy,iz)) &
               * (+ hybrid_const_dx * (by(ix,iy,iz) - by(ix-1,iy,iz)) &
                  - hybrid_const_dy * (bx(ix,iy,iz) - bx(ix,iy-1,iz)) &
                  - jz(ix,iy,iz))
@@ -293,6 +343,30 @@ CONTAINS
     END DO
 
   END SUBROUTINE calculate_E
+
+
+
+  SUBROUTINE hybrid_E_bc
+
+    ! This script updates the ghost cells on the local processor, by either
+    ! passing over those from the neighbouring processor, or by ensuring the
+    ! curls beyond the boundary are zero
+
+    INTEGER :: i
+
+    ! Pass neighbouring ghost cells
+    CALL field_bc(ex, ng)
+    CALL field_bc(ey, ng)
+    CALL field_bc(ez, ng)
+
+    ! Special cases for boundary processors
+    DO i = 1, 2*c_ndims
+      CALL field_zero_curl(ex, i)
+      CALL field_zero_curl(ey, i)
+      CALL field_zero_curl(ez, i)
+    END DO
+
+  END SUBROUTINE hybrid_E_bc
 
 
 
@@ -309,9 +383,9 @@ CONTAINS
     REAL(num) :: T_prime, hybrid_const_ZeV
     INTEGER :: ix, iy, iz
 
-    DO iz = 1, nz
-      DO iy = 1, ny
-        DO ix = 1, nx
+    DO iz = 1-ng, nz+ng
+      DO iy = 1-ng, ny+ng
+        DO ix = 1-ng, nx+ng
           T_prime = hybrid_const_ZeV * hybrid_Tb(ix,iy,iz)
           heat_capacity(ix,iy,iz) = 0.3_num &
               + 1.2_num * T_prime * (2.2_num + T_prime)/(1.1_num + T_prime)**2
@@ -337,7 +411,13 @@ CONTAINS
     REAL(num) :: frac_p, ux, uy, uz, frac_uz, frac
     REAL(num) :: sin_t, cos_t, cos_p, sin_t_cos_p, sin_t_sin_p
     REAL(num) :: p_new_2, weight, dE, part_x, part_y, part_z, part_C, delta_Tb
+    REAL(num) :: idx, idy, idz
+    INTEGER :: ix, iy, iz
     TYPE(particle), POINTER :: current, next
+
+    idx = 1.0_num/dx
+    idy = 1.0_num/dy
+    idz = 1.0_num/dz
 
     ! Generate a normally distributed random number for the scatter angle.
     ! The argument here refers to the standard deviation. The mean is
@@ -346,7 +426,7 @@ CONTAINS
     ! particles at a given timestep, t.
     rand_scatter = random_box_muller(1.0_num)
 
-    ! Cycle over all non-photon species
+    ! Loop over all non-photon species
     DO ispecies = 1, n_species
       current => species_list(ispecies)%attached_list%head
       IF (species_list(ispecies)%species_type == c_species_id_photon) CYCLE
@@ -434,13 +514,18 @@ CONTAINS
         delta_Tb = 1.0_num/(hybrid_ne * part_C * kb)*(-dE / (dx*dy*dz))
 
         ! Write temperature change to the grid
-        CALL add_particle_var_to_grid(part_x, part_y, part_z, delta_Tb, &
-            hybrid_Tb)
+        ix = MAX(1,CEILING(part_x*idx))
+        iy = MAX(1,CEILING(part_y*idy))
+        iz = MAX(1,CEILING(part_z*idz))
+        hybrid_Tb(ix,iy,iz) = hybrid_Tb(ix,iy,iz) + delta_Tb
 
         current => next
 
       END DO
     END DO
+
+    ! Pass new temperature values to ghost cells of neighbouring processors
+    CALL field_bc(hybrid_Tb, ng)
 
   END SUBROUTINE hybrid_collisions
 
@@ -469,13 +554,17 @@ CONTAINS
               +(0.5_num*(ez(ix,iy,iz) + ez(ix,iy,iz-1)))**2
 
           ! Calculate Ohmic heating, avoiding the 0/0 NaN
-          IF (resistivity(ix,iy,iz) > 0.0_num) THEN
+          IF (resistivity(ix,iy,iz) > 0.0_num .AND. &
+              heat_capacity(ix,iy,iz) > 0.0_num) THEN
             hybrid_Tb(ix,iy,iz) = hybrid_Tb(ix,iy,iz) &
                 + E2*fac/(resistivity(ix,iy,iz) * heat_capacity(ix,iy,iz))
           END IF
         END DO
       END DO
     END DO
+
+    ! Pass new temperature values to ghost cells of neighbouring processors
+    CALL field_bc(hybrid_Tb, ng)
 
   END SUBROUTINE ohmic_heating
 
@@ -487,15 +576,57 @@ CONTAINS
 
     INTEGER :: ix, iy, iz
 
-    DO iz = 1, nz
-      DO iy = 1, ny
-        DO ix = 1, nx
+    DO iz = 1-ng, nz+ng
+      DO iy = 1-ng, ny+ng
+        DO ix = 1-ng, nx+ng
           resistivity(ix, iy, iz) = calc_resistivity(hybrid_Tb(ix, iy, iz))
         END DO
       END DO
     END DO
 
   END SUBROUTINE update_resistivity
+
+
+
+  SUBROUTINE field_zero_curl(field, boundary)
+
+    ! If we are on the simulation boundary, let the ghost cells match those of
+    ! the first ghost cell (e.g. by(nx+2:nx+ng,1,1) = by(nx+1,1,1)). This forces
+    ! the gradient across the first two ghost cells to be zero
+
+    INTEGER, INTENT(IN) :: boundary
+    REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(INOUT) :: field
+    INTEGER :: i, nn
+
+    IF (boundary == c_bd_x_min .AND. x_min_boundary) THEN
+      DO i = 1, ng-1
+        field(-i,:,:) = field(0,:,:)
+      END DO
+    ELSE IF (boundary == c_bd_x_max .AND. x_max_boundary) THEN
+      DO i = 1, ng-1
+        field(nx+1+i,:,:) = field(nx+1,:,:)
+      END DO
+
+    ELSE IF (boundary == c_bd_y_min .AND. y_min_boundary) THEN
+      DO i = 1, ng-1
+        field(:,-i,:) = field(:,0,:)
+      END DO
+    ELSE IF (boundary == c_bd_y_max .AND. y_max_boundary) THEN
+      DO i = 1, ng-1
+        field(:,ny+1+i,:) = field(:,ny+1,:)
+      END DO
+
+    ELSE IF (boundary == c_bd_z_min .AND. z_min_boundary) THEN
+      DO i = 1, ng-1
+        field(:,:,-i) = field(:,:,0)
+      END DO
+    ELSE IF (boundary == c_bd_z_max .AND. z_max_boundary) THEN
+      DO i = 1, ng-1
+        field(:,:,ny+1+i) = field(:,:,ny+1)
+      END DO
+    END IF
+
+  END SUBROUTINE field_zero_curl
 
 
 
@@ -559,96 +690,6 @@ CONTAINS
     part_var = fac*part_var
 
   END SUBROUTINE hy_grid_centred_var_at_particle
-
-
-
-  SUBROUTINE add_particle_var_to_grid(part_x, part_y, part_z, part_var, grid)
-
-    ! Adds the value of a variable (part_var), which is evaluated on a particle
-    ! at position (part_x, part_y, part_z), to the grid (grid). Particle
-    ! weighting assumes we are summing to a cell-centred variable (no stagger).
-    ! This uses the same cell indices and weighting as
-    ! "hy_grid_centred_var_at_particle".
-
-    REAL(num), INTENT(IN) :: part_x, part_y, part_z
-    REAL(num), INTENT(INOUT) :: grid(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng)
-    REAL(num), INTENT(IN) :: part_var
-    INTEGER :: cell_x1, cell_y1, cell_z1
-    REAL(num) :: cell_x_r, cell_y_r, cell_z_r
-    REAL(num) :: cell_frac_x, cell_frac_y, cell_frac_z
-    REAL(num), DIMENSION(sf_min:sf_max) :: gx, gy, gz
-    REAL(num), ALLOCATABLE :: gzy(:,:)
-    INTEGER :: igz, igy
-    REAL(num) :: scaled_part_var
-#ifdef PARTICLE_SHAPE_BSPLINE3
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (1.0_num / 24.0_num)**c_ndims
-#elif  PARTICLE_SHAPE_TOPHAT
-    REAL(num), PARAMETER :: fac = (1.0_num)**c_ndims
-#else
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (0.5_num)**c_ndims
-#endif
-
-#ifdef PARTICLE_SHAPE_TOPHAT
-    cell_x_r = part_x / dx - 0.5_num
-    cell_y_r = part_y / dy - 0.5_num
-    cell_z_r = part_z / dz - 0.5_num
-#else
-    cell_x_r = part_x / dx
-    cell_y_r = part_y / dy
-    cell_z_r = part_z / dz
-#endif
-    cell_x1 = FLOOR(cell_x_r + 0.5_num)
-    cell_frac_x = REAL(cell_x1, num) - cell_x_r
-    cell_x1 = cell_x1 + 1
-    cell_y1 = FLOOR(cell_y_r + 0.5_num)
-    cell_frac_y = REAL(cell_y1, num) - cell_y_r
-    cell_y1 = cell_y1 + 1
-    cell_z1 = FLOOR(cell_z_r + 0.5_num)
-    cell_frac_z = REAL(cell_z1, num) - cell_z_r
-    cell_z1 = cell_z1 + 1
-
-    scaled_part_var = fac*part_var
-
-#ifdef PARTICLE_SHAPE_BSPLINE3
-#include "bspline3/gx.inc"
-    ! Pre-calculate gz(i)*gy(j) for speed
-    ALLOCATE(gzy(1:5,1:5))
-    DO igy = 1,5
-      DO igz = 1,5
-        gzy(igz,igy) = gz(igz) * gy(igy)
-      END DO
-    END DO
-#include "bspline3/part_to_grid.inc"
-    DEALLOCATE (gzy)
-
-#elif  PARTICLE_SHAPE_TOPHAT
-#include "tophat/gx.inc"
-    ! Pre-calculate gz(i)*gy(j) for speed
-    ALLOCATE(gzy(1:2,1:2))
-    DO igy = 1,2
-      DO igz = 1,2
-        gzy(igz,igy) = gz(igz) * gy(igy)
-      END DO
-    END DO
-#include "tophat/part_to_grid.inc"
-    DEALLOCATE (gzy)
-
-#else
-#include "triangle/gx.inc"
-    ! Pre-calculate gz(i)*gy(j) for speed
-    ALLOCATE(gzy(1:2,1:2))
-    DO igy = 1,2
-      DO igz = 1,2
-        gzy(igz,igy) = gz(igz) * gy(igy)
-      END DO
-    END DO
-#include "triangle/part_to_grid.inc"
-    DEALLOCATE (gzy)
-#endif
-
-  END SUBROUTINE add_particle_var_to_grid
 
 #endif
 END MODULE hybrid

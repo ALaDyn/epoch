@@ -470,10 +470,14 @@ CONTAINS
           c_stagger_jz, jz)
 
 #ifdef HYBRID
-      CALL write_field(c_dump_hybrid_resist, code, 'resistivity', &
-          'Background/Resistivity', 'V.m/A', c_stagger_cell_centre, resistivity)
-      CALL write_field(c_dump_hybrid_Tb, code, 'Tb', &
-          'Background/Temperature', 'K', c_stagger_cell_centre, hybrid_Tb)
+      ! These variables only exist if we are running in hybrid mode
+      IF (use_hybrid) THEN
+        CALL write_field(c_dump_hybrid_resist, code, 'resistivity', &
+            'Background/Resistivity', 'V.m/A', c_stagger_cell_centre, &
+            resistivity)
+        CALL write_field(c_dump_hybrid_Tb, code, 'Tb', &
+            'Background/Temperature', 'K', c_stagger_cell_centre, hybrid_Tb)
+      END IF
 #endif
 
       IF (cpml_boundaries) THEN
