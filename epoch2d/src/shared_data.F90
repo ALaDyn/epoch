@@ -1095,10 +1095,29 @@ MODULE shared_data
   ! Hybrid mode - Written by S. J. Morris
   ! Based on J. R. Davies, et al, 1997. Phys. Rev. E, 56(6), p.7193.
   !----------------------------------------------------------------------------
+
+  ! Solid type
+  TYPE solid
+    ! Input variables
+    REAL(num) :: hybrid_ni = -1.0_num, hybrid_Iex = -1.0_num
+    INTEGER :: hybrid_Z = -1
+    ! Derived variables
+    REAL(num) :: hybrid_ne, hybrid_D, hybrid_ln_s, hybrid_const_ZeV
+    REAL(num), ALLOCATABLE :: heat_capacity(:,:)
+  END TYPE solid
+
+  TYPE(solid), ALLOCATABLE :: solid_array(:)
+
+  ! Variables used by deck_solid_block to create the solid array
+  INTEGER :: solid_count = 0
+  LOGICAL :: made_solid_array = .FALSE.
+  INTEGER :: solid_index = 1
+
   ! Additional constants
   REAL(num) :: hybrid_const_dx, hybrid_const_dy
   REAL(num) :: hybrid_const_dt_by_dx, hybrid_const_dt_by_dy
   REAL(num) :: hybrid_const_K_to_eV, hybrid_D, hybrid_ln_S, hybrid_const_ZeV
+  REAL(num) :: hybrid_const_heat
 
   ! Additional field variables, resisitivity and temperatures of the background
   REAL(num), ALLOCATABLE, DIMENSION(:,:) :: resistivity, hybrid_Tb
@@ -1108,9 +1127,7 @@ MODULE shared_data
 
   ! Deck variables
   LOGICAL :: use_hybrid_fields = .FALSE., use_hybrid_collisions = .FALSE.
-  REAL(num) :: hybrid_ni = 0.0_num, hybrid_ne = 0.0_num
-  REAL(num) :: hybrid_Tb_init = 0.0_num, hybrid_Iex = 0.0_num
-  INTEGER :: hybrid_Z = 0
+  REAL(num) :: hybrid_Tb_init = 0.0_num
 #endif
   LOGICAL :: use_hybrid = .FALSE.
 

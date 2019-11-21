@@ -33,6 +33,7 @@ MODULE deck
   USE deck_collision_block
   USE deck_part_from_file_block
   USE deck_hybrid_block
+  USE deck_solid_block
   USE deck_landau_lifshitz_block
 #ifdef PHOTONS
   USE photons
@@ -102,6 +103,7 @@ CONTAINS
     CALL probe_deck_initialise
 #endif
     CALL hybrid_deck_initialise
+    CALL solid_deck_initialise
     CALL landau_lifshitz_deck_initialise
     CALL qed_deck_initialise
     CALL bremsstrahlung_deck_initialise
@@ -134,6 +136,7 @@ CONTAINS
     CALL probe_deck_finalise
 #endif
     CALL hybrid_deck_finalise
+    CALL solid_deck_finalise
     CALL landau_lifshitz_deck_finalise
     CALL qed_deck_finalise
     CALL bremsstrahlung_deck_finalise
@@ -182,6 +185,8 @@ CONTAINS
 #endif
     ELSE IF (str_cmp(block_name, 'hybrid')) THEN
       CALL hybrid_block_start
+    ELSE IF (str_cmp(block_name, 'solid')) THEN
+      CALL solid_block_start
     ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
       CALL landau_lifshitz_block_start
     ELSE IF (str_cmp(block_name, 'qed')) THEN
@@ -237,6 +242,8 @@ CONTAINS
 #endif
     ELSE IF (str_cmp(block_name, 'hybrid')) THEN
       CALL hybrid_block_end
+    ELSE IF (str_cmp(block_name, 'solid')) THEN
+      CALL solid_block_end
     ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
       CALL landau_lifshitz_block_end
     ELSE IF (str_cmp(block_name, 'qed')) THEN
@@ -325,6 +332,9 @@ CONTAINS
       RETURN
     ELSE IF (str_cmp(block_name, 'hybrid')) THEN
       handle_block = hybrid_block_handle_element(block_element, block_value)
+      RETURN
+    ELSE IF (str_cmp(block_name, 'solid')) THEN
+      handle_block = solid_block_handle_element(block_element, block_value)
       RETURN
     ELSE IF (str_cmp(block_name, 'landau_lifshitz')) THEN
       handle_block = &

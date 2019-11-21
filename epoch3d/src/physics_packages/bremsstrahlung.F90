@@ -54,8 +54,8 @@ CONTAINS
             WRITE(io,*)
             WRITE(io,*) '*** WARNING ***'
             WRITE(io,*) 'Electron and photon species are either ', &
-                'unspecified or contain no'
-            WRITE(io,*) 'particles. Bremsstrahlung routines will do nothing.'
+                'unspecified or contain no particles initially. ', &
+                'Bremsstrahlung routines may do nothing.'
           END DO
         END IF
       END IF
@@ -163,21 +163,43 @@ CONTAINS
       ! For each unique atomic number, Z, let Z_flags(Z) = 1
       ALLOCATE(Z_flags(100))
       Z_flags(:) = 0
-      DO i_species = 1, n_species
-        Z_temp = species_list(i_species)%atomic_no
-        IF (Z_temp > 0 .AND. Z_temp < 101) THEN
-          Z_flags(Z_temp) = 1;
+      IF (.NOT. use_hybrid) THEN
+        ! In normal PIC, we loop over all ion species
+        DO i_species = 1, n_species
+          Z_temp = species_list(i_species)%atomic_no
+          IF (Z_temp > 0 .AND. Z_temp < 101) THEN
+            Z_flags(Z_temp) = 1;
 
-        ! We only have tables up to Z=100
-        ELSE IF (Z_temp > 100) THEN
-          DO iu = 1, nio_units ! Print to stdout and to file
-            io = io_units(iu)
-            WRITE(io,*) '*** WARNING ***'
-            WRITE(io,*) 'Species with atomic numbers over 100 cannot be ', &
-                'modelled using bremsstrahlung libraries, and will be ignored'
-          END DO
-        END IF
-      END DO
+          ! We only have tables up to Z=100
+          ELSE IF (Z_temp > 100) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*) '*** WARNING ***'
+              WRITE(io,*) 'Species with atomic numbers over 100 cannot be ', &
+                  'modelled using bremsstrahlung libraries, and will be ignored'
+            END DO
+          END IF
+        END DO
+      ELSE
+#ifdef HYBRID
+        ! In hybrid PIC, we loop over all solid species
+        DO i_species = 1, solid_count
+          Z_temp = solid_array(i_species)%hybrid_Z
+          IF (Z_temp > 0 .AND. Z_temp < 101) THEN
+            Z_flags(Z_temp) = 1;
+
+          ! We only have tables up to Z=100
+          ELSE IF (Z_temp > 100) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*) '*** WARNING ***'
+              WRITE(io,*) 'Species with atomic numbers over 100 cannot be ', &
+                  'modelled using bremsstrahlung libraries, and will be ignored'
+            END DO
+          END IF
+        END DO
+#endif
+      END IF
 
       ! Create brem_array to store tables for each atomic number, Z. The value
       ! of Z_to_index(Z) is the brem_array index for tables of atomic number Z.
@@ -539,14 +561,14 @@ CONTAINS
             part_y = current%part_pos(2) - y_grid_min_local
             part_z = current%part_pos(3) - z_grid_min_local
             CALL grid_centred_var_at_particle(part_x, part_y, part_z, part_ni,&
-                iZ, grid_num_density_ion)
+                grid_num_density_ion)
 
             ! Update the optical depth for the screening option chosen
             IF (use_plasma_screening) THEN
 
               !Obtain extra parameters needed for plasma screening model
               CALL grid_centred_var_at_particle(part_x, part_y, part_z, &
-                  part_root_Te_over_ne, iZ, grid_root_temp_over_num)
+                  part_root_Te_over_ne, grid_root_temp_over_num)
 
               plasma_factor = get_plasma_factor( &
                   NINT(species_list(iZ)%charge/q0), Z_temp, &
@@ -579,6 +601,99 @@ CONTAINS
     END IF
 
   END SUBROUTINE bremsstrahlung_update_optical_depth
+
+
+
+#ifdef HYBRID
+  ! Updates the optical depth for electrons. This subroutine is responsible for
+  ! also calling the function which calculates the optical depth change, and
+  ! calling the generate_photon subroutine. This subroutine serves as the main
+  ! interface to the bremsstrahlung module for main-loop processes in
+  ! hybrid.F90
+  SUBROUTINE hybrid_bremsstrahlung_update_optical_depth
+
+    INTEGER :: ispecies, iZ, Z_temp, i_sol
+    TYPE(particle), POINTER :: current
+    REAL(num) :: grid_num_density_ion(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng)
+    REAL(num) :: part_ux, part_uy, part_uz, gamma_rel
+    REAL(num) :: part_x, part_y, part_z, part_E, part_ni, part_v
+    LOGICAL, SAVE :: plasma_warning = .TRUE.
+
+    ! Calculate electron number density and temperature
+    IF (use_plasma_screening) THEN
+      IF (plasma_warning .AND. rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*, 'The hybrid mode does not currently support ionisation, ', &
+           'so no plasma-based cross section enhancement will be modelled'
+      END IF
+    END IF
+
+    ! Calculate the number density of each ion species
+    DO i_sol = 1, solid_count
+
+      ! Identify if the atomic number is greater than 1, but less than 100
+      Z_temp = solid_array(i_sol)%hybrid_Z
+      IF (Z_temp < 1 .OR. Z_temp > 100) THEN
+        CYCLE
+      ENDIF
+
+      grid_num_density_ion = solid_array(i_sol)%hybrid_ni
+
+      ! Update the optical depth for each electron species
+      DO ispecies = 1, n_species
+
+        ! Only update optical_depth_bremsstrahlung for the electron species
+        IF (species_list(ispecies)%species_type /= c_species_id_electron) CYCLE
+
+        ! Cycle through all electrons in this species
+        current => species_list(ispecies)%attached_list%head
+        DO WHILE(ASSOCIATED(current))
+
+          ! Get electron energy
+          part_ux = current%part_p(1) / mc0
+          part_uy = current%part_p(2) / mc0
+          part_uz = current%part_p(3) / mc0
+          gamma_rel = SQRT(part_ux**2 + part_uy**2 + part_uz**2 + 1.0_num)
+          part_E = gamma_rel*m0*c**2
+          current%particle_energy = part_E
+
+          ! Don't update the optical depth if the particle hasn't moved
+          IF (gamma_rel - 1.0_num < 1.0e-15_num) THEN
+            current => current%next
+            CYCLE
+          END IF
+
+          ! Get electron speed
+          part_v = SQRT(current%part_p(1)**2 + current%part_p(2)**2 + &
+              current%part_p(3)**2) * c**2 / part_E
+
+          !Get number density at electron
+          part_x = current%part_pos(1) - x_grid_min_local
+          part_y = current%part_pos(2) - y_grid_min_local
+          part_z = current%part_pos(3) - z_grid_min_local
+          CALL grid_centred_var_at_particle(part_x, part_y, part_z, part_ni, &
+              grid_num_density_ion)
+
+          current%optical_depth_bremsstrahlung = &
+              current%optical_depth_bremsstrahlung &
+              - delta_optical_depth(Z_temp, part_E, part_v, part_ni, 1.0_num)
+
+          ! If optical depth dropped below zero generate photon and reset
+          ! optical depth
+          IF (current%optical_depth_bremsstrahlung <= 0.0_num) THEN
+            CALL generate_photon(current, Z_temp, &
+                bremsstrahlung_photon_species)
+            current%optical_depth_bremsstrahlung = reset_optical_depth()
+          END IF
+
+          current => current%next
+
+        END DO
+      END DO
+    END DO
+
+  END SUBROUTINE hybrid_bremsstrahlung_update_optical_depth
+#endif
 
 
 
@@ -712,10 +827,9 @@ CONTAINS
   ! over the particle shape for a particle at position (part_x, part_y, part_z)
   ! and of species current_species
   SUBROUTINE grid_centred_var_at_particle(part_x, part_y, part_z, part_var, &
-      current_species, grid_var)
+      grid_var)
 
     REAL(num), INTENT(in) :: part_x, part_y, part_z
-    INTEGER, INTENT(in) :: current_species
     REAL(num), INTENT(in) :: grid_var(1-ng:nx+ng, 1-ng:ny+ng, 1-ng:nz+ng)
     REAL(num), INTENT(out) :: part_var
     INTEGER :: cell_x1, cell_y1, cell_z1

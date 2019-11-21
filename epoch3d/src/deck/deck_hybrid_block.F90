@@ -100,39 +100,11 @@ CONTAINS
       RETURN
     END IF
 
-    IF (str_cmp(element, 'ni') &
-        .OR. str_cmp(element, 'background_ni') &
-        .OR. str_cmp(element, 'hybrid_ni')) THEN
-      hybrid_ni = as_real_print(value, element, errcode)
-      RETURN
-    END IF
-
-    IF (str_cmp(element, 'ne') &
-        .OR. str_cmp(element, 'background_ne') &
-        .OR. str_cmp(element, 'hybrid_ne')) THEN
-      hybrid_ne = as_real_print(value, element, errcode)
-      RETURN
-    END IF
-
-    IF (str_cmp(element, 'atomic_no') &
-        .OR. str_cmp(element, 'background_Z') &
-        .OR. str_cmp(element, 'hybrid_Z')) THEN
-      hybrid_Z = as_integer_print(value, element, errcode)
-      RETURN
-    END IF
-
     IF (str_cmp(element, 'temperature') &
         .OR. str_cmp(element, 'background_temp') &
         .OR. str_cmp(element, 'hybrid_temp') &
         .OR. str_cmp(element, 'start_temp')) THEN
       hybrid_Tb_init = as_real_print(value, element, errcode)
-      RETURN
-    END IF
-
-    IF (str_cmp(element, 'I') &
-        .OR. str_cmp(element, 'I_ex') &
-        .OR. str_cmp(element, 'excitation_energy')) THEN
-      hybrid_Iex = as_real_print(value, element, errcode)
       RETURN
     END IF
 
@@ -153,21 +125,6 @@ CONTAINS
     errcode = c_err_none
 
 #ifdef HYBRID
-    IF (hybrid_ni < 0.0_num .OR. hybrid_ne < 0.0) THEN
-      IF (rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*)
-          WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'Please set the background ion and electron number &
-              densities to positive values.'
-          WRITE(io,*) 'Code will terminate.'
-        END DO
-      END IF
-
-      errcode = c_err_bad_value + c_err_terminate
-    END IF
-
     IF (hybrid_Tb_init < 0.0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file

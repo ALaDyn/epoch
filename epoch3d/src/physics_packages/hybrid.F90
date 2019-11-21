@@ -41,7 +41,6 @@ CONTAINS
 
   SUBROUTINE run_hybrid_PIC(push, halt, force_dump)
 
-    REAL(num), ALLOCATABLE :: heat_capacity(:,:,:)
     LOGICAL :: push, halt, force_dump
 
     ! A copy of the EPOCH PIC loop, modified to run in the hybrid scheme
@@ -77,7 +76,7 @@ CONTAINS
       ! Bremsstrahlung radiation calculation (photons can be generated)
       IF (use_bremsstrahlung .AND. time > bremsstrahlung_start_time &
           .AND. push) THEN
-        CALL bremsstrahlung_update_optical_depth()
+        CALL hybrid_bremsstrahlung_update_optical_depth()
       END IF
 #endif
 
@@ -106,17 +105,16 @@ CONTAINS
 
         ! Obtain heat capacity to calculate the temperature change in
         ! hybrid_collisions and ohmic_heating
-        ALLOCATE(heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
-        CALL get_heat_capacity(heat_capacity)
+        CALL get_heat_capacity
 
         ! Calculates collisional drag/scattering, and updates grid temperature
         IF (use_hybrid_collisions) THEN
-          CALL hybrid_collisions(heat_capacity)
+          CALL hybrid_collisions
         END IF
 
         ! Updates grid temperature due to Ohmic heating
-        CALL ohmic_heating(heat_capacity)
-        DEALLOCATE(heat_capacity)
+        CALL ohmic_heating
+        CALL clear_heat_capacity
 
         ! Now that temperature has been fully updated, re-evaluate resistivity
         CALL update_resistivity
@@ -157,8 +155,9 @@ CONTAINS
     ! This subroutine initialises the hybrid arrays, and sets the values of some
     ! constants, to speed up the code
 
-    REAL(num) :: resistivity_init
-    INTEGER :: ix, iy, iz
+    REAL(num) :: resistivity_init, sum_ne
+    INTEGER :: ix, iy, iz, i_sol
+    INTEGER :: io, iu
 
     IF (use_hybrid) THEN
       ! Preset useful constants
@@ -169,10 +168,21 @@ CONTAINS
       hybrid_const_dt_by_dx = 0.5_num * dt / dx
       hybrid_const_dt_by_dy = 0.5_num * dt / dy
       hybrid_const_dt_by_dz = 0.5_num * dt / dz
-      hybrid_D = 0.5_num * hybrid_ne * q0**4 / pi / (epsilon0**2)
-      hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
-          / (hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
-      hybrid_const_ZeV = hybrid_Z**(-4.0_num/3.0_num) * hybrid_const_K_to_eV
+      sum_ne = 0
+      DO i_sol = 1, solid_count
+        solid_array(i_sol)%hybrid_ne = solid_array(i_sol)%hybrid_Z &
+            * solid_array(i_sol)%hybrid_ni
+        solid_array(i_sol)%hybrid_D = 0.5_num * solid_array(i_sol)%hybrid_ne &
+            * q0**4 / pi / (epsilon0**2)
+        solid_array(i_sol)%hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
+            / (solid_array(i_sol)%hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
+        solid_array(i_sol)%hybrid_const_ZeV = &
+            solid_array(i_sol)%hybrid_Z**(-4.0_num/3.0_num) &
+            * hybrid_const_K_to_eV
+
+        sum_ne = sum_ne + solid_array(i_sol)%hybrid_ne
+      END DO
+      hybrid_const_heat = 1.0_num/(kb * sum_ne**2)
 
       ! Allocate additional arrays for running in hybrid mode. These require
       ! extra remapping scripts in balance.F90 (for domain change in
@@ -201,6 +211,71 @@ CONTAINS
             ion_temp(ix,iy,iz) = 0.0_num
           END DO
         END DO
+      END DO
+
+      ! Do we have a solid background?
+      IF (solid_count == 0) THEN
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*)
+            WRITE(io,*) '*** ERROR ***'
+            WRITE(io,*) 'No solids specified! Please set all solid ion ', &
+                'number densities to positive values.'
+            WRITE(io,*) 'Code will terminate.'
+          END DO
+        END IF
+        errcode = c_err_bad_value + c_err_terminate
+      END IF
+
+      ! Check the solid parameters have been entered correctly
+      DO i_sol = 1, solid_count
+
+        ! Check ion number density is positive
+        IF (solid_array(i_sol)%hybrid_ni < 0.0_num) THEN
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Please set all solid ion number densities to ', &
+                  'positive values.'
+              WRITE(io,*) 'Code will terminate.'
+            END DO
+          END IF
+          errcode = c_err_bad_value + c_err_terminate
+        END IF
+
+        ! Check the atomic number is positive
+        IF (solid_array(i_sol)%hybrid_Z < 0.0_num) THEN
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Please set all solid atomic numbers to positive ', &
+                  'values.'
+              WRITE(io,*) 'Code will terminate.'
+            END DO
+          END IF
+          errcode = c_err_bad_value + c_err_terminate
+        END IF
+
+        ! Check the mean excitation energy is positive (only used in collisions)
+        IF (solid_array(i_sol)%hybrid_Iex < 0.0_num &
+            .AND. use_hybrid_collisions) THEN
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Please set all solid mean excitation energies to ', &
+                  'positive values for hybrid collisions'
+              WRITE(io,*) 'Code will terminate.'
+            END DO
+          END IF
+          errcode = c_err_bad_value + c_err_terminate
+        END IF
       END DO
 
       IF (rank == 0) PRINT*, 'Code is running in hybrid mode'
@@ -326,7 +401,6 @@ CONTAINS
               * (+ hybrid_const_dy * (bz(ix,iy,iz) - bz(ix,iy-1,iz)) &
                  - hybrid_const_dz * (by(ix,iy,iz) - by(ix,iy,iz-1)) &
                  - jx(ix,iy,iz))
-
           ey(ix,iy,iz) = &
               + 0.5_num * (resistivity(ix,iy+1,iz) + resistivity(ix,iy,iz)) &
               * (+ hybrid_const_dz * (bx(ix,iy,iz) - bx(ix,iy,iz-1)) &
@@ -370,25 +444,29 @@ CONTAINS
 
 
 
-  SUBROUTINE get_heat_capacity(heat_capacity)
+  SUBROUTINE get_heat_capacity
 
     ! Calculates heat capacity as described by Davies, et al, (2002). Phys. Rev.
-    ! E, 65(2), 026407
+    ! E, 65(2), 026407, for each element of solid_array
     !
     ! C = 0.3 + 1.2*T'*(2.2 + T')/(1.1 + T')^2
     !
     ! Where T' = Z^(-4/3) * Tb, and Tb is measured in eV
 
-    REAL(num), INTENT(OUT) :: heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
-    REAL(num) :: T_prime, hybrid_const_ZeV
-    INTEGER :: ix, iy, iz
+    REAL(num) :: T_prime
+    INTEGER :: ix, iy, iz, i_sol
 
-    DO iz = 1-ng, nz+ng
-      DO iy = 1-ng, ny+ng
-        DO ix = 1-ng, nx+ng
-          T_prime = hybrid_const_ZeV * hybrid_Tb(ix,iy,iz)
-          heat_capacity(ix,iy,iz) = 0.3_num &
-              + 1.2_num * T_prime * (2.2_num + T_prime)/(1.1_num + T_prime)**2
+    DO i_sol = 1, solid_count
+      ALLOCATE(solid_array(i_sol)%heat_capacity(1-ng:nx+ng,1-ng:ny+ng, &
+          1-ng:nz+ng))
+
+      DO iz = 1-ng, nz+ng
+        DO iy = 1-ng, ny+ng
+          DO ix = 1-ng, nx+ng
+            T_prime = solid_array(i_sol)%hybrid_const_ZeV * hybrid_Tb(ix,iy,iz)
+            solid_array(i_sol)%heat_capacity(ix,iy,iz) = 0.3_num &
+                + 1.2_num * T_prime * (2.2_num + T_prime)/(1.1_num + T_prime)**2
+          END DO
         END DO
       END DO
     END DO
@@ -397,14 +475,14 @@ CONTAINS
 
 
 
-  SUBROUTINE hybrid_collisions(heat_capacity)
+  SUBROUTINE hybrid_collisions
 
     ! Calculates collisional drag/scattering, and updates grid temperature based
     ! on energy lost by the particles
 
-    REAL(num), INTENT(IN) :: heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
     INTEGER :: ispecies
     INTEGER(i8) :: ipart
+    REAL(num) :: heat_const
     REAL(num) :: ipart_mc, m2c4
     REAL(num) :: px, py, pz, p, gamma, v, ipart_KE, ln_lambda_L, delta_p
     REAL(num) :: rand1, rand2, rand_scatter, ln_lambda_S, delta_theta, delta_phi
@@ -412,7 +490,7 @@ CONTAINS
     REAL(num) :: sin_t, cos_t, cos_p, sin_t_cos_p, sin_t_sin_p
     REAL(num) :: p_new_2, weight, dE, part_x, part_y, part_z, part_C, delta_Tb
     REAL(num) :: idx, idy, idz
-    INTEGER :: ix, iy, iz
+    INTEGER :: ix, iy, iz, i_sol
     TYPE(particle), POINTER :: current, next
 
     idx = 1.0_num/dx
@@ -426,94 +504,104 @@ CONTAINS
     ! particles at a given timestep, t.
     rand_scatter = random_box_muller(1.0_num)
 
-    ! Loop over all non-photon species
-    DO ispecies = 1, n_species
-      current => species_list(ispecies)%attached_list%head
-      IF (species_list(ispecies)%species_type == c_species_id_photon) CYCLE
+    ! 1 / (kb * sum(ne) * dx * dy * dz)
+    heat_const = hybrid_const_heat / (dx * dy * dz)
 
-      ipart_mc  = 1.0_num / (c * species_list(ispecies)%mass)
-      m2c4 = species_list(ispecies)%mass**2 * c**4
+    ! Loop over all solids
+    DO i_sol = 1, solid_count
 
-      ! Cycle over all particles in the species
-      DO ipart = 1, species_list(ispecies)%attached_list%count
-        next => current%next
+      ! Loop over all non-photon species
+      DO ispecies = 1, n_species
+        current => species_list(ispecies)%attached_list%head
+        IF (species_list(ispecies)%species_type == c_species_id_photon) CYCLE
 
-        ! Find collisional drag momentum loss
-        px = current%part_p(1)
-        py = current%part_p(2)
-        pz = current%part_p(3)
-        p = SQRT(px**2 + py**2 + pz**2)
-        gamma = SQRT((p * ipart_mc)**2 + 1.0_num)
-        v = p * ipart_mc * c / gamma
-        ipart_KE = (gamma - 1.0_num) * species_list(ispecies)%mass * c**2
-        ln_lambda_L = LOG(ipart_KE/hybrid_Iex) + 0.5_num*LOG(gamma + 1.0_num) &
-            + 0.909_num/gamma**2 - 0.818_num/gamma - 0.246_num
-        delta_p = - 0.5_num * hybrid_D / (m0 * v**2) * ln_lambda_L * dt
+        ipart_mc  = 1.0_num / (c * species_list(ispecies)%mass)
+        m2c4 = species_list(ispecies)%mass**2 * c**4
 
-        ! Calculate scattering angles
-        ln_lambda_S = LOG(hybrid_ln_S * p)
-        delta_theta = SQRT(hybrid_Z * hybrid_D * ln_lambda_S  * dt / v) &
-            * rand_scatter / p
-        delta_phi = 2.0_num * pi * random()
+        ! Loop over all particles in the species
+        DO ipart = 1, species_list(ispecies)%attached_list%count
+          next => current%next
 
-        ! Apply scattering angles delta_theta and delta_phi to rotate p
-        frac_p = 1.0_num / p
-        ux = px * frac_p
-        uy = py * frac_p
-        uz = pz * frac_p
-        sin_t = SIN(delta_theta)
-        IF (ABS(1.0_num - uz) < 1.0e-5_num) THEN
-          px = p * sin_t * COS(delta_phi)
-          py = p * sin_t * SIN(delta_phi)
-          pz = p * uz / ABS(uz) * COS(delta_theta)
-        ELSE
-          frac_uz = 1.0_num/SQRT(1 - uz**2)
-          cos_t = COS(delta_theta)
-          cos_p = COS(delta_phi)
-          sin_t_cos_p = sin_t*cos_p
-          sin_t_sin_p = sin_t*SIN(delta_phi)
-          px = p*(ux*cos_t + sin_t_cos_p*ux*uz*frac_uz - sin_t_sin_p*uy*frac_uz)
-          py = p*(uy*cos_t + sin_t_cos_p*uy*uz*frac_uz + sin_t_sin_p*ux*frac_uz)
-          pz = p*(uz*cos_t + cos_p*sin_t*(uz**2 - 1.0_num)*frac_uz)
-        END IF
+          ! Find collisional drag momentum loss
+          px = current%part_p(1)
+          py = current%part_p(2)
+          pz = current%part_p(3)
+          p = SQRT(px**2 + py**2 + pz**2)
+          gamma = SQRT((p * ipart_mc)**2 + 1.0_num)
+          v = p * ipart_mc * c / gamma
+          ipart_KE = (gamma - 1.0_num) * species_list(ispecies)%mass * c**2
+          ln_lambda_L = LOG(ipart_KE/solid_array(i_sol)%hybrid_Iex) &
+              + 0.5_num*LOG(gamma + 1.0_num) &
+              + 0.909_num/gamma**2 - 0.818_num/gamma - 0.246_num
+          delta_p = - 0.5_num *  solid_array(i_sol)%hybrid_D / (m0 * v**2) &
+              * ln_lambda_L * dt
 
-        ! Reduce particle momentum
-        frac = MAX(1.0_num + delta_p / ABS(p), 0.0_num)
-        current%part_p(1) = px * frac
-        current%part_p(2) = py * frac
-        current%part_p(3) = pz * frac
+          ! Calculate scattering angles
+          ln_lambda_S = LOG(solid_array(i_sol)%hybrid_ln_S * p)
+          delta_theta = SQRT(solid_array(i_sol)%hybrid_Z &
+              * solid_array(i_sol)%hybrid_D * ln_lambda_S  * dt / v) &
+              * rand_scatter / p
+          delta_phi = 2.0_num * pi * random()
 
-        ! Calculate energy change due to collisions
-        p_new_2 = current%part_p(1)**2 + current%part_p(2)**2 &
-            + current%part_p(3)**2
+          ! Apply scattering angles delta_theta and delta_phi to rotate p
+          frac_p = 1.0_num / p
+          ux = px * frac_p
+          uy = py * frac_p
+          uz = pz * frac_p
+          sin_t = SIN(delta_theta)
+          IF (ABS(1.0_num - uz) < 1.0e-5_num) THEN
+            px = p * sin_t * COS(delta_phi)
+            py = p * sin_t * SIN(delta_phi)
+            pz = p * uz / ABS(uz) * COS(delta_theta)
+          ELSE
+            frac_uz = 1.0_num/SQRT(1 - uz**2)
+            cos_t = COS(delta_theta)
+            cos_p = COS(delta_phi)
+            sin_t_cos_p = sin_t*cos_p
+            sin_t_sin_p = sin_t*SIN(delta_phi)
+            px = p*(ux*cos_t + sin_t_cos_p*ux*uz*frac_uz &
+                - sin_t_sin_p*uy*frac_uz)
+            py = p*(uy*cos_t + sin_t_cos_p*uy*uz*frac_uz &
+                + sin_t_sin_p*ux*frac_uz)
+            pz = p*(uz*cos_t + cos_p*sin_t*(uz**2 - 1.0_num)*frac_uz)
+          END IF
+
+          ! Reduce particle momentum
+          frac = MAX(1.0_num + delta_p / ABS(p), 0.0_num)
+          current%part_p(1) = px * frac
+          current%part_p(2) = py * frac
+          current%part_p(3) = pz * frac
+
+          ! Calculate energy change due to collisions
+          p_new_2 = current%part_p(1)**2 + current%part_p(2)**2 &
+              + current%part_p(3)**2
 #ifndef PER_SPECIES_WEIGHT
-        weight = current%weight
+          weight = current%weight
 #else
-        weight = species_list(ispecies)%weight
+          weight = species_list(ispecies)%weight
 #endif
-        dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
+          dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
 
-        ! Get heat capacity at the particle position
-        part_x = current%part_pos(1) - x_grid_min_local
-        part_y = current%part_pos(2) - y_grid_min_local
-        part_z = current%part_pos(3) - z_grid_min_local
-        CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, part_C, &
-            heat_capacity)
+          ! Get heat capacity at the particle position
+          part_x = current%part_pos(1) - x_grid_min_local
+          part_y = current%part_pos(2) - y_grid_min_local
+          part_z = current%part_pos(3) - z_grid_min_local
+          CALL get_effective_heat_capacity(part_x, part_y, part_z, part_C)
 
-        ! Calculate the temperature increase, and add this to Tb. We use -dE, as
-        ! the energy gain for temperature is equal to the energy loss of the
-        ! electron. We use T[Kelvin] = T[Joule] / kb. Final term is energy per
-        ! unit volume
-        delta_Tb = 1.0_num/(hybrid_ne * part_C * kb)*(-dE / (dx*dy*dz))
+          ! Calculate the temperature increase, and add this to Tb. We use -dE,
+          ! as the energy gain for temperature is equal to the energy loss of
+          ! the electron.
+          delta_Tb = - dE * part_C * heat_const
 
-        ! Write temperature change to the grid
-        ix = MAX(1,CEILING(part_x*idx))
-        iy = MAX(1,CEILING(part_y*idy))
-        iz = MAX(1,CEILING(part_z*idz))
-        hybrid_Tb(ix,iy,iz) = hybrid_Tb(ix,iy,iz) + delta_Tb
+          ! Write temperature change to the grid (ignores particle shape)
+          ix = MAX(1,CEILING(part_x*idx))
+          iy = MAX(1,CEILING(part_y*idy))
+          iz = MAX(1,CEILING(part_z*idz))
+          hybrid_Tb(ix,iy,iz) = hybrid_Tb(ix,iy,iz) + delta_Tb
 
-        current => next
+          current => next
 
+        END DO
       END DO
     END DO
 
@@ -524,7 +612,41 @@ CONTAINS
 
 
 
-  SUBROUTINE ohmic_heating(heat_capacity)
+  SUBROUTINE get_effective_heat_capacity(part_x, part_y, part_z, part_C)
+
+    ! Temperature increase for one background species would be:
+    !
+    ! (energy change per unit vol.) * (vol. of e-, 1/ne) / (heat cap. of e-)
+    !
+    ! This implementation of the Davies model can use multiple backgrounds, so
+    ! we define an effective heat capacity to find the total temperature rise.
+    ! This assumes the energy is split evenly between all e- in the cell, which
+    ! convert the energy into a temperature increase using different C values
+    !
+    ! (effective heat capacity) = sum(ne/C)
+
+    REAL(num), INTENT(IN) :: part_x, part_y, part_z
+    REAL(num), INTENT(OUT) :: part_C
+    INTEGER :: i_sol
+    REAL(num) :: C_sol
+
+    part_C = 0.0_num
+
+    ! Loop over all solids
+    DO i_sol = 1, solid_count
+      ! Get heat capacity at particle position for current solid
+      CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, C_sol, &
+          solid_array(i_sol)%heat_capacity)
+
+      ! Contribution to the effective heat capacity
+      part_C = part_C + solid_array(i_sol)%hybrid_ne / C_sol
+    END DO
+
+  END SUBROUTINE get_effective_heat_capacity
+
+
+
+  SUBROUTINE ohmic_heating
 
     ! Calculates the Ohmic heating of the simulation grid, as described by
     ! Davies, et al, (2002). Phys. Rev. E, 65(2), 026407. At this point in the
@@ -532,12 +654,27 @@ CONTAINS
     ! middle of this timestep. Assuming this is the average electric field over
     ! the timestep, we have a power per unit volume of E**2/resistivity
 
-    REAL(num), INTENT(IN) :: heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
     REAL(num) :: E2, fac
-    INTEGER :: ix, iy, iz
+    REAL(num) :: eff_heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
+    INTEGER :: ix, iy, iz, i_sol
 
-    fac = dt/(hybrid_ne*kb)
+    fac = dt * hybrid_const_heat
 
+    ! Obtain the effective heat capacity: sum(ne/C)
+    eff_heat_capacity = 0.0_num
+    DO i_sol = 1, solid_count
+      DO iz = 1, nz
+        DO iy = 1, ny
+          DO ix = 1, nx
+            eff_heat_capacity(ix,iy,iz) = eff_heat_capacity(ix,iy,iz) &
+                + solid_array(i_sol)%hybrid_ne &
+                / solid_array(i_sol)%heat_capacity(ix,iy,iz)
+          END DO
+        END DO
+      END DO
+    END DO
+
+    ! Loop over all grid points to find temperature change
     DO iz = 1, nz
       DO iy = 1, ny
         DO ix = 1, nx
@@ -548,9 +685,9 @@ CONTAINS
 
           ! Calculate Ohmic heating, avoiding the 0/0 NaN
           IF (resistivity(ix,iy,iz) > 0.0_num .AND. &
-              heat_capacity(ix,iy,iz) > 0.0_num) THEN
+              eff_heat_capacity(ix,iy,iz) > 0.0_num) THEN
             hybrid_Tb(ix,iy,iz) = hybrid_Tb(ix,iy,iz) &
-                + E2*fac/(resistivity(ix,iy,iz) * heat_capacity(ix,iy,iz))
+                + E2*fac*eff_heat_capacity(ix,iy,iz)/resistivity(ix,iy,iz)
           END IF
         END DO
       END DO
@@ -560,6 +697,22 @@ CONTAINS
     CALL field_bc(hybrid_Tb, ng)
 
   END SUBROUTINE ohmic_heating
+
+
+
+  SUBROUTINE clear_heat_capacity
+
+    ! De-allocate the heat capacity in each solid. This array is recalculated
+    ! each time-step anyway, so there's no need to save and resize it in the
+    ! load balancer
+
+    INTEGER :: i_sol
+
+    DO i_sol = 1, solid_count
+      DEALLOCATE(solid_array(i_sol)%heat_capacity)
+    END DO
+
+  END SUBROUTINE clear_heat_capacity
 
 
 
