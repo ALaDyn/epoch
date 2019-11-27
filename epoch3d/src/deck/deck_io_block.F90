@@ -27,7 +27,7 @@ MODULE deck_io_block
   PUBLIC :: io_block_start, io_block_end
   PUBLIC :: io_block_handle_element, io_block_check, copy_io_block
 
-  INTEGER, PARAMETER :: ov = 33
+  INTEGER, PARAMETER :: ov = 34
   INTEGER, PARAMETER :: io_block_elements = num_vars_to_dump + ov
   INTEGER :: block_number, nfile_prefixes
   INTEGER :: rolling_restart_io_block
@@ -194,7 +194,8 @@ CONTAINS
     alternate_name(i+30) = 'walltime_snapshot'
     io_block_name (i+31) = 'walltime_start'
     io_block_name (i+32) = 'walltime_stop'
-    io_block_name (i+ov) = 'disabled'
+    io_block_name (i+33) = 'disabled'
+    io_block_name (i+ov) = 'remove_photons'
 
     track_ejected_particles = .FALSE.
     dump_absorption = .FALSE.
@@ -621,8 +622,10 @@ CONTAINS
       io_block%walltime_start = as_real_print(value, element, errcode)
     CASE(32)
       io_block%walltime_stop = as_real_print(value, element, errcode)
-    CASE(ov)
+    CASE(33)
       io_block%disabled = as_logical_print(value, element, errcode)
+    CASE(ov)
+      remove_photons = as_logical_print(value, element, errcode)
     END SELECT
 
     IF (style_error == c_err_old_style_ignore) THEN

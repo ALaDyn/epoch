@@ -912,6 +912,14 @@ CONTAINS
       END DO
     END IF
 
+    IF (remove_photons) THEN
+      DO i = 1, n_species
+        IF (species_list(i)%species_type == c_species_id_photon) THEN
+          CALL destroy_partlist(species_list(i)%attached_list)
+        END IF
+      END DO
+    END IF
+
     IF (timer_collect) CALL timer_stop(c_timer_io)
 
   END SUBROUTINE output_routines

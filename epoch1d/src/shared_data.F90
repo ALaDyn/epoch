@@ -857,6 +857,7 @@ MODULE shared_data
   CHARACTER(LEN=c_id_length), ALLOCATABLE :: file_prefixes(:)
   INTEGER, ALLOCATABLE :: file_numbers(:)
   INTEGER(i8) :: sdf_buffer_size
+  LOGICAL :: remove_photons
 
   !----------------------------------------------------------------------------
   ! Extended IO information
