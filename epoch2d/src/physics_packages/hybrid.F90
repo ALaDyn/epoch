@@ -519,11 +519,18 @@ CONTAINS
           ln_lambda_L = LOG(ipart_KE/solid_array(i_sol)%hybrid_Iex) &
               + 0.5_num*LOG(gamma + 1.0_num) &
               + 0.909_num/gamma**2 - 0.818_num/gamma - 0.246_num
+          ! ln_lambda_L should always be positive. If it's not, then the
+          ! particle has too little energy to care about, and we make sure it
+          ! doesn't go negative (which would increase particle energy)
+          ln_lambda_L = MAX(ln_lambda_L, 0.0_num)
           delta_p = - 0.5_num * solid_array(i_sol)%hybrid_D / (m0 * v**2) &
               * ln_lambda_L * dt
 
           ! Calculate scattering angles
-          ln_lambda_S = LOG(solid_array(i_sol)%hybrid_ln_S * p)
+          ! Very low energy particles (~50 eV) will make ln_lambda_S go negative
+          ! causing a NaN in delta_theta. The hybrid mode isn't designed for low
+          ! energy electrons, so delta_theta will be ignored in this case
+          ln_lambda_S = LOG(MAX(1.0_num,solid_array(i_sol)%hybrid_ln_S * p))
           delta_theta = SQRT(solid_array(i_sol)%hybrid_Z &
               * solid_array(i_sol)%hybrid_D * ln_lambda_S  * dt / v) &
               * rand_scatter / p
