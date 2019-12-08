@@ -118,11 +118,20 @@ CONTAINS
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
           WRITE(io,*)
-          WRITE(io,*) '*** WARNING ***'
-          WRITE(io,*) 'Using particle memory addresses for persistent ', &
-                      'subsets but IDs might be faster'
-          WRITE(io,*) 'To enable particle IDs, recompile with ', &
-                      'DEFINE=-DPARTICLE_ID'
+          IF (use_store_default) THEN
+            WRITE(io,*) '*** ERROR ***'
+            WRITE(io,*) 'Trying to use particle memory addresses for ', &
+                        'persistent subsets and particle backing stores'
+            WRITE(io,*) 'Enable particle IDs, by recompiling with ', &
+                        'DEFINE=-DPARTICLE_ID to allow persistent subsets'
+            CALL abort_code(c_err_bad_setup)
+          ELSE
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Using particle memory addresses for persistent ', &
+                        'subsets but IDs might be faster'
+            WRITE(io,*) 'To enable particle IDs, recompile with ', &
+                        'DEFINE=-DPARTICLE_ID'
+          END IF
         END DO
       END IF
 #endif

@@ -40,6 +40,7 @@ CONTAINS
 
     DO ispecies = 1, n_species
       local_count = species_list(ispecies)%attached_list%count
+      species_list(ispecies)%attached_list%locked_store = .TRUE.
       CALL MPI_ALLREDUCE(local_count, species_list(ispecies)%global_count, &
           1, MPI_INTEGER8, MPI_SUM, comm, errcode)
       ALLOCATE(species_list(ispecies)%secondary_list(i0:nx+i1))
@@ -56,7 +57,7 @@ CONTAINS
         cell_x = FLOOR((current%part_pos - x_grid_min_local) / dx + 1.5_num)
 #endif
 
-        CALL remove_particle_from_partlist(&
+        CALL unlink_particle_from_partlist(&
             species_list(ispecies)%attached_list, current)
         CALL add_particle_to_partlist(&
             species_list(ispecies)%secondary_list(cell_x), current)
@@ -78,12 +79,17 @@ CONTAINS
     i1 = 1 - i0
 
     DO ispecies = 1, n_species
-      DO ix = i0, nx + i1
-        CALL append_partlist(species_list(ispecies)%attached_list, &
-            species_list(ispecies)%secondary_list(ix))
-      END DO
+      IF (.NOT. species_list(ispecies)%attached_list%use_store) THEN
+        DO ix = i0, nx + i1
+          CALL append_partlist(species_list(ispecies)%attached_list, &
+              species_list(ispecies)%secondary_list(ix))
+        END DO
+      ELSE
+        CALL relink_partlist(species_list(ispecies)%attached_list, .TRUE.)
+      END IF
       DEALLOCATE(species_list(ispecies)%secondary_list)
     END DO
+    species_list(ispecies)%attached_list%locked_store = .FALSE.
 
     CALL setup_bc_lists
     CALL particle_bcs

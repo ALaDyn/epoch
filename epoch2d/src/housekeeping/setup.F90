@@ -172,7 +172,7 @@ CONTAINS
     INTEGER :: n_id_bits, err, n_cpu_bits_calc
 
     CALL MPI_SIZEOF(id_exemplar, n_id_bits, err)
-    n_id_bits = n_id_bits * 8 !Bytes to bits
+    n_id_bits = n_id_bits * 8 ! Bytes to bits
 
     n_cpu_bits_calc = CEILING(LOG(REAL(nproc,num))/LOG(2.0_num))
     IF (n_cpu_bits > 0 .AND. n_cpu_bits < n_cpu_bits_calc) THEN
@@ -1125,7 +1125,8 @@ CONTAINS
       species => species_list(ispecies)
       npart_local = npart_locals(ispecies)
 
-      CALL create_allocated_partlist(species%attached_list, npart_local)
+      CALL create_allocated_partlist(species%attached_list, &
+          npart_local, use_store=use_store_default, make_live=.TRUE.)
 
       npart_global = npart_global + nparts(ispecies)
       species%count = nparts(ispecies)

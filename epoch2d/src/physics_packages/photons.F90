@@ -807,7 +807,8 @@ CONTAINS
     IF (photon_energy > photon_energy_min .AND. produce_photons) THEN
       IF (photon_energy < c_tiny) photon_energy = c_tiny
 
-      CALL create_particle(new_photon)
+      CALL create_particle_in_list(new_photon, &
+          species_list(iphoton)%attached_list)
       new_photon%part_pos = generating_electron%part_pos
 
       new_photon%part_p(1) = dir_x * photon_energy / c
@@ -818,8 +819,6 @@ CONTAINS
       new_photon%particle_energy = photon_energy
       new_photon%weight = generating_electron%weight
 
-      CALL add_particle_to_partlist(species_list(iphoton)%attached_list, &
-          new_photon)
     END IF
 
   END SUBROUTINE generate_photon
@@ -853,8 +852,10 @@ CONTAINS
     REAL(num) :: probability_split, epsilon_frac, norm
     TYPE(particle), POINTER :: new_electron, new_positron
 
-    CALL create_particle(new_electron)
-    CALL create_particle(new_positron)
+    CALL create_particle_in_list(new_electron, &
+        species_list(ielectron)%attached_list)
+    CALL create_particle_in_list(new_positron, &
+        species_list(ipositron)%attached_list)
 
     new_electron%part_pos = generating_photon%part_pos
     new_positron%part_pos = generating_photon%part_pos
@@ -893,16 +894,9 @@ CONTAINS
     new_electron%weight = generating_photon%weight
     new_positron%weight = generating_photon%weight
 
-    CALL add_particle_to_partlist(species_list(ielectron)%attached_list, &
-        new_electron)
-    CALL add_particle_to_partlist(species_list(ipositron)%attached_list, &
-        new_positron)
-
     ! Remove photon
     CALL remove_particle_from_partlist(species_list(iphoton)%attached_list, &
-        generating_photon)
-
-    DEALLOCATE(generating_photon)
+        generating_photon, destroy=.TRUE.)
 
   END SUBROUTINE generate_pair
 
@@ -915,8 +909,10 @@ CONTAINS
     INTEGER, INTENT(IN) :: ielectron, ipositron
     TYPE(particle), POINTER :: new_electron, new_positron
 
-    CALL create_particle(new_electron)
-    CALL create_particle(new_positron)
+    CALL create_particle_in_list(new_electron, &
+        species_list(ielectron)%attached_list)
+    CALL create_particle_in_list(new_positron, &
+        species_list(ipositron)%attached_list)
 
     new_electron%part_pos = generating_electron%part_pos
     new_positron%part_pos = generating_electron%part_pos
@@ -934,11 +930,6 @@ CONTAINS
 
     new_electron%weight = generating_electron%weight
     new_positron%weight = generating_electron%weight
-
-    CALL add_particle_to_partlist(species_list(ielectron)%attached_list, &
-        new_electron)
-    CALL add_particle_to_partlist(species_list(ipositron)%attached_list, &
-        new_positron)
 
   END SUBROUTINE generate_pair_tri
 

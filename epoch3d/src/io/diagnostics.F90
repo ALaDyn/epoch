@@ -761,8 +761,13 @@ CONTAINS
 
         IF (isubset /= 1) THEN
           DO i = 1, n_species
-            CALL append_partlist(species_list(i)%attached_list, &
-                io_list(i)%attached_list)
+            IF (species_list(i)%attached_list%use_store) THEN
+              CALL relink_partlist(species_list(i)%attached_list, .TRUE.)
+              species_list(i)%attached_list%locked_store = .FALSE.
+            ELSE
+              CALL append_partlist(species_list(i)%attached_list, &
+                  io_list(i)%attached_list)
+            END IF
           END DO
           DO i = 1, n_species
             CALL create_empty_partlist(io_list(i)%attached_list)
@@ -1152,7 +1157,7 @@ CONTAINS
 
     id_starts(1) = n_cpu_bits
 
-    CALL sdf_write_srl(sdf_handle, "id_starts", "id_starts", id_starts, 0)
+    CALL sdf_write_srl(sdf_handle, 'id_starts', 'id_starts', id_starts, 0)
 
     DEALLOCATE(id_starts)
 #endif
@@ -2625,7 +2630,8 @@ CONTAINS
 
         IF (use_particle) THEN
           ! Move particle to io_list
-          CALL remove_particle_from_partlist(species_list(i)%attached_list, &
+          species_list(i)%attached_list%locked_store = .TRUE.
+          CALL unlink_particle_from_partlist(species_list(i)%attached_list, &
               current)
           CALL add_particle_to_partlist(io_list(i)%attached_list, current)
         END IF

@@ -278,7 +278,12 @@ CONTAINS
     END DO ! ix
 
     CALL destroy_partlist(partlist)
-    CALL create_allocated_partlist(partlist, npart_this_proc_new)
+    IF (npart_this_proc_new > 0) THEN
+      CALL create_allocated_partlist(partlist, npart_this_proc_new, &
+          use_store=use_store_default)
+    ELSE
+      CALL create_empty_partlist(partlist, use_store=use_store_default)
+    END IF
 
     ! Randomly place npart_per_cell particles into each valid cell
     current => partlist%head
@@ -301,6 +306,7 @@ CONTAINS
         current%pvol = npart_per_cell
 #endif
         current%part_pos = x(ix) + (random() - 0.5_num) * dx
+        current%live = 1
 
         ipart = ipart + 1
         current => current%next
@@ -309,12 +315,14 @@ CONTAINS
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
-    DO WHILE(ASSOCIATED(current))
-      next => current%next
-      CALL remove_particle_from_partlist(partlist, current)
-      CALL destroy_particle(current)
-      current => next
-    END DO
+    IF (ASSOCIATED(current)) THEN
+      ! Destroy any unplaced particles
+      DO WHILE(ASSOCIATED(current))
+        next => current%next
+        CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
+        current => next
+      END DO
+    END IF
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
@@ -322,7 +330,7 @@ CONTAINS
     species%count = npart_this_species
     species%weight = density_total_global * dx / npart_this_species
 
-    IF (rank == 0) THEN
+    IF (rank == 0 .AND. npart_this_species > 0) THEN
       CALL integer_as_string(npart_this_species, string)
       DO iu = 1, nio_units
         io = ios_units(iu)
@@ -347,6 +355,7 @@ CONTAINS
     LOGICAL, DIMENSION(1-ng:), INTENT(IN) :: load_list
     INTEGER(i8), DIMENSION(:), ALLOCATABLE :: valid_cell_list
     TYPE(particle_list), POINTER :: partlist
+    TYPE(particle_store), POINTER :: partstore
     TYPE(particle), POINTER :: current, next
     INTEGER(i8) :: ipart, npart_per_cell, num_int, num_total, idx
     INTEGER(i8) :: num_valid_cells_local, num_valid_cells_global
@@ -363,7 +372,11 @@ CONTAINS
     INTEGER :: iu, io
 
     npart_this_species = species%count
-    IF (npart_this_species <= 0) RETURN
+    IF (npart_this_species <= 0) THEN
+      CALL create_empty_partlist(species%attached_list, &
+          use_store=use_store_default)
+      RETURN
+    END IF
 
     ix_min = 1
     ix_max = nx
@@ -493,15 +506,22 @@ CONTAINS
     END IF
 
     partlist => species%attached_list
-
-    CALL destroy_partlist(partlist)
-    CALL create_allocated_partlist(partlist, num_new_particles)
+    partstore => species%attached_list%store
+    IF (num_new_particles > 0) THEN
+      CALL create_allocated_partlist(partlist, num_new_particles, &
+          use_store=use_store_default)
+    ELSE
+      CALL create_empty_partlist(partlist, use_store=use_store_default)
+    END IF
+    ! Now have a store with at least one chunk of memory allocated
+    ! And all linking etc is done
+    !NOTE that positions etc not yet set
 
     ! Randomly place npart_per_cell particles into each valid cell
     npart_left = num_new_particles
     current => partlist%head
-    IF (npart_per_cell > 0) THEN
 
+    IF (npart_per_cell > 0) THEN
       DO ix = ix_min, ix_max
         IF (.NOT. load_list(ix)) CYCLE
 
@@ -520,6 +540,7 @@ CONTAINS
           current%pvol = npart_per_cell
 #endif
           current%part_pos = x(ix) + (random() - 0.5_num) * dx
+          current%live = 1
 
           ipart = ipart + 1
           current => current%next
@@ -565,6 +586,7 @@ CONTAINS
         current%pvol = npart_per_cell
 #endif
         current%part_pos = x(cell_x) + (random() - 0.5_num) * dx
+        current%live = 1
 
         current => current%next
       END DO
@@ -574,19 +596,21 @@ CONTAINS
 
     ! Remove any unplaced particles from the list. This should never be
     ! called if the above routines worked correctly.
-    DO WHILE(ASSOCIATED(current))
-      next => current%next
-      CALL remove_particle_from_partlist(partlist, current)
-      CALL destroy_particle(current)
-      current => next
-    END DO
+    IF (ASSOCIATED(current)) THEN
+      ! Destroy any unplaced particles
+      DO WHILE(ASSOCIATED(current))
+        next => current%next
+        CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
+        current => next
+      END DO
+    END IF
 
     CALL MPI_ALLREDUCE(partlist%count, npart_this_species, 1, MPI_INTEGER8, &
         MPI_SUM, comm, errcode)
 
     species%count = npart_this_species
 
-    IF (rank == 0) THEN
+    IF (rank == 0 .AND. npart_this_species > 0) THEN
       CALL integer_as_string(npart_this_species, string)
       DO iu = 1, nio_units
         io = ios_units(iu)
@@ -728,8 +752,7 @@ CONTAINS
       DO WHILE(ASSOCIATED(current))
         next => current%next
         IF (current%part_pos < x0 .OR. current%part_pos >= x1) THEN
-          CALL remove_particle_from_partlist(partlist, current)
-          CALL destroy_particle(current)
+          CALL remove_particle_from_partlist(partlist, current, destroy=.TRUE.)
         END IF
         current => next
       END DO
@@ -817,7 +840,7 @@ CONTAINS
 
       ! Just to be sure
       CALL destroy_partlist(partlist)
-      CALL create_empty_partlist(partlist)
+      CALL create_empty_partlist(partlist, use_store=use_store_default)
 
       ! MPI read files
       part_count = load_1d_real_array(curr_loader%x_data, xbuf, &
@@ -885,8 +908,7 @@ CONTAINS
 #endif
 
       DO read_count = 1, part_count
-        CALL create_particle(new_particle)
-        CALL add_particle_to_partlist(partlist, new_particle)
+        CALL create_particle_in_list(new_particle, partlist)
 
         ! Insert data to particle
         new_particle%part_pos = xbuf(read_count)

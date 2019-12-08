@@ -842,18 +842,21 @@ CONTAINS
 
         IF (out_of_bounds) THEN
           ! Particle has gone forever
-          CALL remove_particle_from_partlist(&
-              species_list(ispecies)%attached_list, cur)
           IF (track_ejected_particles) THEN
+            CALL remove_particle_from_partlist(&
+                species_list(ispecies)%attached_list, cur)
             CALL add_particle_to_partlist(&
                 ejected_list(ispecies)%attached_list, cur)
           ELSE
-            CALL destroy_particle(cur)
+            CALL remove_particle_from_partlist(&
+                species_list(ispecies)%attached_list, cur, destroy=.TRUE.)
           END IF
         ELSE IF (ABS(xbd) > 0) THEN
           ! Particle has left processor, send it to its neighbour
           CALL remove_particle_from_partlist(&
               species_list(ispecies)%attached_list, cur)
+          ! Live is now 0 and links are dead
+          ! If we used stores, we've got a copy now
           CALL add_particle_to_partlist(send(xbd), cur)
         END IF
       END DO
@@ -863,8 +866,10 @@ CONTAINS
         ixp = -ix
         CALL partlist_sendrecv(send(ix), recv(ixp), &
             neighbour(ix), neighbour(ixp))
+        ! Since elements of recv are copies of sent particles,
+        ! their live flag may be 0, so we override it in the add
         CALL append_partlist(species_list(ispecies)%attached_list, &
-            recv(ixp))
+            recv(ixp), ignore_live=.TRUE.)
       END DO
 
       DO ix = -1, 1, 2
