@@ -199,7 +199,7 @@ DEFINES := $(DEFINE)
 #DEFINES += $(D)PARTICLE_SHAPE_TOPHAT
 
 # Use fifth order particle weighting (default is third order).
-DEFINES += $(D)PARTICLE_SHAPE_BSPLINE3
+#DEFINES += $(D)PARTICLE_SHAPE_BSPLINE3
 
 # Include a unique global particle ID. The first flag defines the ID using
 # an 8-byte integer, the second uses 4-bytes.
@@ -212,7 +212,7 @@ DEFINES += $(D)HYBRID
 
 # Calculate classical Landau-Lifshitz radiaion reaction (NOT TO BE USED WITH
 # PHOTONS)
-DEFINES += $(D)LANDAU_LIFSHITZ
+#DEFINES += $(D)LANDAU_LIFSHITZ
 
 # Include QED routines
 DEFINES += $(D)PHOTONS

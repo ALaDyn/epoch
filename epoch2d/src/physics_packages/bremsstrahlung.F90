@@ -759,6 +759,9 @@ CONTAINS
     REAL(num) :: dir_x, dir_y, dir_z, mag_p
     REAL(num) :: rand_temp, photon_energy, part_E
     TYPE(particle), POINTER :: new_photon
+    REAL(num) :: photon_p, photon_px, photon_py, photon_pz
+    REAL(num) :: theta, phi, sin_t, frac_dir_z, cos_t, cos_p
+    REAL(num) :: sin_t_cos_p, sin_t_sin_p
 
     ! Obtain electron direction (magnitude must be > 0 to prevent 1/0 issues)
     part_E = electron%particle_energy
@@ -776,13 +779,40 @@ CONTAINS
         brem_array(brem_index)%E_table, brem_array(brem_index)%k_table, &
         brem_array(brem_index)%cdf_table)
 
-    ! Calculate electron recoil
-    IF (use_bremsstrahlung_recoil) THEN
-      mag_p = mag_p - photon_weight * photon_energy / c
-      electron%part_p(1) = dir_x * mag_p
-      electron%part_p(2) = dir_y * mag_p
-      electron%part_p(3) = dir_z * mag_p
-      electron%particle_energy = electron%particle_energy - photon_energy
+    ! Calculate the momentum 3-vector of this photon
+    photon_p = photon_energy / c
+    IF (brem_scatter) THEN
+      ! Generate a momentum direction which deviates from that of the electron
+      theta = calc_scatter_theta(part_E)
+      phi = 2*pi*random()
+
+      ! Apply scattering angles theta and phi to electron direction, then
+      ! scale this direction with the photon momentum magnitude to obtain the
+      ! deviated photon direction
+      sin_t = SIN(theta)
+      IF (ABS(1.0_num - dir_z) < 1.0e-5_num) THEN
+        ! Special case if electron is travelling in the z direction
+        photon_px = photon_p * sin_t * COS(phi)
+        photon_py = photon_p * sin_t * SIN(phi)
+        photon_pz = photon_p * dir_z / ABS(dir_z) * COS(theta)
+      ELSE
+        frac_dir_z = 1.0_num/SQRT(1 - dir_z**2)
+        cos_t = COS(theta)
+        cos_p = COS(phi)
+        sin_t_cos_p = sin_t*cos_p
+        sin_t_sin_p = sin_t*SIN(phi)
+        photon_px = photon_p*(dir_x*cos_t + sin_t_cos_p*dir_x*dir_z*frac_dir_z &
+            - sin_t_sin_p*dir_y*frac_dir_z)
+        photon_py = photon_p*(dir_y*cos_t + sin_t_cos_p*dir_y*dir_z*frac_dir_z &
+            + sin_t_sin_p*dir_x*frac_dir_z)
+        photon_pz = photon_p*(dir_z*cos_t &
+            + cos_p*sin_t*(dir_z**2 - 1.0_num)*frac_dir_z)
+      END IF
+    ELSE
+      ! Emit in the same direction as the electron
+      photon_px = dir_x * photon_energy / c
+      photon_py = dir_y * photon_energy / c
+      photon_pz = dir_z * photon_energy / c
     END IF
 
     ! This will only create photons that have energies above a user specified
@@ -793,12 +823,13 @@ CONTAINS
       ! Ensure photon_energy is a number we can handle at our precision
       IF (photon_energy < c_tiny) photon_energy = c_tiny
 
-      ! Create new photon at the electron position, in the electron direction
+      ! Create new photon at the electron position
       CALL create_particle(new_photon)
       new_photon%part_pos = electron%part_pos
-      new_photon%part_p(1) = dir_x * photon_energy / c
-      new_photon%part_p(2) = dir_y * photon_energy / c
-      new_photon%part_p(3) = dir_z * photon_energy / c
+      new_photon%part_p(1) = photon_px
+      new_photon%part_p(2) = photon_py
+      new_photon%part_p(3) = photon_pz
+
 #ifdef PHOTONS
       new_photon%optical_depth = reset_optical_depth()
 #endif
@@ -807,10 +838,58 @@ CONTAINS
 
       CALL add_particle_to_partlist(species_list(iphoton)%attached_list, &
           new_photon)
+    END IF
 
+    ! Calculate electron recoil
+    IF (use_bremsstrahlung_recoil) THEN
+      electron%part_p(1) = electron%part_p(1) - photon_weight*photon_px
+      electron%part_p(2) = electron%part_p(2) - photon_weight*photon_py
+      electron%part_p(3) = electron%part_p(3) - photon_weight*photon_pz
     END IF
 
   END SUBROUTINE generate_photon
+
+
+
+  ! Calculates the angular scatter of photons using the Tsai method outlined in
+  ! the Geant4 physics reference manual, section 10.2.1. This model is accurate
+  ! for electron energies over 500 keV (as discussed in the "Comparisons
+  ! between Tsai, 2BS and 2BN generators" section)
+  FUNCTION calc_scatter_theta(part_E)
+
+    REAL(num), INTENT(IN) :: part_E
+    REAL(num) :: calc_scatter_theta
+    REAL(num) :: gamma_theta_max, gamma_theta, gamma
+    REAL(num) :: a1 = 0.625_num
+    REAL(num) :: a2 = 1.875_num
+    REAL(num) :: border = 0.25_num
+    REAL(num) :: r1, r2, r3
+
+    gamma = part_E/(m0*c**2)
+    gamma_theta_max = pi*gamma
+
+    ! Perform the Tsai algorithm
+    DO
+      ! We require three random numbers per sample attempt
+      r1 = random()
+      r2 = random()
+      r3 = random()
+
+      ! Random sampling returns a u value, which is equivalent to the product of
+      ! the particle gamma factor and the deflection theta
+      IF (r1 < border) THEN
+        gamma_theta = -LOG(r2*r3)/a1
+      ELSE
+        gamma_theta = -LOG(r2*r3)/a2
+      END IF
+
+      ! We require a theta value less than pi
+      IF (gamma_theta <= gamma_theta_max) EXIT
+    END DO
+
+    calc_scatter_theta = gamma_theta/gamma
+
+  END FUNCTION  calc_scatter_theta
 
 
 

@@ -158,6 +158,11 @@ END SUBROUTINE bremsstrahlung_deck_finalise
       RETURN
     END IF
 
+    IF (str_cmp(element, 'brem_scatter')) THEN
+      brem_scatter = as_logical_print(value, element, errcode)
+      RETURN
+    END IF
+
     errcode = c_err_unknown_element
 #endif
 
