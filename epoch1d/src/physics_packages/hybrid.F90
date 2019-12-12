@@ -568,8 +568,10 @@ CONTAINS
           delta_Tb = - dE * part_C * heat_const
 
           ! Write temperature change to the grid (ignores particle shape)
+          ! Impose maximum temperature of 1e30 to prevent temperature rising
+          ! unphysically
           ix = MAX(1,CEILING(part_x*idx))
-          hybrid_Tb(ix) = hybrid_Tb(ix) + delta_Tb
+          hybrid_Tb(ix) = MIN(hybrid_Tb(ix) + delta_Tb, 1.0e30_num)
 
           current => next
 
@@ -646,11 +648,11 @@ CONTAINS
       ! Tb is a cell-centred variable, but E has stagger - need to average
       E2 = (0.5_num*(ex(ix) + ex(ix-1)))**2 + ey(ix)**2 + ez(ix)**2
 
-      ! Calculate Ohmic heating, avoiding the 0/0 NaN
+      ! Calculate Ohmic heating, avoiding the 0/0 NaN. Cap temperature at 1.0e30
       IF (resistivity(ix) > 0.0_num .AND. &
           eff_heat_capacity(ix) > 0.0_num) THEN
-        hybrid_Tb(ix) = hybrid_Tb(ix) &
-            + E2*fac*eff_heat_capacity(ix)/resistivity(ix)
+        hybrid_Tb(ix) = MIN(hybrid_Tb(ix) &
+            + E2*fac*eff_heat_capacity(ix)/resistivity(ix), 1.0e30_num)
       END IF
     END DO
 
