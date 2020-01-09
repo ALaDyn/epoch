@@ -668,6 +668,18 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'promote_energy')) THEN
+      species_list(species_id)%migrate%promotion_energy = &
+          as_real_print(value, element, errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'demote_energy')) THEN
+      species_list(species_id)%migrate%demotion_energy = &
+          as_real_print(value, element, errcode)
+      RETURN
+    END IF
+
     IF (str_cmp(element, 'promote_density')) THEN
       species_list(species_id)%migrate%promotion_density = &
           as_real_print(value, element, errcode)

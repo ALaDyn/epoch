@@ -120,6 +120,7 @@ CONTAINS
     REAL(num) :: ke_multiplier, density_condition
     REAL(num) :: rsqrt_part_m
     REAL(num) :: part_ke, local_te, local_ne
+    REAL(num) :: part_ke_rel, gamma, part_m
     INTEGER(KIND=i8) :: ipart
     INTEGER :: ix
     TYPE(particle), POINTER :: current, next
@@ -129,7 +130,8 @@ CONTAINS
     ke_multiplier = species_list(from_list)%migrate%promotion_energy_factor
     density_condition = species_list(from_list)%migrate%promotion_density
 #ifndef PER_PARTICLE_CHARGE_MASS
-    rsqrt_part_m = 1.0_num / SQRT(species_list(from_list)%mass)
+    part_m = species_list(from_list)%mass
+    rsqrt_part_m = 1.0_num / SQRT(part_m)
 #endif
 
     current => species_list(from_list)%attached_list%head
@@ -139,7 +141,8 @@ CONTAINS
       CALL prefetch_particle(next)
 #endif
 #ifdef PER_PARTICLE_CHARGE_MASS
-      rsqrt_part_m = 1.0_num / SQRT(current%mass)
+    part_m = current%mass
+    rsqrt_part_m = 1.0_num / SQRT(part_m)
 #endif
       part_ke = SUM((current%part_p(:) * rsqrt_part_m)**2)
 
@@ -158,6 +161,13 @@ CONTAINS
           .AND. local_ne < density_condition) &
           CALL swap_lists(from_list, to_list, current)
 
+      ! Are we above the promotion energy?
+      gamma = SQRT(1.0_num + SUM((current%part_p(:)/(part_m*c))**2))
+      part_ke_rel = (gamma - 1.0_num)*part_m*c**2
+      IF (part_ke_rel > species_list(from_list)%migrate%promotion_energy) THEN
+        CALL swap_lists(from_list, to_list, current)
+      END IF
+
       current => next
     END DO
 
@@ -172,6 +182,7 @@ CONTAINS
     REAL(num) :: ke_multiplier, density_condition
     REAL(num) :: rsqrt_part_m
     REAL(num) :: part_ke, local_te, local_ne
+    REAL(num) :: part_ke_rel, gamma, part_m
     INTEGER(KIND=i8) :: ipart
     INTEGER :: ix
     TYPE(particle), POINTER :: current, next
@@ -181,7 +192,8 @@ CONTAINS
     ke_multiplier = species_list(from_list)%migrate%demotion_energy_factor
     density_condition = species_list(from_list)%migrate%demotion_density
 #ifndef PER_PARTICLE_CHARGE_MASS
-    rsqrt_part_m = 1.0_num / SQRT(species_list(from_list)%mass)
+    part_m = species_list(from_list)%mass
+    rsqrt_part_m = 1.0_num / SQRT(part_m)
 #endif
 
     current => species_list(from_list)%attached_list%head
@@ -191,7 +203,8 @@ CONTAINS
       CALL prefetch_particle(next)
 #endif
 #ifdef PER_PARTICLE_CHARGE_MASS
-      rsqrt_part_m = 1.0_num / SQRT(current%mass)
+      part_m = current%mass
+      rsqrt_part_m = 1.0_num / SQRT(part_m)
 #endif
       part_ke = SUM((current%part_p(:) * rsqrt_part_m)**2)
 
@@ -209,6 +222,13 @@ CONTAINS
       IF (part_ke < ke_multiplier * 3.0_num * kb * local_te &
           .AND. local_ne >= density_condition) &
           CALL swap_lists(from_list, to_list, current)
+
+      ! Are we below the demotion energy?
+      gamma = SQRT(1.0_num + SUM((current%part_p(:)/(part_m*c))**2))
+      part_ke_rel = (gamma - 1.0_num)*part_m*c**2
+      IF (part_ke_rel < species_list(from_list)%migrate%demotion_energy) THEN
+        CALL swap_lists(from_list, to_list, current)
+      END IF
 
       current => next
     END DO

@@ -626,6 +626,7 @@ MODULE shared_data
     LOGICAL :: promoteable, demoteable
     INTEGER :: promote_to_species, demote_to_species
     REAL(num) :: promotion_energy_factor, demotion_energy_factor
+    REAL(num) :: promotion_energy, demotion_energy
     REAL(num) :: promotion_density, demotion_density
     REAL(num), DIMENSION(:), POINTER :: fluid_energy, fluid_density
   END TYPE particle_species_migration
