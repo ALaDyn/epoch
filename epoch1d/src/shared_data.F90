@@ -1072,12 +1072,12 @@ MODULE shared_data
   ! Solid type
   TYPE solid
     ! Input variables
-    REAL(num) :: hybrid_ni = -1.0_num, hybrid_Iex = -1.0_num
+    REAL(num) :: hybrid_Iex = -1.0_num
     INTEGER :: hybrid_Z = -1
     REAL(num), ALLOCATABLE :: ion_density(:), el_density(:)
     ! Derived variables
-    REAL(num) :: hybrid_ne, hybrid_D, hybrid_ln_s, hybrid_const_ZeV
-    REAL(num), ALLOCATABLE :: heat_capacity(:), coll_D(:)
+    REAL(num) :: hybrid_ne, hybrid_D, hybrid_ln_s, hybrid_const_ZeV, theta_fac
+    REAL(num), ALLOCATABLE :: heat_capacity(:)
   END TYPE solid
 
   TYPE(solid), ALLOCATABLE :: solid_array(:)
@@ -1091,6 +1091,7 @@ MODULE shared_data
   REAL(num) :: hybrid_const_dx
   REAL(num) :: hybrid_const_dt_by_dx
   REAL(num) :: hybrid_const_K_to_eV, hybrid_D, hybrid_ln_S, hybrid_const_ZeV
+  REAL(num) :: hybrid_const_dp = -0.5_num*q0**4/(2.0_num*pi*epsilon0**2)
   REAL(num), ALLOCATABLE :: hybrid_const_heat(:)
 
   ! Additional field variables, resisitivity and temperatures of the background

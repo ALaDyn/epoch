@@ -436,11 +436,6 @@ CONTAINS
       ion_temp = temp
 
       DO isolid = 1, solid_count
-        CALL remap_field(solid_array(isolid)%coll_D, temp)
-        DEALLOCATE(solid_array(isolid)%coll_D)
-        ALLOCATE(solid_array(isolid)%coll_D(1-ng:nx_new+ng, 1-ng:ny_new+ng))
-        solid_array(isolid)%coll_D = temp
-
         CALL remap_field(solid_array(isolid)%ion_density, temp)
         DEALLOCATE(solid_array(isolid)%ion_density)
         ALLOCATE(solid_array(isolid)%ion_density(1-ng:nx_new+ng, &

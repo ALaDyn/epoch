@@ -172,8 +172,8 @@ CONTAINS
       DO i_sol = 1, solid_count
         solid_array(i_sol)%el_density = solid_array(i_sol)%hybrid_Z &
             * solid_array(i_sol)%ion_density
-        solid_array(i_sol)%coll_D = 0.5_num * solid_array(i_sol)%el_density &
-            * q0**4 / pi / (epsilon0**2)
+        solid_array(i_sol)%theta_fac = solid_array(i_sol)%hybrid_Z * q0**4 &
+            / (2.0_num * pi * epsilon0**2 )
         solid_array(i_sol)%hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
             / (solid_array(i_sol)%hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
         solid_array(i_sol)%hybrid_const_ZeV = &
@@ -457,9 +457,9 @@ CONTAINS
     INTEGER :: ispecies
     INTEGER(i8) :: ipart
     REAL(num) :: heat_const(1-ng:nx+ng)
-    REAL(num) :: part_heat_const, part_coll_D
-    REAL(num) :: ipart_mc, m2c4
-    REAL(num) :: px, py, pz, p, gamma, v, ipart_KE, ln_lambda_L, delta_p
+    REAL(num) :: part_heat_const
+    REAL(num) :: ipart_mc, m2c4, sum_dp, sum_dtheta, part_ne
+    REAL(num) :: px, py, pz, p, gamma, v, ipart_KE, ln_lambda_L_terms, delta_p
     REAL(num) :: rand1, rand2, rand_scatter, ln_lambda_S, delta_theta, delta_phi
     REAL(num) :: frac_p, ux, uy, uz, frac_uz, frac
     REAL(num) :: sin_t, cos_t, cos_p, sin_t_cos_p, sin_t_sin_p
@@ -481,111 +481,113 @@ CONTAINS
     ! 1m in epoch1d
     heat_const = hybrid_const_heat / dx
 
-    ! Loop over all solids
-    DO i_sol = 1, solid_count
+    ! Loop over all non-photon species
+    DO ispecies = 1, n_species
+      current => species_list(ispecies)%attached_list%head
+      IF (species_list(ispecies)%species_type == c_species_id_photon) CYCLE
 
-      ! Loop over all non-photon species
-      DO ispecies = 1, n_species
-        current => species_list(ispecies)%attached_list%head
-        IF (species_list(ispecies)%species_type == c_species_id_photon) CYCLE
+      ipart_mc  = 1.0_num / (c * species_list(ispecies)%mass)
+      m2c4 = species_list(ispecies)%mass**2 * c**4
 
-        ipart_mc  = 1.0_num / (c * species_list(ispecies)%mass)
-        m2c4 = species_list(ispecies)%mass**2 * c**4
+      ! Loop over all particles in the species
+      DO ipart = 1, species_list(ispecies)%attached_list%count
+        next => current%next
 
-        ! Loop over all particles in the species
-        DO ipart = 1, species_list(ispecies)%attached_list%count
-          next => current%next
+        ! Extract particle variables
+        part_x = current%part_pos - x_grid_min_local
+        px = current%part_p(1)
+        py = current%part_p(2)
+        pz = current%part_p(3)
+        p = SQRT(px**2 + py**2 + pz**2)
+        gamma = SQRT((p * ipart_mc)**2 + 1.0_num)
+        v = p * ipart_mc * c / gamma
+        ipart_KE = (gamma - 1.0_num) * species_list(ispecies)%mass * c**2
+        ln_lambda_L_terms = 0.5_num*LOG(gamma + 1.0_num) + 0.909_num/gamma**2 &
+            - 0.818_num/gamma - 0.246_num
 
-          ! Evaluate coll_D and heat_const at the particle position, for the
-          ! current solid
-          part_x = current%part_pos - x_grid_min_local
-          CALL hy_grid_centred_var_at_particle(part_x, part_coll_D, &
-              solid_array(i_sol)%coll_D)
-          CALL hy_grid_centred_var_at_particle(part_x, part_heat_const, &
-              heat_const)
+        ! Extract solid variables averaged over all solids present in this cell
+        sum_dp = 0.0_num
+        sum_dtheta = 0.0_num
+        DO i_sol = 1, solid_count
+          CALL hy_grid_centred_var_at_particle(part_x, part_ne, &
+              solid_array(i_sol)%el_density)
 
-          ! Find collisional drag momentum loss
-          px = current%part_p(1)
-          py = current%part_p(2)
-          pz = current%part_p(3)
-          p = SQRT(px**2 + py**2 + pz**2)
-          gamma = SQRT((p * ipart_mc)**2 + 1.0_num)
-          v = p * ipart_mc * c / gamma
-          ipart_KE = (gamma - 1.0_num) * species_list(ispecies)%mass * c**2
-          ln_lambda_L = LOG(ipart_KE/solid_array(i_sol)%hybrid_Iex) &
-              + 0.5_num*LOG(gamma + 1.0_num) &
-              + 0.909_num/gamma**2 - 0.818_num/gamma - 0.246_num
-          ! ln_lambda_L should always be positive. If it's not, then the
-          ! particle has too little energy to care about, and we make sure it
-          ! doesn't go negative (which would increase particle energy)
-          ln_lambda_L = MAX(ln_lambda_L, 0.0_num)
-          delta_p =  - 0.5_num * part_coll_D / (m0 * v**2) * ln_lambda_L * dt
+          ! If ne is zero, then the solid is not in this cell, so don't
+          ! calculate the constants
+          IF (part_ne < TINY(1.0_num)) CYCLE
 
-          ! Calculate scattering angles
           ! Very low energy particles (~50 eV) will make ln_lambda_S go negative
           ! causing a NaN in delta_theta. The hybrid mode isn't designed for low
           ! energy electrons, so delta_theta will be ignored in this case
-          ln_lambda_S = LOG(MAX(1.0_num,solid_array(i_sol)%hybrid_ln_S * p))
-          delta_theta = SQRT(solid_array(i_sol)%hybrid_Z * part_coll_D &
-              * ln_lambda_S  * dt / v) * rand_scatter / p
-          delta_phi = 2.0_num * pi * random()
-
-          ! Apply scattering angles delta_theta and delta_phi to rotate p
-          frac_p = 1.0_num / p
-          ux = px * frac_p
-          uy = py * frac_p
-          uz = pz * frac_p
-          sin_t = SIN(delta_theta)
-          IF (ABS(1.0_num - uz) < 1.0e-5_num) THEN
-            px = p * sin_t * COS(delta_phi)
-            py = p * sin_t * SIN(delta_phi)
-            pz = p * uz / ABS(uz) * COS(delta_theta)
-          ELSE
-            frac_uz = 1.0_num/SQRT(1 - uz**2)
-            cos_t = COS(delta_theta)
-            cos_p = COS(delta_phi)
-            sin_t_cos_p = sin_t*cos_p
-            sin_t_sin_p = sin_t*SIN(delta_phi)
-            px = p*(ux*cos_t + sin_t_cos_p*ux*uz*frac_uz &
-                - sin_t_sin_p*uy*frac_uz)
-            py = p*(uy*cos_t + sin_t_cos_p*uy*uz*frac_uz &
-                + sin_t_sin_p*ux*frac_uz)
-            pz = p*(uz*cos_t + cos_p*sin_t*(uz**2 - 1.0_num)*frac_uz)
-          END IF
-
-          ! Reduce particle momentum
-          frac = MAX(1.0_num + delta_p / ABS(p), 0.0_num)
-          current%part_p(1) = px * frac
-          current%part_p(2) = py * frac
-          current%part_p(3) = pz * frac
-
-          ! Calculate energy change due to collisions
-          p_new_2 = current%part_p(1)**2 + current%part_p(2)**2 &
-              + current%part_p(3)**2
-#ifndef PER_SPECIES_WEIGHT
-          weight = current%weight
-#else
-          weight = species_list(ispecies)%weight
-#endif
-          dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
-
-          ! Get effective heat capacity at the particle position
-          CALL get_effective_heat_capacity(part_x, part_C)
-
-          ! Calculate the temperature increase, and add this to Tb. We use -dE,
-          ! as the energy gain for temperature is equal to the energy loss of
-          ! the electron.
-          delta_Tb = - dE * part_C * part_heat_const
-
-          ! Write temperature change to the grid (ignores particle shape)
-          ! Impose maximum temperature of 1e30 to prevent temperature rising
-          ! unphysically
-          ix = MAX(1,CEILING(part_x*idx))
-          hybrid_Tb(ix) = MIN(hybrid_Tb(ix) + delta_Tb, 1.0e30_num)
-
-          current => next
-
+          sum_dp = sum_dp + part_ne * ( ln_lambda_L_terms &
+              + LOG(MAX(1.0_num, ipart_KE/solid_array(i_sol)%hybrid_Iex)))
+          sum_dtheta = sum_dtheta + solid_array(i_sol)%theta_fac * part_ne &
+              * LOG(MAX(1.0_num, solid_array(i_sol)%hybrid_ln_s * p)) * dt / v
         END DO
+
+        ! Collisional changes to momentum and direction
+        delta_p =  hybrid_const_dp * sum_dp * dt &
+            / (species_list(ispecies)%mass * v**2)
+        delta_theta = SQRT(sum_dtheta) / p * rand_scatter
+        delta_phi = 2.0_num * pi * random()
+
+        ! Apply scattering angles delta_theta and delta_phi to rotate p
+        frac_p = 1.0_num / p
+        ux = px * frac_p
+        uy = py * frac_p
+        uz = pz * frac_p
+        sin_t = SIN(delta_theta)
+        IF (ABS(1.0_num - uz) < 1.0e-5_num) THEN
+          px = p * sin_t * COS(delta_phi)
+          py = p * sin_t * SIN(delta_phi)
+          pz = p * uz / ABS(uz) * COS(delta_theta)
+        ELSE
+          frac_uz = 1.0_num/SQRT(1 - uz**2)
+          cos_t = COS(delta_theta)
+          cos_p = COS(delta_phi)
+          sin_t_cos_p = sin_t*cos_p
+          sin_t_sin_p = sin_t*SIN(delta_phi)
+          px = p*(ux*cos_t + sin_t_cos_p*ux*uz*frac_uz &
+              - sin_t_sin_p*uy*frac_uz)
+          py = p*(uy*cos_t + sin_t_cos_p*uy*uz*frac_uz &
+              + sin_t_sin_p*ux*frac_uz)
+          pz = p*(uz*cos_t + cos_p*sin_t*(uz**2 - 1.0_num)*frac_uz)
+        END IF
+
+        ! Reduce particle momentum
+        frac = MAX(1.0_num + delta_p / ABS(p), 0.0_num)
+        current%part_p(1) = px * frac
+        current%part_p(2) = py * frac
+        current%part_p(3) = pz * frac
+
+        ! Calculate energy change due to collisions
+        p_new_2 = current%part_p(1)**2 + current%part_p(2)**2 &
+            + current%part_p(3)**2
+#ifndef PER_SPECIES_WEIGHT
+        weight = current%weight
+#else
+        weight = species_list(ispecies)%weight
+#endif
+        dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
+
+        ! Get effective heat capacity at the particle position
+        CALL hy_grid_centred_var_at_particle(part_x, part_heat_const, &
+            heat_const)
+        CALL get_effective_heat_capacity(part_x, part_C)
+
+        ! Calculate the temperature increase, and add this to Tb. We use -dE,
+        ! as the energy gain for temperature is equal to the energy loss of
+        ! the electron.
+        delta_Tb = - dE * part_C * part_heat_const
+
+        ! Write temperature change to the grid (ignores particle shape)
+        ! Impose maximum temperature of 1e30 to prevent temperature rising
+        ! unphysically
+        ix = MAX(1,CEILING(part_x*idx))
+        hybrid_Tb(ix) = MIN(hybrid_Tb(ix) + delta_Tb, 1.0e30_num)
+
+        current => next
+
       END DO
     END DO
 

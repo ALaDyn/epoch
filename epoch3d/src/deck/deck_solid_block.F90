@@ -61,7 +61,6 @@ CONTAINS
               1-ng:nz+ng))
           ALLOCATE(solid_array(isolid)%el_density(1-ng:nx+ng,1-ng:ny+ng, &
               1-ng:nz+ng))
-          ALLOCATE(solid_array(isolid)%coll_D(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
         END DO
       ELSE
         solid_index = solid_index + 1

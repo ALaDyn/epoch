@@ -59,7 +59,6 @@ CONTAINS
         DO isolid = 1, solid_count
           ALLOCATE(solid_array(isolid)%ion_density(1-ng:nx+ng))
           ALLOCATE(solid_array(isolid)%el_density(1-ng:nx+ng))
-          ALLOCATE(solid_array(isolid)%coll_D(1-ng:nx+ng))
         END DO
       ELSE
         solid_index = solid_index + 1

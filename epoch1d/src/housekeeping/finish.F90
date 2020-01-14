@@ -70,7 +70,6 @@ CONTAINS
         DO isolid = 1, solid_count
           DEALLOCATE(solid_array(isolid)%ion_density)
           DEALLOCATE(solid_array(isolid)%el_density)
-          DEALLOCATE(solid_array(isolid)%coll_D)
         END DO
         ! Deallocate the array of solids after
         DEALLOCATE(solid_array)
