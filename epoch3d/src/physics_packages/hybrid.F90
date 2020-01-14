@@ -155,7 +155,8 @@ CONTAINS
     ! This subroutine initialises the hybrid arrays, and sets the values of some
     ! constants, to speed up the code
 
-    REAL(num) :: resistivity_init, sum_ne
+    REAL(num) :: resistivity_init
+    REAL(num) :: sum_ne(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
     INTEGER :: ix, iy, iz, i_sol
     INTEGER :: io, iu
 
@@ -168,11 +169,14 @@ CONTAINS
       hybrid_const_dt_by_dx = 0.5_num * dt / dx
       hybrid_const_dt_by_dy = 0.5_num * dt / dy
       hybrid_const_dt_by_dz = 0.5_num * dt / dz
+
+      ! Preset useful constants for solids
+      ALLOCATE(hybrid_const_heat(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
       sum_ne = 0
       DO i_sol = 1, solid_count
-        solid_array(i_sol)%hybrid_ne = solid_array(i_sol)%hybrid_Z &
-            * solid_array(i_sol)%hybrid_ni
-        solid_array(i_sol)%hybrid_D = 0.5_num * solid_array(i_sol)%hybrid_ne &
+        solid_array(i_sol)%el_density = solid_array(i_sol)%hybrid_Z &
+            * solid_array(i_sol)%ion_density
+        solid_array(i_sol)%coll_D = 0.5_num * solid_array(i_sol)%el_density &
             * q0**4 / pi / (epsilon0**2)
         solid_array(i_sol)%hybrid_ln_s = 4.0_num * epsilon0 * h_planck &
             / (solid_array(i_sol)%hybrid_Z**(1.0_num/3.0_num) * m0 * q0**2)
@@ -180,7 +184,7 @@ CONTAINS
             solid_array(i_sol)%hybrid_Z**(-4.0_num/3.0_num) &
             * hybrid_const_K_to_eV
 
-        sum_ne = sum_ne + solid_array(i_sol)%hybrid_ne
+        sum_ne = sum_ne + solid_array(i_sol)%el_density
       END DO
       hybrid_const_heat = 1.0_num/(kb * sum_ne**2)
 
@@ -232,14 +236,14 @@ CONTAINS
       DO i_sol = 1, solid_count
 
         ! Check ion number density is positive
-        IF (solid_array(i_sol)%hybrid_ni < 0.0_num) THEN
+        IF (MINVAL(solid_array(i_sol)%ion_density) < 0.0_num) THEN
           IF (rank == 0) THEN
             DO iu = 1, nio_units ! Print to stdout and to file
               io = io_units(iu)
               WRITE(io,*)
               WRITE(io,*) '*** ERROR ***'
-              WRITE(io,*) 'Please set all solid ion number densities to ', &
-                  'positive values.'
+              WRITE(io,*) 'Please ensure the solid ion number densities are ', &
+                  'positive values in all cells.'
               WRITE(io,*) 'Code will terminate.'
             END DO
           END IF
@@ -482,7 +486,8 @@ CONTAINS
 
     INTEGER :: ispecies
     INTEGER(i8) :: ipart
-    REAL(num) :: heat_const
+    REAL(num) :: heat_const(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
+    REAL(num) :: part_heat_const, part_coll_D
     REAL(num) :: ipart_mc, m2c4
     REAL(num) :: px, py, pz, p, gamma, v, ipart_KE, ln_lambda_L, delta_p
     REAL(num) :: rand1, rand2, rand_scatter, ln_lambda_S, delta_theta, delta_phi
@@ -522,6 +527,16 @@ CONTAINS
         DO ipart = 1, species_list(ispecies)%attached_list%count
           next => current%next
 
+          ! Evaluate coll_D and heat_const at the particle position, for the
+          ! current solid
+          part_x = current%part_pos(1) - x_grid_min_local
+          part_y = current%part_pos(2) - y_grid_min_local
+          part_z = current%part_pos(3) - z_grid_min_local
+          CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, &
+              part_coll_D, solid_array(i_sol)%coll_D)
+          CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, &
+              part_heat_const, heat_const)
+
           ! Find collisional drag momentum loss
           px = current%part_p(1)
           py = current%part_p(2)
@@ -537,17 +552,15 @@ CONTAINS
           ! particle has too little energy to care about, and we make sure it
           ! doesn't go negative (which would increase particle energy)
           ln_lambda_L = MAX(ln_lambda_L, 0.0_num)
-          delta_p = - 0.5_num *  solid_array(i_sol)%hybrid_D / (m0 * v**2) &
-              * ln_lambda_L * dt
+          delta_p =  - 0.5_num * part_coll_D / (m0 * v**2) * ln_lambda_L * dt
 
           ! Calculate scattering angles
           ! Very low energy particles (~50 eV) will make ln_lambda_S go negative
           ! causing a NaN in delta_theta. The hybrid mode isn't designed for low
           ! energy electrons, so delta_theta will be ignored in this case
           ln_lambda_S = LOG(MAX(1.0_num,solid_array(i_sol)%hybrid_ln_S * p))
-          delta_theta = SQRT(solid_array(i_sol)%hybrid_Z &
-              * solid_array(i_sol)%hybrid_D * ln_lambda_S  * dt / v) &
-              * rand_scatter / p
+          delta_theta = SQRT(solid_array(i_sol)%hybrid_Z * part_coll_D &
+              * ln_lambda_S  * dt / v) * rand_scatter / p
           delta_phi = 2.0_num * pi * random()
 
           ! Apply scattering angles delta_theta and delta_phi to rotate p
@@ -590,15 +603,12 @@ CONTAINS
           dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
 
           ! Get heat capacity at the particle position
-          part_x = current%part_pos(1) - x_grid_min_local
-          part_y = current%part_pos(2) - y_grid_min_local
-          part_z = current%part_pos(3) - z_grid_min_local
           CALL get_effective_heat_capacity(part_x, part_y, part_z, part_C)
 
           ! Calculate the temperature increase, and add this to Tb. We use -dE,
           ! as the energy gain for temperature is equal to the energy loss of
           ! the electron.
-          delta_Tb = - dE * part_C * heat_const
+          delta_Tb = - dE * part_C * part_heat_const
 
           ! Write temperature change to the grid (ignores particle shape)
           ! Impose maximum temperature of 1e30 to prevent temperature rising
@@ -637,7 +647,7 @@ CONTAINS
     REAL(num), INTENT(IN) :: part_x, part_y, part_z
     REAL(num), INTENT(OUT) :: part_C
     INTEGER :: i_sol
-    REAL(num) :: C_sol
+    REAL(num) :: C_sol, part_ne
 
     part_C = 0.0_num
 
@@ -646,9 +656,11 @@ CONTAINS
       ! Get heat capacity at particle position for current solid
       CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, C_sol, &
           solid_array(i_sol)%heat_capacity)
+      CALL hy_grid_centred_var_at_particle(part_x, part_y, part_z, part_ne, &
+          solid_array(i_sol)%el_density)
 
       ! Contribution to the effective heat capacity
-      part_C = part_C + solid_array(i_sol)%hybrid_ne / C_sol
+      part_C = part_C + part_ne / C_sol
     END DO
 
   END SUBROUTINE get_effective_heat_capacity
@@ -663,8 +675,9 @@ CONTAINS
     ! middle of this timestep. Assuming this is the average electric field over
     ! the timestep, we have a power per unit volume of E**2/resistivity
 
-    REAL(num) :: E2, fac
+    REAL(num) :: E2
     REAL(num) :: eff_heat_capacity(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
+    REAL(num) :: fac(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng)
     INTEGER :: ix, iy, iz, i_sol
 
     fac = dt * hybrid_const_heat
@@ -676,7 +689,7 @@ CONTAINS
         DO iy = 1, ny
           DO ix = 1, nx
             eff_heat_capacity(ix,iy,iz) = eff_heat_capacity(ix,iy,iz) &
-                + solid_array(i_sol)%hybrid_ne &
+                + solid_array(i_sol)%el_density(ix,iy,iz) &
                 / solid_array(i_sol)%heat_capacity(ix,iy,iz)
           END DO
         END DO
@@ -696,8 +709,8 @@ CONTAINS
           IF (resistivity(ix,iy,iz) > 0.0_num .AND. &
               eff_heat_capacity(ix,iy,iz) > 0.0_num) THEN
             hybrid_Tb(ix,iy,iz) =   MIN(hybrid_Tb(ix,iy,iz) &
-                + E2*fac*eff_heat_capacity(ix,iy,iz)/resistivity(ix,iy,iz), &
-                1.0e30_num)
+                + E2*fac(ix,iy,iz)*eff_heat_capacity(ix,iy,iz) &
+                /resistivity(ix,iy,iz), 1.0e30_num)
           END IF
         END DO
       END DO

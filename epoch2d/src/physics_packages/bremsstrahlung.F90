@@ -606,7 +606,6 @@ CONTAINS
 
     INTEGER :: ispecies, iZ, Z_temp, i_sol
     TYPE(particle), POINTER :: current
-    REAL(num) :: grid_num_density_ion(1-ng:nx+ng, 1-ng:ny+ng)
     REAL(num) :: part_ux, part_uy, part_uz, gamma_rel
     REAL(num) :: part_x, part_y, part_E, part_ni, part_v
     LOGICAL, SAVE :: plasma_warning = .TRUE.
@@ -628,8 +627,6 @@ CONTAINS
       IF (Z_temp < 1 .OR. Z_temp > 100) THEN
         CYCLE
       ENDIF
-
-      grid_num_density_ion = solid_array(i_sol)%hybrid_ni
 
       ! Update the optical depth for each electron species
       DO ispecies = 1, n_species
@@ -663,7 +660,7 @@ CONTAINS
           part_x = current%part_pos(1) - x_grid_min_local
           part_y = current%part_pos(2) - y_grid_min_local
           CALL grid_centred_var_at_particle(part_x, part_y, part_ni, &
-              grid_num_density_ion)
+              solid_array(i_sol)%ion_density)
 
           current%optical_depth_bremsstrahlung = &
               current%optical_depth_bremsstrahlung &

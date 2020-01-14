@@ -51,6 +51,9 @@ CONTAINS
   SUBROUTINE deallocate_memory
 
     INTEGER :: i, n, stat
+#ifdef HYBRID
+    INTEGER :: isolid
+#endif
 
     DEALLOCATE(x, xb, x_global, xb_global, xb_offset_global)
     DEALLOCATE(y, yb, y_global, yb_global, yb_offset_global)
@@ -61,7 +64,18 @@ CONTAINS
     IF (use_hybrid) THEN
       DEALLOCATE(resistivity, hybrid_Tb)
       DEALLOCATE(ion_charge, ion_density, ion_temp)
-      IF (made_solid_array) DEALLOCATE(solid_array)
+      DEALLOCATE(hybrid_const_heat)
+
+      ! Deallocate the ion density array for each solid first
+      IF (made_solid_array) THEN
+        DO isolid = 1, solid_count
+          DEALLOCATE(solid_array(isolid)%ion_density)
+          DEALLOCATE(solid_array(isolid)%el_density)
+          DEALLOCATE(solid_array(isolid)%coll_D)
+        END DO
+        ! Deallocate the array of solids after
+        DEALLOCATE(solid_array)
+      END IF
     END IF
 #endif
 

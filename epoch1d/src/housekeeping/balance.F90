@@ -278,6 +278,9 @@ CONTAINS
     REAL(r4), DIMENSION(:,:), ALLOCATABLE :: r4temp_sum
     REAL(num), DIMENSION(:), ALLOCATABLE :: temp, temp2
     INTEGER :: i, ispecies, io, id, nspec_local, mask
+#ifdef HYBRID
+    INTEGER :: isolid
+#endif
 
     nx_new = new_domain(1,2) - new_domain(1,1) + 1
 
@@ -373,6 +376,11 @@ CONTAINS
       ALLOCATE(hybrid_Tb(1-ng:nx_new+ng))
       hybrid_Tb = temp
 
+      CALL remap_field(hybrid_const_heat, temp)
+      DEALLOCATE(hybrid_const_heat)
+      ALLOCATE(hybrid_const_heat(1-ng:nx_new+ng))
+      hybrid_const_heat = temp
+
       CALL remap_field(ion_charge, temp)
       DEALLOCATE(ion_charge)
       ALLOCATE(ion_charge(1-ng:nx_new+ng))
@@ -387,6 +395,23 @@ CONTAINS
       DEALLOCATE(ion_temp)
       ALLOCATE(ion_temp(1-ng:nx_new+ng))
       ion_temp = temp
+
+      DO isolid = 1, solid_count
+        CALL remap_field(solid_array(isolid)%coll_D, temp)
+        DEALLOCATE(solid_array(isolid)%coll_D)
+        ALLOCATE(solid_array(isolid)%coll_D(1-ng:nx_new+ng))
+        solid_array(isolid)%coll_D = temp
+
+        CALL remap_field(solid_array(isolid)%ion_density, temp)
+        DEALLOCATE(solid_array(isolid)%ion_density)
+        ALLOCATE(solid_array(isolid)%ion_density(1-ng:nx_new+ng))
+        solid_array(isolid)%ion_density = temp
+
+        CALL remap_field(solid_array(isolid)%el_density, temp)
+        DEALLOCATE(solid_array(isolid)%el_density)
+        ALLOCATE(solid_array(isolid)%el_density(1-ng:nx_new+ng))
+        solid_array(isolid)%el_density = temp
+      END DO
 
     END IF
 #endif

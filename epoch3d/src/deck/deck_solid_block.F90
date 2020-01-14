@@ -44,13 +44,25 @@ CONTAINS
 
     INTEGER :: io, iu
 #ifdef HYBRID
+    INTEGER :: isolid
+
     IF (deck_state == c_ds_first) THEN
       ! Count number of solids in first pass
       solid_count = solid_count + 1
     ELSE
       IF (.NOT. made_solid_array) THEN
+        ! Create array to hold solids
         ALLOCATE(solid_array(solid_count))
         made_solid_array = .TRUE.
+
+        ! Allocate arrays for each solid
+        DO isolid = 1, solid_count
+          ALLOCATE(solid_array(isolid)%ion_density(1-ng:nx+ng,1-ng:ny+ng, &
+              1-ng:nz+ng))
+          ALLOCATE(solid_array(isolid)%el_density(1-ng:nx+ng,1-ng:ny+ng, &
+              1-ng:nz+ng))
+          ALLOCATE(solid_array(isolid)%coll_D(1-ng:nx+ng,1-ng:ny+ng,1-ng:nz+ng))
+        END DO
       ELSE
         solid_index = solid_index + 1
       END IF
@@ -106,13 +118,6 @@ CONTAINS
     IF (element == blank .OR. value == blank) RETURN
 
 #ifdef HYBRID
-    IF (str_cmp(element, 'ni') &
-        .OR. str_cmp(element, 'background_ni') &
-        .OR. str_cmp(element, 'hybrid_ni')) THEN
-      solid_array(solid_index)%hybrid_ni = &
-          as_real_print(value, element, errcode)
-      RETURN
-    END IF
 
     IF (str_cmp(element, 'atomic_no') &
         .OR. str_cmp(element, 'background_Z') &
@@ -130,6 +135,13 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'ion_density') &
+        .OR. str_cmp(element, 'rho' ) &
+        .OR. str_cmp(element, 'ni')) THEN
+      CALL fill_array(solid_array(solid_index)%ion_density, value)
+      RETURN
+    END IF
+
     errcode = c_err_unknown_element
 #endif
 
@@ -140,12 +152,53 @@ CONTAINS
   FUNCTION solid_block_check() RESULT(errcode)
 
     INTEGER :: errcode
-#ifdef HYBRID
-    INTEGER :: io, iu
-#endif
 
     errcode = c_err_none
 
   END FUNCTION solid_block_check
+
+
+
+  SUBROUTINE fill_array(array, value)
+
+    ! A simplified version of the script in deck_species_block. It evaluates the
+    ! equation string stored in 'value' (for the maths parser to interpret), and
+    ! writes the elements to 'array'.
+
+    REAL(num), DIMENSION(1-ng:,1-ng:,1-ng:), INTENT(INOUT) :: array
+    CHARACTER(LEN=*), INTENT(IN) :: value
+    TYPE(stack_element) :: iblock
+    TYPE(primitive_stack) :: stack
+    INTEGER :: io, iu, ix, iy, iz
+    TYPE(parameter_pack) :: parameters
+
+    CALL initialise_stack(stack)
+    CALL tokenize(value, stack, errcode)
+
+    ! Sanity check
+    array(1,1,1) = evaluate(stack, errcode)
+    IF (errcode /= c_err_none) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Unable to parse input deck.'
+        END DO
+      END IF
+      CALL abort_code(errcode)
+    END IF
+
+    DO iz = 1-ng, nz+ng
+      parameters%pack_iz = iz
+      DO iy = 1-ng, ny+ng
+        parameters%pack_iy = iy
+        DO ix = 1-ng, nx+ng
+          parameters%pack_ix = ix
+          array(ix,iy,iz) = evaluate_with_parameters(stack, parameters, errcode)
+        END DO
+      END DO
+    END DO
+
+  END SUBROUTINE fill_array
 
 END MODULE deck_solid_block
