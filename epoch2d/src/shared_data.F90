@@ -1103,6 +1103,7 @@ MODULE shared_data
     ! Input variables
     REAL(num) ::  hybrid_Iex = -1.0_num
     INTEGER :: hybrid_Z = -1
+    INTEGER :: material = 1
     REAL(num), ALLOCATABLE :: ion_density(:,:), el_density(:,:)
     ! Derived variables
     REAL(num) :: hybrid_ne, hybrid_D, hybrid_ln_s, hybrid_const_ZeV, theta_fac
@@ -1125,6 +1126,13 @@ MODULE shared_data
 
   ! Additional field variables, resisitivity and temperatures of the background
   REAL(num), ALLOCATABLE, DIMENSION(:,:) :: resistivity, hybrid_Tb
+
+  ! These allow for spatially varying resistivity models
+  INTEGER, PARAMETER :: c_resist_vacuum = 1
+  INTEGER, PARAMETER :: c_resist_conductor = 2
+  INTEGER, PARAMETER :: c_resist_insulator = 3
+  INTEGER, ALLOCATABLE, DIMENSION(:,:) :: resistivity_model
+
 
   ! Arrays for ionisation routines
   REAL(num), ALLOCATABLE, DIMENSION(:,:) :: ion_charge, ion_density, ion_temp

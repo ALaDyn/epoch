@@ -155,7 +155,7 @@ CONTAINS
     ! This subroutine initialises the hybrid arrays, and sets the values of some
     ! constants, to speed up the code
 
-    REAL(num) :: resistivity_init
+    REAL(num) :: resistivity_init, max_ne
     REAL(num) :: sum_ne(1-ng:nx+ng)
     INTEGER :: ix, i_sol
     INTEGER :: io, iu
@@ -188,19 +188,32 @@ CONTAINS
       ! extra remapping scripts in balance.F90 (for domain change in
       ! load-balance)
       ALLOCATE(resistivity(1-ng:nx+ng))
+      ALLOCATE(resistivity_model(1-ng:nx+ng))
       ALLOCATE(hybrid_Tb(1-ng:nx+ng))
       ALLOCATE(ion_charge(1-ng:nx+ng))
       ALLOCATE(ion_density(1-ng:nx+ng))
       ALLOCATE(ion_temp(1-ng:nx+ng))
 
-      resistivity_init = calc_resistivity(hybrid_Tb_init)
+      ! Assign a resistivity model to each cell based on present solids
+      ! (default to vacuum)
+      resistivity_model = c_resist_vacuum
+      DO ix = 1-ng, nx+ng
+        max_ne = 0.0_num
+        DO i_sol = 1, solid_count
+          ! Use the same resistivity model as the solid with the highest local
+          ! electron number density
+          IF (solid_array(i_sol)%el_density(ix) > max_ne) THEN
+            max_ne = solid_array(i_sol)%el_density(ix)
+            resistivity_model(ix) = solid_array(i_sol)%material
+          END IF
+        END DO
+      END DO
 
       ! Initialise arrays
       DO ix = 1-ng, nx+ng
         ! Set background temperature and resistivity to those matching
         ! hybrid_Tb_init, which is read in from input.deck
         hybrid_Tb(ix) = hybrid_Tb_init
-        resistivity(ix) = resistivity_init
 
         ! These arrays currently serve no purpose, but will be used when
         ! ionisation routines are added
@@ -208,6 +221,7 @@ CONTAINS
         ion_density(ix) = 0.0_num
         ion_temp(ix) = 0.0_num
       END DO
+      CALL update_resistivity
 
       ! Do we have a solid background?
       IF (solid_count == 0) THEN
@@ -294,7 +308,7 @@ CONTAINS
 
 
 
-  FUNCTION calc_resistivity(Tb)
+  FUNCTION calc_resistivity_conductor(Tb)
 
     ! Calculates the resistivity for the background temperature Tb, using the
     ! equation from H. M. Milchberg, et al, 1988. Phys. Rev. Lett., 61(20),
@@ -302,16 +316,36 @@ CONTAINS
 
     REAL(num), INTENT(IN) :: Tb
     REAL(num) :: Tb_eV
-    REAL(num) :: calc_resistivity
+    REAL(num) :: calc_resistivity_conductor
 
     ! Convert Tb from Kelvin to eV
     Tb_eV = hybrid_const_K_to_eV * Tb
 
-    ! Calculate resistivity for a METAL
-    calc_resistivity = Tb_eV &
+    ! Calculate resistivity
+    calc_resistivity_conductor = Tb_eV &
         / (5.0e6_num + 170.0_num*Tb_eV**2.5_num + 3.0e5_num*Tb_eV)
 
-  END FUNCTION calc_resistivity
+  END FUNCTION calc_resistivity_conductor
+
+
+
+  FUNCTION calc_resistivity_insulator(Tb)
+
+    ! Calculates the resistivity for the background temperature Tb, using the
+    ! heuristic model for plastic from Davies, et al, (2002). Phys. Rev. E,
+    ! 65(2), 026407
+
+    REAL(num), INTENT(IN) :: Tb
+    REAL(num) :: Tb_eV
+    REAL(num) :: calc_resistivity_insulator
+
+    ! Convert Tb from Kelvin to eV
+    Tb_eV = hybrid_const_K_to_eV * Tb
+
+    ! Calculate resistivity
+    calc_resistivity_insulator =  1.0_num / (4.3e5_num + 1.3e3_num*Tb**1.5_num)
+
+  END FUNCTION calc_resistivity_insulator
 
 
 
@@ -697,12 +731,20 @@ CONTAINS
 
   SUBROUTINE update_resistivity
 
-    ! Loops over the local resistivity grid and updates each point
+    ! Loops over the resistivity grid and updates each point based on the
+    ! resistivity model in that cell
 
     INTEGER :: ix
 
     DO ix = 1-ng, nx+ng
-       resistivity(ix) = calc_resistivity(hybrid_Tb(ix))
+      SELECT CASE (resistivity_model(ix))
+      CASE(c_resist_vacuum)
+        resistivity(ix) = 0.0_num
+      CASE(c_resist_conductor)
+        resistivity(ix) = calc_resistivity_conductor(hybrid_Tb(ix))
+      CASE(c_resist_insulator)
+        resistivity(ix) = calc_resistivity_insulator(hybrid_Tb(ix))
+      END SELECT
     END DO
 
   END SUBROUTINE update_resistivity

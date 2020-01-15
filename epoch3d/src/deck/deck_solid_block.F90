@@ -110,7 +110,7 @@ CONTAINS
   FUNCTION solid_block_handle_element(element, value) RESULT(errcode)
 
     CHARACTER(*), INTENT(IN) :: element, value
-    INTEGER :: errcode
+    INTEGER :: errcode, io, iu
 
     errcode = c_err_none
     IF (deck_state == c_ds_first) RETURN
@@ -138,6 +138,28 @@ CONTAINS
         .OR. str_cmp(element, 'rho' ) &
         .OR. str_cmp(element, 'ni')) THEN
       CALL fill_array(solid_array(solid_index)%ion_density, value)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'resistivity') &
+        .OR. str_cmp(element, 'resistivity_model' ) &
+        .OR. str_cmp(element, 'material')) THEN
+      IF (str_cmp(value, 'vacuum')) THEN
+        solid_array(solid_index)%material = c_resist_vacuum
+      ELSE IF (str_cmp(value, 'conductor')) THEN
+        solid_array(solid_index)%material = c_resist_conductor
+      ELSE IF (str_cmp(value, 'insulator')) THEN
+        solid_array(solid_index)%material = c_resist_insulator
+      ELSE
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units ! Print to stdout and to file
+            io = io_units(iu)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Unrecognised resistivity model: ', value
+            WRITE(io,*) 'Code will ignore return currents from this solid'
+          END DO
+        END IF
+      END IF
       RETURN
     END IF
 
