@@ -343,7 +343,8 @@ CONTAINS
     Tb_eV = hybrid_const_K_to_eV * Tb
 
     ! Calculate resistivity
-    calc_resistivity_insulator =  1.0_num / (4.3e5_num + 1.3e3_num*Tb**1.5_num)
+    calc_resistivity_insulator =  1.0_num &
+        / (4.3e5_num + 1.3e3_num*Tb_eV**1.5_num)
 
   END FUNCTION calc_resistivity_insulator
 
