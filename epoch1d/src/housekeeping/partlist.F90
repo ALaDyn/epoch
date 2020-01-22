@@ -46,6 +46,9 @@ CONTAINS
 #if !defined(PER_SPECIES_WEIGHT) || defined(PHOTONS)
     nvar = nvar+1
 #endif
+#if !defined(NO_PARTICLE_PROBES) && defined(PROBE_TIME)
+    nvar = nvar+1
+#endif
 #ifdef DELTAF_METHOD
     nvar = nvar+1
 #endif
@@ -392,6 +395,10 @@ CONTAINS
     array(cpos) = a_particle%weight
     cpos = cpos+1
 #endif
+#if !defined(NO_PARTICLE_PROBES) && defined(PROBE_TIME)
+    array(cpos) = a_particle%probe_time
+    cpos = cpos+1
+#endif
 #ifdef DELTAF_METHOD
     array(cpos) = a_particle%pvol
     cpos = cpos+1
@@ -465,6 +472,10 @@ CONTAINS
     cpos = cpos+3
 #if !defined(PER_SPECIES_WEIGHT) || defined(PHOTONS)
     a_particle%weight = array(cpos)
+    cpos = cpos+1
+#endif
+#if !defined(NO_PARTICLE_PROBES) && defined(PROBE_TIME)
+    a_particle%probe_time = array(cpos)
     cpos = cpos+1
 #endif
 #ifdef DELTAF_METHOD
@@ -542,6 +553,9 @@ CONTAINS
 #ifdef PER_PARTICLE_CHARGE_MASS
     new_particle%charge = 0.0_num
     new_particle%mass = 0.0_num
+#endif
+#if !defined(NO_PARTICLE_PROBES) && defined(PROBE_TIME)
+    new_particle%probe_time = 0.0_num
 #endif
 #ifdef PARTICLE_DEBUG
     new_particle%processor = 0

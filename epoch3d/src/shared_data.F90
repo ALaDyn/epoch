@@ -260,6 +260,7 @@ MODULE constants
   INTEGER(i8), PARAMETER :: c_def_bremsstrahlung = 2**24
   INTEGER(i8), PARAMETER :: c_def_landau_lifshitz = 2**25
   INTEGER(i8), PARAMETER :: c_def_hybrid = 2**26
+  INTEGER(i8), PARAMETER :: c_def_probe_time = 2**27
 
   ! Stagger types
   INTEGER, PARAMETER :: c_stagger_ex = c_stagger_face_x
@@ -584,6 +585,9 @@ MODULE shared_data
     REAL(num) :: mass
 #endif
     TYPE(particle), POINTER :: next, prev
+#if !defined(NO_PARTICLE_PROBES) && defined(PROBE_TIME)
+    REAL(num) :: probe_time
+#endif
 #ifdef PARTICLE_DEBUG
     INTEGER :: processor
     INTEGER :: processor_at_t0
@@ -815,16 +819,17 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_hybrid_ion_charge = 64
   INTEGER, PARAMETER :: c_dump_hybrid_ni         = 65
   INTEGER, PARAMETER :: c_dump_hybrid_ion_temp   = 66
+  INTEGER, PARAMETER :: c_dump_probe_time        = 67
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 67
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 68
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 69
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 70
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 71
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 72
-  INTEGER, PARAMETER :: num_vars_to_dump         = 72
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 68
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 69
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 70
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 71
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 72
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 73
+  INTEGER, PARAMETER :: num_vars_to_dump         = 73
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 66
+  INTEGER, PARAMETER :: num_vars_to_dump         = 67
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
