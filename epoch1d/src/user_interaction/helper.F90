@@ -56,6 +56,9 @@ CONTAINS
 
     INTEGER :: ispecies
     TYPE(particle_species), POINTER :: species
+#ifndef NO_PARTICLE_PROBES
+    TYPE(particle_probe), POINTER :: test_probe
+#endif
 
     CALL set_thermal_bcs
 
@@ -100,6 +103,20 @@ CONTAINS
     END IF
 
     CALL deltaf_load
+
+    ! Set ID for species with a probe (this allows ID output without dumping ID
+    ! for all particles)
+#ifndef NO_PARTICLE_PROBES
+#if defined(PARTICLE_ID) || defined(PARTICLE_ID4)
+    DO ispecies = 1, n_species
+      ! Check if each species has a probe attached
+      test_probe => species_list(ispecies)%attached_probes
+      IF (ASSOCIATED(test_probe)) THEN
+        CALL generate_particle_ids(species_list(ispecies)%attached_list)
+      END IF
+    END DO
+#endif
+#endif
 
   END SUBROUTINE auto_load
 

@@ -236,6 +236,12 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(TRIM(ADJUSTL(str_in)), 'tnsa')) THEN
+      as_bc = c_bc_tnsa
+      RETURN
+    END IF
+
+
     IF (str_cmp(TRIM(ADJUSTL(str_in)), 'conduct')) THEN
       as_bc = c_bc_conduct
       RETURN

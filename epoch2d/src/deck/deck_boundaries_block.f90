@@ -102,11 +102,38 @@ CONTAINS
     INTEGER :: errcode
     INTEGER :: loop, elementselected, itmp
     INTEGER, PARAMETER :: nbase = boundary_block_nbase
+    CHARACTER(LEN=string_length) :: filename
+    LOGICAL :: got_filename
+    INTEGER :: filename_error_ignore
 
     errcode = c_err_none
     IF (deck_state /= c_ds_first) RETURN
 
+    ! Generate tables for TNSA boundaries if appropriate
+
+    IF (str_cmp(element, 'tnsa_escape')) THEN
+      CALL get_filename(value, filename, got_filename, filename_error_ignore)
+      IF (got_filename) THEN
+        CALL make_table(filename, c_tnsa_escape)
+      ELSE
+        errcode = c_err_bad_value
+      END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'tnsa_reflect')) THEN
+      CALL get_filename(value, filename, got_filename, filename_error_ignore)
+      IF (got_filename) THEN
+        CALL make_table(filename, c_tnsa_reflect)
+      ELSE
+        errcode = c_err_bad_value
+      END IF
+      RETURN
+    END IF
+
     errcode = c_err_unknown_element
+
+    ! Assign boundary types
 
     elementselected = 0
 
@@ -220,6 +247,11 @@ CONTAINS
       END IF
     END DO
 
+    ! TNSA boundaries only apply to particles, replace field TNSA with reflect
+    DO idx = 1, 2*c_ndims
+      IF (bc_field(idx) == c_bc_tnsa) bc_field(idx) = c_bc_reflect
+    END DO
+
     ! Sanity check on periodic boundaries
     error = .FALSE.
     DO idx = 1, c_ndims
@@ -247,5 +279,86 @@ CONTAINS
     END IF
 
   END FUNCTION boundary_block_check
+
+  
+
+  ! Allocates the global arrays tnsa_escape and tnsa_reflect
+  SUBROUTINE make_table(file_name, table_id)
+
+    CHARACTER(LEN=string_length) :: file_name
+    INTEGER :: table_id
+    INTEGER :: i_err, eof, line_count, iline, io, iu
+    REAL(num) :: temp(2)
+    LOGICAL :: pre_allocated
+
+    ! Open the file
+    OPEN(unit=lu, file=TRIM(file_name), STATUS='OLD')
+
+    ! First pass through the file to find the number of data values
+    eof = 0
+    line_count = 0
+    DO WHILE (eof == 0)
+      READ(lu, *, IOSTAT = eof) temp(1:2)
+      ! Successfully read line
+      IF (eof == 0) THEN
+        line_count = line_count + 1
+      ! Line contains illegal values
+      ELSE IF (eof > 1) THEN
+        IF (rank == 0) THEN
+          DO iu = 1, nio_units
+            io = io_units(iu)
+            WRITE(io,*)
+            WRITE(io,*) '*** WARNING ***'
+            WRITE(io,*) 'Illegal value present in: ', file_name
+            WRITE(io,*) 'Code will continue to run but behaviour is unknown'
+          END DO
+        END IF
+        eof = 0
+      END IF
+    END DO
+
+    ! Allocate tables
+    pre_allocated = .TRUE.
+
+    ! Escape table
+    IF (table_id == c_tnsa_escape) THEN
+      IF (.NOT. ALLOCATED(tnsa_escape)) THEN
+        pre_allocated = .FALSE.
+        ALLOCATE(tnsa_escape(2,line_count))
+      END IF
+    ! Reflect table
+    ELSE IF (table_id == c_tnsa_reflect) THEN
+      IF (.NOT. ALLOCATED(tnsa_reflect)) THEN
+        pre_allocated = .FALSE.
+        ALLOCATE(tnsa_reflect(2,line_count))
+      END IF
+    END IF
+
+    ! Has the user already written this table?
+    IF (pre_allocated) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units
+          io = io_units(iu)
+          WRITE(io,*)
+          WRITE(io,*) '*** WARNING ***'
+          WRITE(io,*) 'Multiple attempts to write TNSA tables will be ignored'
+        END DO
+      END IF
+    END IF
+
+    ! Prepare file for second pass
+    CLOSE(UNIT=lu)
+    OPEN(unit=lu, file=TRIM(file_name), STATUS='OLD')
+
+    ! Write table
+    DO iline = 1, line_count
+      IF (table_id==c_tnsa_escape) READ(lu,*,IOSTAT=eof) tnsa_escape(:,iline)
+      IF (table_id==c_tnsa_reflect) READ(lu,*,IOSTAT=eof) tnsa_reflect(:,iline)
+    END DO
+
+    ! Close file
+    CLOSE(UNIT=lu)
+
+  END SUBROUTINE make_table
 
 END MODULE deck_boundaries_block

@@ -997,7 +997,7 @@ CONTAINS
     ELSE
       IF(rank == 0) THEN
         PRINT*,'*** ERROR ***'
-        PRINT*,'Illegal value found in read_injector_real'
+        PRINT*,'Illegal value found in read_injector_int'
         PRINT*,'Injected particle will not behave as expected'
         CALL abort_code(c_err_bad_value)
       END IF
@@ -1035,7 +1035,7 @@ CONTAINS
     ELSE
       IF(rank == 0) THEN
         PRINT*,'*** ERROR ***'
-        PRINT*,'Illegal value found in read_injector_real'
+        PRINT*,'Illegal value found in read_injector_int4'
         PRINT*,'Injected particle will not behave as expected'
         CALL abort_code(c_err_bad_value)
       END IF

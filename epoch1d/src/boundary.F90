@@ -103,7 +103,8 @@ CONTAINS
     IF (boundary == c_bc_periodic &
         .OR. boundary == c_bc_reflect &
         .OR. boundary == c_bc_thermal &
-        .OR. boundary == c_bc_open) RETURN
+        .OR. boundary == c_bc_open &
+        .OR. boundary == c_bc_tnsa) RETURN
 
     IF (rank == 0) THEN
       WRITE(*,*)
@@ -349,7 +350,7 @@ CONTAINS
 
     n = n + 1
     bc = bc_species(n)
-    IF (x_min_boundary .AND. bc == c_bc_reflect) THEN
+    IF (x_min_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_tnsa)) THEN
       IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng-1
@@ -366,7 +367,7 @@ CONTAINS
 
     n = n + 1
     bc = bc_species(n)
-    IF (x_max_boundary .AND. bc == c_bc_reflect) THEN
+    IF (x_max_boundary .AND. (bc == c_bc_reflect .OR. bc == c_bc_tnsa)) THEN
       IF (flip_dir == (n-1)/2 + 1) THEN
         ! Currents get reversed in the direction of the boundary
         DO i = 1, ng
@@ -666,9 +667,15 @@ CONTAINS
             IF (x_min_boundary) THEN
               xbd = 0
               bc = bc_species(c_bd_x_min)
-              IF (bc == c_bc_reflect) THEN
+              IF (bc == c_bc_reflect .OR. bc == c_bc_tnsa) THEN
                 cur%part_pos = 2.0_num * x_min - part_pos
                 cur%part_p(1) = -cur%part_p(1)
+                IF (bc == c_bc_tnsa) THEN
+                  CALL tnsa_part_escape(cur, out_of_bounds, ispecies)
+                  IF (.NOT. out_of_bounds) THEN
+                    CALL tnsa_part_reflect(cur, c_bd_x_min, ispecies)
+                  END IF
+                END IF
               ELSE IF (bc == c_bc_periodic) THEN
                 xbd = -1
                 cur%part_pos = part_pos + length_x
@@ -725,9 +732,15 @@ CONTAINS
             IF (x_max_boundary) THEN
               xbd = 0
               bc = bc_species(c_bd_x_max)
-              IF (bc == c_bc_reflect) THEN
+              IF (bc == c_bc_reflect .OR. bc == c_bc_tnsa) THEN
                 cur%part_pos = 2.0_num * x_max - part_pos
                 cur%part_p(1) = -cur%part_p(1)
+                IF (bc == c_bc_tnsa) THEN
+                  CALL tnsa_part_escape(cur, out_of_bounds, ispecies)
+                  IF (.NOT. out_of_bounds) THEN
+                    CALL tnsa_part_reflect(cur, c_bd_x_min, ispecies)
+                  END IF
+                END IF
               ELSE IF (bc == c_bc_periodic) THEN
                 xbd = 1
                 cur%part_pos = part_pos - length_x
@@ -1110,5 +1123,136 @@ CONTAINS
     END IF
 
   END SUBROUTINE cpml_advance_b_currents
+
+
+
+  SUBROUTINE tnsa_part_escape(cur, out_of_bounds, ispecies)
+
+    ! In a laser-solid interaction, electrons can escape the solid when the
+    ! sheath field is not strong enough to contain them. We cannot model the
+    ! sheath field when running in hybrid mode, so we approximate its effect by
+    ! randomly removing particles based on an "escape chance", which can be
+    ! characterised in regular PIC
+
+    TYPE(particle), POINTER :: cur
+    LOGICAL :: out_of_bounds
+    INTEGER :: ispecies
+    REAL(num) :: part_KE, mc, escape_chance
+
+    ! Calculate particle KE
+#ifdef PER_PARTICLE_CHARGE_MASS
+    mc = cur%mass * c
+#else
+    mc = species_list(ispecies)%mass * c
+#endif
+    part_KE = c*(SQRT((mc)**2 + cur%part_p(1)**2 + cur%part_p(2)**2 &
+        + cur%part_p(3)**2) - mc)
+
+    ! Look-up escape chance
+    escape_chance = tnsa_table_interpolate(part_KE, tnsa_escape)
+
+    ! Check if particle escapes
+    IF (random() < escape_chance) out_of_bounds = .TRUE.
+
+  END SUBROUTINE tnsa_part_escape
+
+
+
+  SUBROUTINE tnsa_part_reflect(cur, boundary, ispecies)
+
+    ! In a laser-solid interaction, electrons can lose energy while refluxing in
+    ! the sheath field. We cannot model the sheath field when running in hybrid
+    ! mode, so we approximate its effect by reducing the energy of particles as
+    ! they reflux, which can be characterised in regular PIC
+
+    TYPE(particle), POINTER :: cur
+    INTEGER :: boundary, ispecies
+    REAL(num) :: part_KE, mc, dKE_frac
+
+    ! Calculate particle KE
+#ifdef PER_PARTICLE_CHARGE_MASS
+    mc = cur%mass * c
+#else
+    mc = species_list(ispecies)%mass * c
+#endif
+    part_KE = c*(SQRT((mc)**2 + cur%part_p(1)**2 + cur%part_p(2)**2 &
+        + cur%part_p(3)**2) - mc)
+
+    ! Look-up refluxing energy change
+    dKE_frac = tnsa_table_interpolate(part_KE, tnsa_reflect)
+
+    ! Apply momentum change
+    cur%part_p(1) = (1.0_num + dKE_frac) * cur%part_p(1)
+    cur%part_p(2) = (1.0_num + dKE_frac) * cur%part_p(2)
+    cur%part_p(3) = (1.0_num + dKE_frac) * cur%part_p(3)
+
+  END SUBROUTINE tnsa_part_reflect
+
+
+
+  FUNCTION tnsa_table_interpolate(x_in, table)
+
+    ! Interpolates in the table (2 by nx) array
+    ! table(1,:) contains the lookup values
+    ! table(2,:) contains the returning values
+    ! We output the "returning" value that corresponds to x_in in the "lookup"
+    ! values
+
+    REAL(num) :: tnsa_table_interpolate
+    REAL(num), INTENT(IN) :: x_in
+    INTEGER :: nx
+    REAL(num), INTENT(IN) :: table(:,:)
+    REAL(num) :: fx, x_value, value_interp, xdif1, xdif2, xdifm
+    INTEGER :: i1, i2, im
+    LOGICAL, SAVE :: warning = .TRUE.
+
+    nx = SIZE(table,2)
+
+    ! Use bisection to find the nearest cells i1, i2
+    i1 = 1
+    i2 = nx
+    xdif1 = table(1,i1) - x_in
+    xdif2 = table(1,i2) - x_in
+    IF (xdif1 * xdif2 < 0) THEN
+      DO
+        im = (i1 + i2) / 2
+        xdifm = table(1,im) - x_in
+        IF (xdif1 * xdifm < 0) THEN
+          i2 = im
+        ELSE
+          i1 = im
+          xdif1 = xdifm
+        END IF
+        IF (i2 - i1 == 1) EXIT
+      END DO
+
+      ! Interpolate in x to find fraction between the cells
+      fx = (x_in - table(1,i1)) / (table(1,i2) - table(1,i1))
+
+    ! Our x_in value falls outside of the lookup array - truncate the value
+    ELSE
+      IF (warning .AND. rank == 0) THEN
+        PRINT*,'*** WARNING ***'
+        PRINT*,'Argument to "tnsa_table_interpolate" in boundary.f90', &
+            ' outside the range of the table.'
+        PRINT*,'Using truncated value. No more warnings will be issued.'
+        warning = .FALSE.
+      END IF
+      IF (xdif1 >= 0) THEN
+        ! If below lowest value, assume 0
+        ! For escape, this means no chance of escape (expected for low KE)
+        ! For reflect, this means no energy loss/gain (ignore low KE)
+        tnsa_table_interpolate = 0.0_num
+        RETURN
+      ELSE
+        fx = 1.0_num
+      END IF
+    END IF
+
+    ! Corresponding number from return array, a fraction fx between i1 and i2
+    value_interp = (1.0_num - fx) * table(2,i1) + fx * table(2,i2)
+    tnsa_table_interpolate = value_interp
+
+  END FUNCTION tnsa_table_interpolate
 
 END MODULE boundary

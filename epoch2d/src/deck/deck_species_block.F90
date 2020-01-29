@@ -236,6 +236,8 @@ CONTAINS
 
           IF (bc == c_bc_reflect) THEN
             bc = c_bc_reflect
+          ELSE IF (bc == c_bc_tnsa) THEN
+            bc = c_bc_tnsa
           ELSE IF (bc /= c_bc_periodic) THEN
             bc = c_bc_open
           END IF

@@ -86,6 +86,7 @@ MODULE constants
   INTEGER, PARAMETER :: c_bc_cpml_laser = 12
   INTEGER, PARAMETER :: c_bc_cpml_outflow = 13
   INTEGER, PARAMETER :: c_bc_mixed = 14
+  INTEGER, PARAMETER :: c_bc_tnsa = 15
 
   ! Boundary location codes
   INTEGER, PARAMETER :: c_bd_x_min = 1
@@ -1068,12 +1069,19 @@ MODULE shared_data
   INTEGER :: bc_x_max_after_move
   REAL(num) :: window_shift
 
-#ifdef HYBRID
   !----------------------------------------------------------------------------
   ! Hybrid mode - Written by S. J. Morris
   ! Based on J. R. Davies, et al, 1997. Phys. Rev. E, 56(6), p.7193.
   !----------------------------------------------------------------------------
 
+  ! Arrays to approximate the effects of refluxing energy loss, loosely based
+  ! off observations from:
+  ! D. Rusby, et al, 2019. High Power Laser Sci. Eng., 7, E45
+  REAL(num), ALLOCATABLE :: tnsa_escape(:,:), tnsa_reflect(:,:)
+  INTEGER, PARAMETER :: c_tnsa_escape = 1
+  INTEGER, PARAMETER :: c_tnsa_reflect = 2
+
+#ifdef HYBRID
   ! Solid type
   TYPE solid
     ! Input variables
