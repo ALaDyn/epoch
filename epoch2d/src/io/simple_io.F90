@@ -112,9 +112,9 @@ CONTAINS
     INTEGER(KIND=MPI_OFFSET_KIND), INTENT(IN) :: offset
     REAL(num), DIMENSION(:), POINTER, INTENT(INOUT) :: array
     INTEGER, INTENT(INOUT) :: err
-    INTEGER(KIND=MPI_OFFSET_KIND) :: filesize, disp
+    INTEGER(KIND=MPI_OFFSET_KIND) :: filesize, disp, records
     INTEGER(KIND=MPI_OFFSET_KIND) :: total_records, remainder, tail
-    INTEGER :: fh, typesize, records
+    INTEGER :: fh, typesize, records4
     INTEGER :: stat(MPI_STATUS_SIZE)
     INTEGER :: datatype
 
@@ -153,7 +153,7 @@ CONTAINS
     END IF
 
     total_records = (filesize - offset - tail) / typesize
-    records = INT(total_records / nproc, i4)
+    records = INT(total_records / nproc, i8)
     remainder = MOD(total_records, INT(nproc, i8))
     IF (rank < remainder) THEN
       records = records + 1
@@ -163,14 +163,15 @@ CONTAINS
           + records * (rank - remainder) * typesize
     END IF
 
-    ALLOCATE(array(records))
+    records4 = INT(records)
+    ALLOCATE(array(records4))
 
     CALL MPI_FILE_SET_VIEW(fh, disp, datatype, datatype, 'native', &
         MPI_INFO_NULL, errcode)
 
-    CALL MPI_FILE_READ_ALL(fh, array, records, datatype, stat, errcode)
+    CALL MPI_FILE_READ_ALL(fh, array, records4, datatype, stat, errcode)
 
-    CALL MPI_GET_COUNT(stat, datatype, records, errcode)
+    CALL MPI_GET_COUNT(stat, datatype, records4, errcode)
 
     CALL MPI_FILE_CLOSE(fh, errcode)
 
