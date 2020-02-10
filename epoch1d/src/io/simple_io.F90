@@ -185,13 +185,13 @@ CONTAINS
     INTEGER(KIND=MPI_OFFSET_KIND), INTENT(IN) :: offset
     INTEGER(KIND=i4), DIMENSION(:), POINTER, INTENT(INOUT) :: array
     INTEGER, INTENT(INOUT) :: err
-    INTEGER(KIND=MPI_OFFSET_KIND) :: filesize, disp
+    INTEGER(KIND=MPI_OFFSET_KIND) :: filesize, disp, records8
     INTEGER(KIND=MPI_OFFSET_KIND) :: total_records, remainder, tail
     INTEGER :: fh, typesize, records
     INTEGER :: stat(MPI_STATUS_SIZE)
     INTEGER :: datatype = MPI_INTEGER4
 
-    records = 0
+    records8 = 0
 
     CALL MPI_TYPE_SIZE(datatype, typesize, errcode)
 
@@ -224,16 +224,17 @@ CONTAINS
     END IF
 
     total_records = (filesize - offset - tail) / typesize
-    records = INT(total_records / nproc, i4)
+    records8 = INT(total_records / nproc, i8)
     remainder = MOD(total_records, INT(nproc, i8))
     IF (rank < remainder) THEN
-      records = records + 1
-      disp = offset + rank * records * typesize
+      records8 = records8 + 1
+      disp = offset + rank * records8 * typesize
     ELSE
-      disp = offset + (records + 1) * remainder * typesize &
-          + records * (rank - remainder) * typesize
+      disp = offset + (records8 + 1) * remainder * typesize &
+          + records8 * (rank - remainder) * typesize
     END IF
 
+    records = INT(records8)
     ALLOCATE(array(records))
 
     CALL MPI_FILE_SET_VIEW(fh, disp, datatype, datatype, 'native', &
@@ -255,13 +256,13 @@ CONTAINS
     INTEGER(KIND=MPI_OFFSET_KIND), INTENT(IN) :: offset
     INTEGER(KIND=i8), DIMENSION(:), POINTER, INTENT(INOUT) :: array
     INTEGER, INTENT(INOUT) :: err
-    INTEGER(KIND=MPI_OFFSET_KIND) :: filesize, disp
+    INTEGER(KIND=MPI_OFFSET_KIND) :: filesize, disp, records8
     INTEGER(KIND=MPI_OFFSET_KIND) :: total_records, remainder, tail
     INTEGER :: fh, typesize, records
     INTEGER :: stat(MPI_STATUS_SIZE)
     INTEGER :: datatype = MPI_INTEGER8
 
-    records = 0
+    records8 = 0
 
     CALL MPI_TYPE_SIZE(datatype, typesize, errcode)
 
@@ -294,16 +295,17 @@ CONTAINS
     END IF
 
     total_records = (filesize - offset - tail) / typesize
-    records = INT(total_records / nproc, i4)
+    records8 = INT(total_records / nproc, i8)
     remainder = MOD(total_records, INT(nproc, i8))
     IF (rank < remainder) THEN
-      records = records + 1
-      disp = offset + rank * records * typesize
+      records8 = records8 + 1
+      disp = offset + rank * records8 * typesize
     ELSE
-      disp = offset + (records + 1) * remainder * typesize &
-          + records * (rank - remainder) * typesize
+      disp = offset + (records8 + 1) * remainder * typesize &
+          + records8 * (rank - remainder) * typesize
     END IF
 
+    records = INT(records8)
     ALLOCATE(array(records))
 
     CALL MPI_FILE_SET_VIEW(fh, disp, datatype, datatype, 'native', &
