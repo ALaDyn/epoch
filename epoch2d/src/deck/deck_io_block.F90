@@ -140,6 +140,8 @@ CONTAINS
     io_block_name (c_dump_hybrid_ion_charge) = 'background_ion_charge'
     io_block_name (c_dump_hybrid_ni        ) = 'background_ni'
     io_block_name (c_dump_hybrid_ion_temp  ) = 'background_ion_temp'
+    io_block_name (c_dump_part_opdepth_delt) = 'delta_optical_depth'
+    io_block_name (c_dump_pic_hybrid_smooth) = 'pic_hybrid_smooth'
 
     i = num_vars_to_dump
     o1 = 1

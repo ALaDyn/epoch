@@ -23,6 +23,7 @@ MODULE finish
   USE deck
   USE window
   USE laser
+  USE hy_laser
   USE collisions
   USE dist_fn
   USE ionise
@@ -64,7 +65,7 @@ CONTAINS
     IF (use_hybrid) THEN
       DEALLOCATE(resistivity, resistivity_model, hybrid_Tb)
       DEALLOCATE(ion_charge, ion_density, ion_temp)
-      DEALLOCATE(hybrid_const_heat)
+      DEALLOCATE(hybrid_const_heat, hybrid_const_sum_ne)
 
       ! Deallocate the ion density array for each solid first
       IF (made_solid_array) THEN
@@ -74,6 +75,23 @@ CONTAINS
         END DO
         ! Deallocate the array of solids after
         DEALLOCATE(solid_array)
+      END IF
+
+      IF (use_hybrid_scatter) THEN
+        DEALLOCATE(urb_d1, urb_d2, urb_d3, urb_d4)
+        DEALLOCATE(urb_iZ23, urb_theta1, urb_theta2, urb_Zeff, urb_rad_len)
+      END IF
+    END IF
+#endif
+
+#ifdef PIC_HYBRID
+    IF (use_pic_hybrid) THEN
+      DEALLOCATE(is_hybrid, field_frac)
+      IF (use_pic_hybrid_fields) THEN
+        DEALLOCATE(ex_pic, ey_pic, ez_pic)
+        DEALLOCATE(bx_pic, by_pic, bz_pic)
+        DEALLOCATE(ex_hy, ey_hy, ez_hy)
+        DEALLOCATE(bx_hy, by_hy, bz_hy)
       END IF
     END IF
 #endif
@@ -129,6 +147,7 @@ CONTAINS
     CALL deallocate_input_deck_buffer
     CALL deallocate_window
     CALL deallocate_lasers
+    CALL deallocate_hy_lasers
     CALL deallocate_collisions
     CALL deallocate_file_list
     CALL deallocate_dist_fns

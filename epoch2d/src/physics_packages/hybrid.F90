@@ -25,6 +25,8 @@ MODULE hybrid
   USE particles
   USE particle_migration
   USE random_generator
+  USE hy_elastic_scatter
+  USE hy_laser
 #ifdef LANDAU_LIFSHITZ
   USE landau_lifshitz
 #endif
@@ -96,6 +98,7 @@ CONTAINS
 
         ! Inject particles into the simulation
         CALL run_injectors
+        CALL run_hybrid_lasers
 
         ! .FALSE. this time to use load balancing threshold
         IF (use_balance) CALL balance_workload(.FALSE.)
@@ -103,14 +106,22 @@ CONTAINS
         ! Move particles, leapfrogging over E and B
         CALL push_particles
 
+        ! Calculate scattering from elastic collisions
+        IF (use_hybrid_scatter) THEN
+          CALL run_elastic_scatter
+        END IF
+
         ! Obtain heat capacity to calculate the temperature change in
         ! hybrid_collisions and ohmic_heating
         CALL get_heat_capacity
 
-        ! Calculates collisional drag/scattering, and updates grid temperature
+        ! Calculates ionisational energy loss, and updates grid temperature
         IF (use_hybrid_collisions) THEN
-          CALL hybrid_collisions
+          CALL run_ionisation_loss
         END IF
+
+        ! Removes slow particles from the simulation
+        CALL remove_slow_particles
 
         ! Updates grid temperature due to Ohmic heating
         CALL ohmic_heating
@@ -156,21 +167,32 @@ CONTAINS
     ! constants, to speed up the code
 
     REAL(num) :: resistivity_init, max_ne
-    REAL(num) :: sum_ne(1-ng:nx+ng,1-ng:ny+ng)
     INTEGER :: ix, iy, i_sol
     INTEGER :: io, iu
 
     IF (use_hybrid) THEN
+
+      IF (use_hybrid_collisions) THEN
+        CALL setup_hy_ionisation_loss
+      END IF
+
+      IF (use_hybrid_scatter) THEN
+        CALL setup_hy_elastic_scatter
+      END IF
+
       ! Preset useful constants
       hybrid_const_dx = 1.0_num / (mu0 * dx)
       hybrid_const_dy = 1.0_num / (mu0 * dy)
       hybrid_const_K_to_eV = kb / q0
       hybrid_const_dt_by_dx = 0.5_num * dt / dx
       hybrid_const_dt_by_dy = 0.5_num * dt / dy
+      hybrid_idx = 1.0_num/dx
+      hybrid_idy = 1.0_num/dy
 
       ! Preset useful constants for solids
       ALLOCATE(hybrid_const_heat(1-ng:nx+ng,1-ng:ny+ng))
-      sum_ne = 0
+      ALLOCATE(hybrid_const_sum_ne(1-ng:nx+ng,1-ng:ny+ng))
+      hybrid_const_sum_ne = 0
       DO i_sol = 1, solid_count
         solid_array(i_sol)%el_density = solid_array(i_sol)%hybrid_Z &
             * solid_array(i_sol)%ion_density
@@ -181,10 +203,23 @@ CONTAINS
         solid_array(i_sol)%hybrid_const_ZeV = &
             solid_array(i_sol)%hybrid_Z**(-4.0_num/3.0_num) &
             * hybrid_const_K_to_eV
+        solid_array(i_sol)%Iex_term = 2.0_num &
+            / (solid_array(i_sol)%hybrid_Iex/mc2)**2
+        solid_array(i_sol)%dEdx_C = 1.0_num + 2.0_num &
+            * LOG(solid_array(i_sol)%hybrid_Iex/(h_bar*q0)*SQRT(epsilon0 * m0))
 
-        sum_ne = sum_ne + solid_array(i_sol)%el_density
+        hybrid_const_sum_ne = hybrid_const_sum_ne &
+            + solid_array(i_sol)%el_density
       END DO
-      hybrid_const_heat = 1.0_num/(kb * sum_ne**2)
+      hybrid_const_heat = 0.0_num
+      DO iy = 1-ng,ny+ng
+        DO ix = 1-ng,nx+ng
+          IF (hybrid_const_sum_ne(ix,iy) > 0.0_num) THEN
+            hybrid_const_heat(ix,iy) = 1.0_num &
+              / (kb * hybrid_const_sum_ne(ix,iy)**2)
+          END IF
+        END DO
+      END DO
 
       ! Allocate additional arrays for running in hybrid mode. These require
       ! extra remapping scripts in balance.F90 (for domain change in
@@ -292,9 +327,29 @@ CONTAINS
           END IF
           errcode = c_err_bad_value + c_err_terminate
         END IF
+
+        ! Check the radiation length is positive (only used in elastic scatter)
+        IF (solid_array(i_sol)%rad_len < 0.0_num &
+            .AND. use_hybrid_scatter) THEN
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*)
+              WRITE(io,*) '*** ERROR ***'
+              WRITE(io,*) 'Please set all solid radiation lengths to ', &
+                  'positive values for hybrid scatter'
+              WRITE(io,*) 'Code will terminate.'
+            END DO
+          END IF
+          errcode = c_err_bad_value + c_err_terminate
+        END IF
       END DO
 
-      IF (rank == 0) PRINT*, 'Code is running in hybrid mode'
+      IF (use_pic_hybrid) THEN
+        IF (rank == 0) PRINT*, 'Code is running in PIC-hybrid mode'
+      ELSE
+        IF (rank == 0) PRINT*, 'Code is running in hybrid mode'
+      END IF
 
     ELSE
       ! Do not try to output hybrid variables if we aren't running in hybrid
@@ -491,6 +546,12 @@ CONTAINS
 
       DO iy = 1-ng, ny+ng
         DO ix = 1-ng, nx+ng
+#ifdef PIC_HYBRID
+        ! Ignore heat capacity in PIC region
+        IF (use_pic_hybrid) THEN
+          IF (.NOT. is_hybrid(ix,iy)) CYCLE
+        END IF
+#endif
           T_prime = solid_array(i_sol)%hybrid_const_ZeV * hybrid_Tb(ix,iy)
           solid_array(i_sol)%heat_capacity(ix,iy) = 0.3_num &
               + 1.2_num * T_prime * (2.2_num + T_prime)/(1.1_num + T_prime)**2
@@ -502,66 +563,77 @@ CONTAINS
 
 
 
-  SUBROUTINE hybrid_collisions
+  SUBROUTINE run_elastic_scatter
 
-    ! Calculates collisional drag/scattering, and updates grid temperature based
-    ! on energy lost by the particles
+    ! Runs the user-requested elastic scatter model
+
+    IF (elastic_scatter_model == c_hy_davies) THEN
+      CALL Davies_elastic_scatter
+    ELSE IF (elastic_scatter_model == c_hy_urban) THEN
+      CALL Urban_elastic_scatter
+    END IF
+
+  END SUBROUTINE run_elastic_scatter
+
+
+
+  SUBROUTINE Davies_elastic_scatter
+
+    ! Calculates collisional scattering using the method discussed in  Davies,
+    ! et al, (2002). Phys. Rev. E, 65(2), 026407
 
     INTEGER :: ispecies
     INTEGER(i8) :: ipart
-    REAL(num) :: heat_const(1-ng:nx+ng,1-ng:ny+ng)
-    REAL(num) :: part_heat_const
-    REAL(num) :: ipart_mc, m2c4, sum_dp, sum_dtheta, part_ne
-    REAL(num) :: px, py, pz, p, gamma, v, ipart_KE, ln_lambda_L_terms, delta_p
-    REAL(num) :: rand1, rand2, rand_scatter, ln_lambda_S, delta_theta, delta_phi
-    REAL(num) :: frac_p, ux, uy, uz, frac_uz, frac
-    REAL(num) :: sin_t, cos_t, cos_p, sin_t_cos_p, sin_t_sin_p
-    REAL(num) :: p_new_2, weight, dE, part_x, part_y, part_C, delta_Tb
-    REAL(num) :: idx, idy
-    INTEGER :: ix, iy, i_sol
+    REAL(num) :: ipart_mc, sum_dtheta, part_ne
+    REAL(num) :: p, gamma, v
+    REAL(num) :: rand_scatter, delta_theta, delta_phi
+    REAL(num) :: part_x, part_y
+    INTEGER :: i_sol
     TYPE(particle), POINTER :: current, next
 
-    idx = 1.0_num/dx
-    idy = 1.0_num/dy
+    ! Precalculate repeated variables
+    ipart_mc  = 1.0_num / mc0
 
     ! Generate a normally distributed random number for the scatter angle.
     ! The argument here refers to the standard deviation. The mean is
-    ! assumed zero. In Davies, et al, (2002). Phys. Rev. E, 65(2), 026407, this
-    ! random number is a function of time, which might mean constant for all
-    ! particles at a given timestep, t.
+    ! assumed zero.
     rand_scatter = random_box_muller(1.0_num)
 
-    ! 1 / (kb * sum(ne) * dx * dy) - last bit is per unit volume, but dz is 1m
-    ! in epoch2d
-    heat_const = hybrid_const_heat / (dx * dy)
-
-    ! Loop over all non-photon species
+    ! Loop over all electron species
     DO ispecies = 1, n_species
       current => species_list(ispecies)%attached_list%head
-      IF (species_list(ispecies)%species_type == c_species_id_photon) CYCLE
-
-      ipart_mc  = 1.0_num / (c * species_list(ispecies)%mass)
-      m2c4 = species_list(ispecies)%mass**2 * c**4
+      IF (.NOT. species_list(ispecies)%species_type == c_species_id_electron) &
+          CYCLE
 
       ! Loop over all particles in the species
       DO ipart = 1, species_list(ispecies)%attached_list%count
         next => current%next
 
+#ifdef PIC_HYBRID
+        ! Ignore elastic scatter in PIC region
+        IF (use_pic_hybrid) THEN
+          IF (.NOT. current%in_hybrid) THEN
+            next => current%next
+            current => next
+            CYCLE
+          END IF
+        END IF
+#endif
+
         ! Extract particle variables
         part_x = current%part_pos(1) - x_grid_min_local
         part_y = current%part_pos(2) - y_grid_min_local
-        px = current%part_p(1)
-        py = current%part_p(2)
-        pz = current%part_p(3)
-        p = SQRT(px**2 + py**2 + pz**2)
+        p = SQRT(current%part_p(1)**2 + current%part_p(2)**2 &
+            + current%part_p(3)**2)
+        ! No scatter for immobile electrons
+        IF (p < c_tiny) THEN
+          current => next
+          CYCLE
+        END IF
         gamma = SQRT((p * ipart_mc)**2 + 1.0_num)
         v = p * ipart_mc * c / gamma
-        ipart_KE = (gamma - 1.0_num) * species_list(ispecies)%mass * c**2
-        ln_lambda_L_terms = 0.5_num*LOG(gamma + 1.0_num) + 0.909_num/gamma**2 &
-            - 0.818_num/gamma - 0.246_num
 
         ! Extract solid variables averaged over all solids present in this cell
-        sum_dp = 0.0_num
         sum_dtheta = 0.0_num
         DO i_sol = 1, solid_count
           CALL hy_grid_centred_var_at_particle(part_x, part_y, part_ne, &
@@ -574,119 +646,81 @@ CONTAINS
           ! Very low energy particles (~50 eV) will make ln_lambda_S go negative
           ! causing a NaN in delta_theta. The hybrid mode isn't designed for low
           ! energy electrons, so delta_theta will be ignored in this case
-          sum_dp = sum_dp + part_ne * ( ln_lambda_L_terms &
-              + LOG(MAX(1.0_num, ipart_KE/solid_array(i_sol)%hybrid_Iex)))
           sum_dtheta = sum_dtheta + solid_array(i_sol)%theta_fac * part_ne &
               * LOG(MAX(1.0_num, solid_array(i_sol)%hybrid_ln_s * p)) * dt / v
         END DO
 
-        ! Collisional changes to momentum and direction
-        delta_p =  hybrid_const_dp * sum_dp * dt &
-            / (species_list(ispecies)%mass * v**2)
+        ! Collisional changes to direction
         delta_theta = SQRT(sum_dtheta) / p * rand_scatter
         delta_phi = 2.0_num * pi * random()
 
-        ! Apply scattering angles delta_theta and delta_phi to rotate p
-        frac_p = 1.0_num / p
-        ux = px * frac_p
-        uy = py * frac_p
-        uz = pz * frac_p
-        sin_t = SIN(delta_theta)
-        IF (ABS(1.0_num - uz) < 1.0e-5_num) THEN
-          px = p * sin_t * COS(delta_phi)
-          py = p * sin_t * SIN(delta_phi)
-          pz = p * uz / ABS(uz) * COS(delta_theta)
-        ELSE
-          frac_uz = 1.0_num/SQRT(1 - uz**2)
-          cos_t = COS(delta_theta)
-          cos_p = COS(delta_phi)
-          sin_t_cos_p = sin_t*cos_p
-          sin_t_sin_p = sin_t*SIN(delta_phi)
-          px = p*(ux*cos_t + sin_t_cos_p*ux*uz*frac_uz &
-              - sin_t_sin_p*uy*frac_uz)
-          py = p*(uy*cos_t + sin_t_cos_p*uy*uz*frac_uz &
-              + sin_t_sin_p*ux*frac_uz)
-          pz = p*(uz*cos_t + cos_p*sin_t*(uz**2 - 1.0_num)*frac_uz)
-        END IF
-
-        ! Reduce particle momentum
-        frac = MAX(1.0_num + delta_p / ABS(p), 0.0_num)
-        current%part_p(1) = px * frac
-        current%part_p(2) = py * frac
-        current%part_p(3) = pz * frac
-
-        ! Calculate energy change due to collisions
-        p_new_2 = current%part_p(1)**2 + current%part_p(2)**2 &
-            + current%part_p(3)**2
-#ifndef PER_SPECIES_WEIGHT
-        weight = current%weight
-#else
-        weight = species_list(ispecies)%weight
-#endif
-        dE = (SQRT(p_new_2*c**2 + m2c4) - SQRT((p*c)**2 + m2c4)) * weight
-
-        ! Get effective heat capacity at the particle position
-        CALL hy_grid_centred_var_at_particle(part_x, part_y, part_heat_const, &
-            heat_const)
-        CALL get_effective_heat_capacity(part_x, part_y, part_C)
-
-        ! Calculate the temperature increase, and add this to Tb. We use -dE,
-        ! as the energy gain for temperature is equal to the energy loss of
-        ! the electron.
-        delta_Tb = - dE * part_C * part_heat_const
-
-        ! Write temperature change to the grid (ignores particle shape)
-        ! Impose maximum temperature of 1e30 to prevent temperature rising
-        ! unphysically
-        ix = MAX(1,CEILING(part_x*idx))
-        iy = MAX(1,CEILING(part_y*idy))
-        hybrid_Tb(ix,iy) = MIN(hybrid_Tb(ix,iy) + delta_Tb, 1.0e30_num)
+        ! Apply rotation
+        CALL rotate_p(current, COS(delta_theta), delta_phi, p)
 
         current => next
-
       END DO
     END DO
 
-    ! Pass new temperature values to ghost cells of neighbouring processors
-    CALL field_bc(hybrid_Tb, ng)
-
-  END SUBROUTINE hybrid_collisions
+  END SUBROUTINE Davies_elastic_scatter
 
 
 
-  SUBROUTINE get_effective_heat_capacity(part_x, part_y, part_C)
+  SUBROUTINE remove_slow_particles
 
-    ! Temperature increase for one background species would be:
-    !
-    ! (energy change per unit vol.) * (vol. of e-, 1/ne) / (heat cap. of e-)
-    !
-    ! This implementation of the Davies model can use multiple backgrounds, so
-    ! we define an effective heat capacity to find the total temperature rise.
-    ! This assumes the energy is split evenly between all e- in the cell, which
-    ! convert the energy into a temperature increase using different C values
-    !
-    ! (effective heat capacity) = sum(ne/C)
+    ! Removes particles from the simulation if their energy drops below
+    ! min_hybrid_energy. If running in PIC-hybrid mode, this removal only occurs
+    ! in pure hybrid regions. Ionisation energy loss will reduce the KE of
+    ! particles to zero if their total energy is below min_hybrid_energy,
+    ! dumping the KE locally as a temperature increase. These particles will
+    ! have zero KE when this subroutine is called, so remove all particles with
+    ! zero KE
 
-    REAL(num), INTENT(IN) :: part_x, part_y
-    REAL(num), INTENT(OUT) :: part_C
-    INTEGER :: i_sol
-    REAL(num) :: C_sol, part_ne
+    INTEGER :: ispecies
+    REAL(num) :: part_x, part_y, part_field
+    TYPE(particle), POINTER :: current, next
 
-    part_C = 0.0_num
+    ! Check each electron species
+    DO ispecies = 1, n_species
+      IF (species_list(ispecies)%species_type /= c_species_id_electron) CYCLE
 
-    ! Loop over all solids
-    DO i_sol = 1, solid_count
-      ! Get heat capacity at particle position for current solid
-      CALL hy_grid_centred_var_at_particle(part_x, part_y, C_sol, &
-          solid_array(i_sol)%heat_capacity)
-      CALL hy_grid_centred_var_at_particle(part_x, part_y, part_ne, &
-          solid_array(i_sol)%el_density)
+      ! Cycle through all electrons in this species
+      current => species_list(ispecies)%attached_list%head
+      DO WHILE(ASSOCIATED(current))
+        next=>current%next
 
-      ! Contribution to the effective heat capacity
-      part_C = part_C + part_ne / C_sol
+#ifdef PIC_HYBRID
+        ! Only test particles inside the pure hybrid region (so we don't remove
+        ! interpolation particles in the overlap region)
+        IF (use_pic_hybrid) THEN
+          part_x = current%part_pos(1) - x_grid_min_local
+          part_y = current%part_pos(2) - y_grid_min_local
+          CALL hy_grid_centred_var_at_particle(part_x, part_y, part_field, &
+              field_frac)
+          ! If outside pure hybrid region, skip particle
+          IF (part_field > c_tiny) THEN
+            current=>next
+            CYCLE
+          END IF
+        END IF
+#endif
+
+        ! If the particle has lost all its KE, remove it from the simulation
+        IF (current%particle_energy - mc2 < 1.0e-10_num*mc2) THEN
+          CALL remove_particle_from_partlist(&
+              species_list(ispecies)%attached_list, current)
+          IF (track_ejected_particles) THEN
+            CALL add_particle_to_partlist(&
+                ejected_list(ispecies)%attached_list, current)
+          ELSE
+            DEALLOCATE(current)
+          END IF
+        END IF
+
+        current=>next
+      END DO
     END DO
 
-  END SUBROUTINE get_effective_heat_capacity
+  END SUBROUTINE remove_slow_particles
 
 
 
@@ -720,6 +754,12 @@ CONTAINS
     ! Loop over all grid points to find temperature change
     DO iy = 1, ny
       DO ix = 1, nx
+#ifdef PIC_HYBRID
+        ! No Ohmic heating in PIC region
+        IF (use_pic_hybrid) THEN
+          IF (.NOT. is_hybrid(ix,iy)) CYCLE
+        END IF
+#endif
         ! Tb is a cell-centred variable, but E has stagger - need to average
         E2 = (0.5_num*(ex(ix,iy) + ex(ix-1,iy)))**2 &
             +(0.5_num*(ey(ix,iy) + ey(ix,iy-1)))**2 &
@@ -767,6 +807,12 @@ CONTAINS
 
     DO iy = 1-ng, ny+ng
       DO ix = 1-ng, nx+ng
+#ifdef PIC_HYBRID
+        ! No resistivity in PIC region
+        IF (use_pic_hybrid) THEN
+          IF (.NOT. is_hybrid(ix,iy)) CYCLE
+        END IF
+#endif
         SELECT CASE (resistivity_model(ix,iy))
         CASE(c_resist_vacuum)
           resistivity(ix,iy) = 0.0_num
@@ -812,100 +858,6 @@ CONTAINS
     END IF
 
   END SUBROUTINE field_zero_curl
-
-
-
-  SUBROUTINE hy_grid_centred_var_at_particle(part_x, part_y, part_var, grid_var)
-
-    ! Calculates the value of a grid-centred variable "part_var" stored in the
-    ! grid "grid_var", averaged over the particle shape for a particle at
-    ! position (part_x, part_y)
-
-    REAL(num), INTENT(in) :: part_x, part_y
-    REAL(num), INTENT(in) :: grid_var(1-ng:nx+ng, 1-ng:ny+ng)
-    REAL(num), INTENT(out) :: part_var
-    INTEGER :: cell_x1, cell_y1
-    REAL(num) :: cell_x_r, cell_y_r
-    REAL(num) :: cell_frac_x, cell_frac_y
-    REAL(num), DIMENSION(sf_min:sf_max) :: gx, gy
-#ifdef PARTICLE_SHAPE_BSPLINE3
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (1.0_num / 24.0_num)**c_ndims
-#elif  PARTICLE_SHAPE_TOPHAT
-    REAL(num), PARAMETER :: fac = (1.0_num)**c_ndims
-#else
-    REAL(num) :: cf2
-    REAL(num), PARAMETER :: fac = (0.5_num)**c_ndims
-#endif
-
-    ! The following method is lifted from photons.F90 (field_at_particle), for
-    ! the cell-centered fields, taking into account the various particle shapes
-#ifdef PARTICLE_SHAPE_TOPHAT
-    cell_x_r = part_x / dx - 0.5_num
-    cell_y_r = part_y / dy - 0.5_num
-#else
-    cell_x_r = part_x / dx
-    cell_y_r = part_y / dy
-#endif
-    cell_x1 = FLOOR(cell_x_r + 0.5_num)
-    cell_frac_x = REAL(cell_x1, num) - cell_x_r
-    cell_x1 = cell_x1 + 1
-    cell_y1 = FLOOR(cell_y_r + 0.5_num)
-    cell_frac_y = REAL(cell_y1, num) - cell_y_r
-    cell_y1 = cell_y1 + 1
-
-#ifdef PARTICLE_SHAPE_BSPLINE3
-#include "bspline3/gx.inc"
-
-    part_var = &
-          gy(-2) * (gx(-2) * grid_var(cell_x1-2,cell_y1-2) &
-        +           gx(-1) * grid_var(cell_x1-1,cell_y1-2) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1-2) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1-2) &
-        +           gx( 2) * grid_var(cell_x1+2,cell_y1-2)) &
-        + gy(-1) * (gx(-2) * grid_var(cell_x1-2,cell_y1-1) &
-        +           gx(-1) * grid_var(cell_x1-1,cell_y1-1) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1-1) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1-1) &
-        +           gx( 2) * grid_var(cell_x1+2,cell_y1-1)) &
-        + gy( 0) * (gx(-2) * grid_var(cell_x1-2,cell_y1  ) &
-        +           gx(-1) * grid_var(cell_x1-1,cell_y1  ) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1  ) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1  ) &
-        +           gx( 2) * grid_var(cell_x1+2,cell_y1  )) &
-        + gy( 1) * (gx(-2) * grid_var(cell_x1-2,cell_y1+1) &
-        +           gx(-1) * grid_var(cell_x1-1,cell_y1+1) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1+1) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1+1) &
-        +           gx( 2) * grid_var(cell_x1+2,cell_y1+1)) &
-        + gy( 2) * (gx(-2) * grid_var(cell_x1-2,cell_y1+2) &
-        +           gx(-1) * grid_var(cell_x1-1,cell_y1+2) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1+2) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1+2) &
-        +           gx( 2) * grid_var(cell_x1+2,cell_y1+2))
-#elif  PARTICLE_SHAPE_TOPHAT
-#include "tophat/gx.inc"
-    part_var = &
-          gy( 0) * (gx( 0) * grid_var(cell_x1  ,cell_y1  ) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1  )) &
-        + gy( 1) * (gx( 0) * grid_var(cell_x1  ,cell_y1+1) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1+1))
-#else
-#include "triangle/gx.inc"
-    part_var = &
-          gy(-1) * (gx(-1) * grid_var(cell_x1-1,cell_y1-1) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1-1) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1-1)) &
-        + gy( 0) * (gx(-1) * grid_var(cell_x1-1,cell_y1  ) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1  ) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1  )) &
-        + gy( 1) * (gx(-1) * grid_var(cell_x1-1,cell_y1+1) &
-        +           gx( 0) * grid_var(cell_x1  ,cell_y1+1) &
-        +           gx( 1) * grid_var(cell_x1+1,cell_y1+1))
-#endif
-    part_var = fac*part_var
-
-  END SUBROUTINE hy_grid_centred_var_at_particle
 
 #endif
 END MODULE hybrid

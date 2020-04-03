@@ -437,6 +437,18 @@ CONTAINS
 
       ! Try to ionise every particle of the species
       DO WHILE(ASSOCIATED(current))
+
+#ifdef PIC_HYBRID
+        ! Ignore ionisation in hybrid region
+        IF (use_pic_hybrid) THEN
+          IF (current%in_hybrid) THEN
+            next => current%next
+            current => next
+            CYCLE
+          END IF
+        END IF
+#endif
+
         ! Copy the particle properties out for speed
         part_x  = current%part_pos(1) - x_grid_min_local
         part_y  = current%part_pos(2) - y_grid_min_local
@@ -719,6 +731,18 @@ CONTAINS
 
       ! Try to ionise every particle of the species
       DO WHILE(ASSOCIATED(current))
+
+#ifdef PIC_HYBRID
+        ! Ignore ionisation in hybrid region
+        IF (use_pic_hybrid) THEN
+          IF (current%in_hybrid) THEN
+            next => current%next
+            current => next
+            CYCLE
+          END IF
+        END IF
+#endif
+
         ! Copy the particle properties out for speed
         part_x  = current%part_pos(1) - x_grid_min_local
         part_y  = current%part_pos(2) - y_grid_min_local
@@ -987,6 +1011,18 @@ CONTAINS
 
       ! Try to ionise every particle of the species
       DO WHILE(ASSOCIATED(current))
+
+#ifdef PIC_HYBRID
+        ! Ignore ionisation in hybrid region
+        IF (use_pic_hybrid) THEN
+          IF (current%in_hybrid) THEN
+            next => current%next
+            current => next
+            CYCLE
+          END IF
+        END IF
+#endif
+
         ! Copy the particle properties out for speed
         part_x  = current%part_pos(1) - x_grid_min_local
         part_y  = current%part_pos(2) - y_grid_min_local
@@ -1245,6 +1281,18 @@ CONTAINS
 
       ! Try to ionise every particle of the species
       DO WHILE(ASSOCIATED(current))
+
+#ifdef PIC_HYBRID
+        ! Ignore ionisation in hybrid region
+        IF (use_pic_hybrid) THEN
+          IF (current%in_hybrid) THEN
+            next => current%next
+            current => next
+            CYCLE
+          END IF
+        END IF
+#endif
+
         ! Copy the particle properties out for speed
         part_x  = current%part_pos(1) - x_grid_min_local
         part_y  = current%part_pos(2) - y_grid_min_local

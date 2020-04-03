@@ -1268,6 +1268,25 @@ CONTAINS
       RETURN
     END IF
 
+    ! Delta ray electron from ionisation in solid region
+    IF (str_cmp(value, 'delta_electron')) THEN
+      species_list(species_id)%charge = -q0
+      species_list(species_id)%mass = m0
+      species_list(species_id)%species_type = c_species_id_electron
+      species_charge_set(species_id) = .TRUE.
+      species_list(species_id)%electron = .TRUE.
+#ifdef HYBRID
+      delta_electron_species = species_id
+#else
+      errcode = c_err_generic_warning
+#endif
+#ifdef BREMSSTRAHLUNG
+      species_list(species_id)%atomic_no = 0
+      species_list(species_id)%atomic_no_set = .TRUE.
+#endif
+      RETURN
+    END IF
+
     IF (str_cmp(value, 'bw_positron')) THEN
       species_list(species_id)%charge = q0
       species_list(species_id)%mass = m0

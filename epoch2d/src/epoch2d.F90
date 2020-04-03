@@ -54,6 +54,9 @@ PROGRAM pic
 #ifdef HYBRID
   USE hybrid
 #endif
+#ifdef PIC_HYBRID
+  USE pic_hybrid
+#endif
 #ifdef LANDAU_LIFSHITZ
   USE landau_lifshitz
 #endif
@@ -144,6 +147,13 @@ PROGRAM pic
     npart_global = npart_global + species_list(ispecies)%count
   END DO
 
+#ifdef PIC_HYBRID
+  CALL initialise_pic_hybrid
+#endif
+#ifdef HYBRID
+  CALL initialise_hybrid
+#endif
+
   ! .TRUE. to over_ride balance fraction check
   IF (npart_global > 0) CALL balance_workload(.TRUE.)
 
@@ -178,9 +188,6 @@ PROGRAM pic
 #ifdef BREMSSTRAHLUNG
   IF (use_bremsstrahlung) CALL setup_bremsstrahlung_module()
 #endif
-#ifdef HYBRID
-  CALL initialise_hybrid
-#endif
 
   walltime_started = MPI_WTIME()
   IF (.NOT.ic_from_restart) CALL output_routines(step) ! diagnostics.f90
@@ -188,10 +195,10 @@ PROGRAM pic
 
   IF (timer_collect) CALL timer_start(c_timer_step)
 
-  IF (use_hybrid) THEN
+  IF (use_hybrid .AND. .NOT. use_pic_hybrid) THEN
 #ifdef HYBRID
-    ! Pass control to hybrid.F90 if running in hybrid mode, otherwise run as
-    ! normal
+    ! Pass control to hybrid.F90 if running in pure hybrid mode, otherwise run
+    ! normal PIC loop
     CALL run_hybrid_PIC(push, halt, force_dump)
 #endif
   ELSE
@@ -222,15 +229,33 @@ PROGRAM pic
       IF (push .AND. use_bremsstrahlung &
           .AND. time > bremsstrahlung_start_time) THEN
         CALL bremsstrahlung_update_optical_depth()
+#ifdef PIC_HYBRID
+        IF (use_pic_hybrid) THEN
+          ! In PIC hybrid mode, consider bremsstrahlung from solids too
+          CALL hybrid_bremsstrahlung_update_optical_depth()
+        END IF
+#endif
       END IF
 #endif
 
-      CALL update_eb_fields_half
+      IF (.NOT. use_pic_hybrid) THEN
+        CALL update_eb_fields_half
+      ELSE
+#ifdef PIC_HYBRID
+        CALL pic_hybrid_fields_half
+#endif
+      END IF
+
       IF (push) THEN
         CALL run_injectors
         ! .FALSE. this time to use load balancing threshold
         IF (use_balance) CALL balance_workload(.FALSE.)
         CALL push_particles
+#ifdef PIC_HYBRID
+        IF (use_pic_hybrid) THEN
+          CALL electron_transport
+        END IF
+#endif
         IF (use_particle_lists) THEN
           ! After this line, the particles can be accessed on a cell by cell
           ! basis using the particle_species%secondary_list property
@@ -250,7 +275,9 @@ PROGRAM pic
 
           CALL reattach_particles_to_mainlist
         END IF
-        IF (use_particle_migration) CALL migrate_particles(step)
+        IF (.NOT. use_pic_hybrid) THEN
+          IF (use_particle_migration) CALL migrate_particles(step)
+        END IF
         IF (use_field_ionisation) CALL ionise_particles
         CALL current_finish
         CALL update_particle_count
@@ -263,9 +290,17 @@ PROGRAM pic
       CALL output_routines(step)
       time = time + dt / 2.0_num
 
-      CALL update_eb_fields_final
+      IF (.NOT. use_pic_hybrid) THEN
+        CALL update_eb_fields_final
+      ELSE
+#ifdef PIC_HYBRID
+        CALL pic_hybrid_fields_final
+#endif
+      END IF
 
-      CALL moving_window
+      IF (.NOT. use_pic_hybrid) THEN
+        CALL moving_window
+      END IF
     END DO
   END IF
 

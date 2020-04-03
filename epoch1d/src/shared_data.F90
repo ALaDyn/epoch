@@ -183,6 +183,8 @@ MODULE constants
       atomic_electric_field = 5.142206538736485312185213306837419e11_num
   ! m0 * c
   REAL(num), PARAMETER :: mc0 = 2.73092429345209278e-22_num
+  ! m0 * c²
+  REAL(num), PARAMETER :: mc2 = mc0*c ! J
 
   ! Constants used in pair production
 #if defined(PHOTONS) || defined(LANDAU_LIFSHITZ)
@@ -614,7 +616,7 @@ MODULE shared_data
 #ifdef PHOTONS
     REAL(num) :: optical_depth
 #endif
-#if defined(PHOTONS) || defined(BREMSSTRAHLUNG)
+#if defined(PHOTONS) || defined(BREMSSTRAHLUNG) || defined(HYBRID)
     REAL(num) :: particle_energy
 #endif
 #if defined(PHOTONS) && defined(TRIDENT_PHOTONS)
@@ -622,6 +624,9 @@ MODULE shared_data
 #endif
 #ifdef BREMSSTRAHLUNG
     REAL(num) :: optical_depth_bremsstrahlung
+#endif
+#ifdef HYBRID
+    REAL(num) :: optical_depth_delta
 #endif
   END TYPE particle
 
@@ -807,17 +812,18 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_dump_hybrid_ion_charge = 56
   INTEGER, PARAMETER :: c_dump_hybrid_ni         = 57
   INTEGER, PARAMETER :: c_dump_hybrid_ion_temp   = 58
-  INTEGER, PARAMETER :: c_dump_probe_time        = 59
+  INTEGER, PARAMETER :: c_dump_part_opdepth_delt = 59
+  INTEGER, PARAMETER :: c_dump_probe_time        = 60
 #ifdef WORK_DONE_INTEGRATED
-  INTEGER, PARAMETER :: c_dump_part_work_x       = 60
-  INTEGER, PARAMETER :: c_dump_part_work_y       = 61
-  INTEGER, PARAMETER :: c_dump_part_work_z       = 62
-  INTEGER, PARAMETER :: c_dump_part_work_x_total = 63
-  INTEGER, PARAMETER :: c_dump_part_work_y_total = 64
-  INTEGER, PARAMETER :: c_dump_part_work_z_total = 65
-  INTEGER, PARAMETER :: num_vars_to_dump         = 65
+  INTEGER, PARAMETER :: c_dump_part_work_x       = 61
+  INTEGER, PARAMETER :: c_dump_part_work_y       = 62
+  INTEGER, PARAMETER :: c_dump_part_work_z       = 63
+  INTEGER, PARAMETER :: c_dump_part_work_x_total = 64
+  INTEGER, PARAMETER :: c_dump_part_work_y_total = 65
+  INTEGER, PARAMETER :: c_dump_part_work_z_total = 66
+  INTEGER, PARAMETER :: num_vars_to_dump         = 66
 #else
-  INTEGER, PARAMETER :: num_vars_to_dump         = 59
+  INTEGER, PARAMETER :: num_vars_to_dump         = 60
 #endif
   INTEGER, DIMENSION(num_vars_to_dump) :: dumpmask
 
@@ -1086,12 +1092,16 @@ MODULE shared_data
   TYPE solid
     ! Input variables
     REAL(num) :: hybrid_Iex = -1.0_num
+    REAL(num) :: rad_len = -1.0_num
     INTEGER :: hybrid_Z = -1
     INTEGER :: material = 1
     REAL(num), ALLOCATABLE :: ion_density(:), el_density(:)
     ! Derived variables
     REAL(num) :: hybrid_ne, hybrid_D, hybrid_ln_s, hybrid_const_ZeV, theta_fac
+    REAL(num) :: Iex_term, dEdx_C
     REAL(num), ALLOCATABLE :: heat_capacity(:)
+    ! Elastic scatter material variables
+    REAL(num) :: urb_sig, urb_high, urb_el(22), urb_pos(22)
   END TYPE solid
 
   TYPE(solid), ALLOCATABLE :: solid_array(:)
@@ -1101,15 +1111,33 @@ MODULE shared_data
   LOGICAL :: made_solid_array = .FALSE.
   INTEGER :: solid_index = 1
 
+  ! Elastic scatter routines
+  INTEGER, PARAMETER :: c_hy_davies = 1
+  INTEGER, PARAMETER :: c_hy_urban = 2
+  INTEGER :: elastic_scatter_model = c_hy_davies ! Default to Davies
+
   ! Additional constants
   REAL(num) :: hybrid_const_dx
   REAL(num) :: hybrid_const_dt_by_dx
   REAL(num) :: hybrid_const_K_to_eV, hybrid_D, hybrid_ln_S, hybrid_const_ZeV
+  REAL(num) :: hybrid_idx
   REAL(num) :: hybrid_const_dp = -0.5_num*q0**4/(2.0_num*pi*epsilon0**2)
-  REAL(num), ALLOCATABLE :: hybrid_const_heat(:)
+  REAL(num) :: hybrid_const_dp_ion = -0.25_num*q0**4/(pi*epsilon0**2*m0)
+  REAL(num) :: c_hybrid_ion_sig = q0**4/(8.0_num*pi*epsilon0**2*m0**2*c**2)
+  REAL(num) :: c_hybrid_ion_dedx = q0**4/(8.0_num*pi*epsilon0**2*m0)
+  REAL(num), PARAMETER :: KE_cut_delta = 1.0e3_num*q0
+  REAL(num) :: two_KE_cut_delta = 2.0_num*KE_cut_delta
+  REAL(num) :: c_hybrid_tau_min = KE_cut_delta/mc2
+  REAL(num) :: c_hybrid_dEdx_x = 1.0_num/4.606_num
+  REAL(num) :: c_hybrid_dens_lim = (SQRT(1.0_NUM + EXP(0.9212_num))-1.0_num)*mc2
+  REAL(num) :: c_hybrid_C_switch = 2.0_num/(100.0_num*q0/mc2)**2
+  REAL(num), ALLOCATABLE :: hybrid_const_heat(:), hybrid_const_sum_ne(:)
 
   ! Additional field variables, resisitivity and temperatures of the background
   REAL(num), ALLOCATABLE, DIMENSION(:) :: resistivity, hybrid_Tb
+
+  ! Delta electron species flag
+  INTEGER :: delta_electron_species = -1
 
   ! These allow for spatially varying resistivity models
   INTEGER, PARAMETER :: c_resist_vacuum = 1
@@ -1120,9 +1148,16 @@ MODULE shared_data
   ! Arrays for ionisation routines
   REAL(num), ALLOCATABLE, DIMENSION(:) :: ion_charge, ion_density, ion_temp
 
+  ! Additional arrays for elastic scatter routines
+  REAL(num), ALLOCATABLE :: urb_d1(:), urb_d2(:), urb_d3(:), urb_d4(:)
+  REAL(num), ALLOCATABLE :: urb_iZ23(:), urb_theta1(:), urb_theta2(:)
+  REAL(num), ALLOCATABLE :: urb_Zeff(:), urb_rad_len(:)
+
   ! Deck variables
   LOGICAL :: use_hybrid_fields = .FALSE., use_hybrid_collisions = .FALSE.
-  REAL(num) :: hybrid_Tb_init = 0.0_num
+  LOGICAL :: use_hybrid_scatter = .FALSE., produce_delta_rays = .FALSE.
+  REAL(num) :: hybrid_Tb_init = 0.0_num, min_delta_energy = 0.0_num
+  REAL(num) :: min_hybrid_energy = 0.0_num
 #endif
   LOGICAL :: use_hybrid = .FALSE.
 
@@ -1152,7 +1187,7 @@ MODULE shared_data
   INTEGER :: trident_positron_species = -1, breit_wheeler_positron_species = -1
 
   REAL(num) :: photon_energy_min = EPSILON(1.0_num)
-  REAL(num) :: qed_start_time = 0.0_num
+  REAL(num) :: qed_start_time = 0.0_num, qed_weight = 1.0_num
   LOGICAL :: produce_pairs = .FALSE., use_radiation_reaction = .TRUE.
   LOGICAL :: produce_photons = .FALSE., photon_dynamics = .FALSE.
   CHARACTER(LEN=string_length) :: qed_table_location
@@ -1340,6 +1375,54 @@ MODULE shared_data
 
   REAL(num) :: total_particle_energy = 0.0_num
   REAL(num) :: total_field_energy = 0.0_num
+
+  !----------------------------------------------------------------------------
+  ! Hybrid laser boundaries - written by SJ Morris
+  ! Electron injector based on laser parameters for hybrid mode
+  !----------------------------------------------------------------------------
+#ifdef HYBRID
+  TYPE hy_laser_block
+    ! Similar syntax to the laser_block type, but without a phase function
+    INTEGER :: boundary
+    INTEGER :: id
+    INTEGER :: ppc
+    REAL(num) :: profile
+
+    LOGICAL :: use_time_function, use_profile_function, use_omega_function
+    TYPE(primitive_stack) :: time_function, profile_function, omega_function
+
+    REAL(num) :: intensity, omega, t_start, t_end, profile_min, efficiency
+    INTEGER :: omega_func_type, species
+    LOGICAL :: has_t_end
+
+    INTEGER :: mean, e_dist, ang_dist
+
+    ! Angular distribution variables
+    REAL(num) :: user_theta_max, cos_n_power, top_hat_L, sheng_angle, mean_mult
+    REAL(num) :: theta_mean, phi_mean
+    LOGICAL :: use_moore_max
+    LOGICAL :: use_sheng_dir
+
+    TYPE(hy_laser_block), POINTER :: next
+  END TYPE hy_laser_block
+
+  TYPE(hy_laser_block), POINTER :: hy_laser_x_min, hy_laser_x_max
+  INTEGER :: n_hy_laser_x_min = 0, n_hy_laser_x_max = 0
+  LOGICAL, DIMENSION(2*c_ndims) :: add_hy_laser = .FALSE.
+
+  INTEGER, PARAMETER :: c_mean_wilks = 1
+  INTEGER, PARAMETER :: c_mean_a0 = 2
+
+  INTEGER, PARAMETER :: e_dist_exp = 1
+  INTEGER, PARAMETER :: e_dist_mono = 2
+  INTEGER, PARAMETER :: e_dist_tophat = 3
+  INTEGER, PARAMETER :: e_dist_exp_weight = 4
+
+  INTEGER, PARAMETER :: c_ang_uniform = 1
+  INTEGER, PARAMETER :: c_ang_cos = 2
+  INTEGER, PARAMETER :: c_ang_beam = 3
+
+#endif
 
   !----------------------------------------------------------------------------
   ! custom particle loading - written by MP Tooley

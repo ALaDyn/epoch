@@ -530,6 +530,17 @@ CONTAINS
           current => species_list(ispecies)%attached_list%head
           DO WHILE(ASSOCIATED(current))
 
+            ! Get number density at electron
+            part_x = current%part_pos - x_grid_min_local
+            CALL grid_centred_var_at_particle(part_x, part_ni, &
+                grid_num_density_ion)
+
+            ! No background ions, so no bremsstrahlung from this solid
+            IF (part_ni <= c_tiny) THEN
+              current => current%next
+              CYCLE
+            END IF
+
             ! Get electron energy
             part_ux = current%part_p(1) / mc0
             part_uy = current%part_p(2) / mc0
@@ -547,11 +558,6 @@ CONTAINS
             ! Get electron speed
             part_v = SQRT(current%part_p(1)**2 + current%part_p(2)**2 + &
                 current%part_p(3)**2) * c**2 / part_E
-
-            ! Get number density at electron
-            part_x = current%part_pos - x_grid_min_local
-            CALL grid_centred_var_at_particle(part_x, part_ni, &
-                grid_num_density_ion)
 
             ! Update the optical depth for the screening option chosen
             IF (use_plasma_screening) THEN
@@ -636,6 +642,17 @@ CONTAINS
         current => species_list(ispecies)%attached_list%head
         DO WHILE(ASSOCIATED(current))
 
+          ! Get number density at electron
+          part_x = current%part_pos - x_grid_min_local
+          CALL grid_centred_var_at_particle(part_x, part_ni, &
+              solid_array(i_sol)%ion_density)
+
+          ! No background ions, so no bremsstrahlung from this solid
+          IF (part_ni <= c_tiny) THEN
+            current => current%next
+            CYCLE
+          END IF
+
           ! Get electron energy
           part_ux = current%part_p(1) / mc0
           part_uy = current%part_p(2) / mc0
@@ -653,11 +670,6 @@ CONTAINS
           ! Get electron speed
           part_v = SQRT(current%part_p(1)**2 + current%part_p(2)**2 + &
               current%part_p(3)**2) * c**2 / part_E
-
-          ! Get number density at electron
-          part_x = current%part_pos - x_grid_min_local
-          CALL grid_centred_var_at_particle(part_x, part_ni, &
-              solid_array(i_sol)%ion_density)
 
           current%optical_depth_bremsstrahlung = &
               current%optical_depth_bremsstrahlung &

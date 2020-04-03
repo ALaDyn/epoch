@@ -129,6 +129,11 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'photon_weight')) THEN
+      qed_weight = as_real_print(value, element, errcode)
+      RETURN
+    END IF
+
     IF (str_cmp(element, 'produce_pairs')) THEN
       produce_pairs = as_logical_print(value, element, errcode)
       RETURN

@@ -130,6 +130,12 @@ CONTAINS
 
       DO iy = 1, ny
       DO ix = 1, nx
+#ifdef PIC_HYBRID
+        ! Calculate collisions differently in hybrid cells
+        IF (use_pic_hybrid) THEN
+          IF (is_hybrid(ix,iy)) CYCLE
+        END IF
+#endif
         p_list1 => species_list(ispecies)%secondary_list(ix,iy)
         CALL shuffle_particle_list_random(p_list1)
       END DO ! ix
@@ -162,6 +168,12 @@ CONTAINS
 
         DO iy = 1, ny
         DO ix = 1, nx
+#ifdef PIC_HYBRID
+          ! Calculate collisions differently in hybrid cells
+          IF (use_pic_hybrid) THEN
+            IF (is_hybrid(ix,iy)) CYCLE
+          END IF
+#endif
           IF (ispecies == jspecies) THEN
             CALL intra_species_collisions( &
                 species_list(ispecies)%secondary_list(ix,iy), &
@@ -205,6 +217,12 @@ CONTAINS
 
     DO iy = 1, ny
     DO ix = 1, nx
+#ifdef PIC_HYBRID
+      ! Calculate collisions differently in hybrid cells
+      IF (use_pic_hybrid) THEN
+        IF (is_hybrid(ix,iy)) CYCLE
+      END IF
+#endif
       DO ispecies = 1, n_species
         p_list1 => species_list(ispecies)%secondary_list(ix,iy)
         CALL shuffle_particle_list_random(p_list1)
@@ -341,6 +359,12 @@ CONTAINS
         IF (ispecies == jspecies) THEN
           DO iy = 1, ny
           DO ix = 1, nx
+#ifdef PIC_HYBRID
+            ! Calculate collisions differently in hybrid cells
+            IF (use_pic_hybrid) THEN
+              IF (is_hybrid(ix,iy)) CYCLE
+            END IF
+#endif
             CALL intra_species_collisions( &
                 species_list(ispecies)%secondary_list(ix,iy), &
                 m1, q1, w1, idens(ix,iy), itemp(ix,iy), &
@@ -351,6 +375,12 @@ CONTAINS
             .AND. species_list(jspecies)%electron) THEN
           DO iy = 1, ny
           DO ix = 1, nx
+#ifdef PIC_HYBRID
+            ! Calculate collisions differently in hybrid cells
+            IF (use_pic_hybrid) THEN
+              IF (is_hybrid(ix,iy)) CYCLE
+            END IF
+#endif
             ! Perform collisional ionisation before calculating scatter
             CALL preionise(species_list(jspecies)%secondary_list(ix,iy), &
                 species_list(ispecies)%secondary_list(ix,iy), &
@@ -388,6 +418,12 @@ CONTAINS
             .AND. species_list(jspecies)%ionise) THEN
           DO iy = 1, ny
           DO ix = 1, nx
+#ifdef PIC_HYBRID
+            ! Calculate collisions differently in hybrid cells
+            IF (use_pic_hybrid) THEN
+              IF (is_hybrid(ix,iy)) CYCLE
+            END IF
+#endif
             ! Perform collisional ionisation before calculating scatter
             CALL preionise(species_list(ispecies)%secondary_list(ix,iy), &
                 species_list(jspecies)%secondary_list(ix,iy), &
@@ -424,6 +460,12 @@ CONTAINS
         ELSE
           DO iy = 1, ny
           DO ix = 1, nx
+#ifdef PIC_HYBRID
+            ! Calculate collisions differently in hybrid cells
+            IF (use_pic_hybrid) THEN
+              IF (is_hybrid(ix,iy)) CYCLE
+            END IF
+#endif
             CALL inter_species_collisions( &
                 species_list(ispecies)%secondary_list(ix,iy), &
                 species_list(jspecies)%secondary_list(ix,iy), &

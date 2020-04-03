@@ -476,6 +476,14 @@ CONTAINS
       END IF
 #endif
 
+#ifdef PIC_HYBRID
+      ! These variables only exist if we are running in PIC-hybrid mode
+      IF (use_pic_hybrid) THEN
+        CALL write_field(c_dump_pic_hybrid_smooth, code, 'field_frac', &
+            'PIC_Hybrid/Field_Smooth', '', c_stagger_cell_centre, field_frac)
+      END IF
+#endif
+
       IF (cpml_boundaries) THEN
         CALL sdf_write_srl(sdf_handle, 'boundary_thickness', &
             'Boundary thickness', cpml_thickness)

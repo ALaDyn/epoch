@@ -33,6 +33,10 @@ MODULE deck
   USE deck_collision_block
   USE deck_part_from_file_block
   USE deck_hybrid_block
+  USE deck_hy_laser_block
+#ifdef HYBRID
+  USE hy_ionisation_loss
+#endif
   USE deck_solid_block
   USE deck_landau_lifshitz_block
 #ifdef PHOTONS
@@ -97,6 +101,7 @@ CONTAINS
     CALL io_deck_initialise
     CALL io_global_deck_initialise
     CALL laser_deck_initialise
+    CALL hy_laser_deck_initialise
     CALL stencil_deck_initialise
     CALL subset_deck_initialise
 #ifndef NO_PARTICLE_PROBES
@@ -130,6 +135,7 @@ CONTAINS
     CALL io_deck_finalise
     CALL io_global_deck_finalise
     CALL laser_deck_finalise
+    CALL hy_laser_deck_finalise
     CALL stencil_deck_finalise
     CALL subset_deck_finalise
 #ifndef NO_PARTICLE_PROBES
@@ -173,6 +179,8 @@ CONTAINS
       CALL io_global_block_start
     ELSE IF (str_cmp(block_name, 'laser')) THEN
       CALL laser_block_start
+    ELSE IF (str_cmp(block_name, 'hy_laser')) THEN
+      CALL hy_laser_block_start
     ELSE IF (str_cmp(block_name, 'injector')) THEN
       CALL injector_block_start
     ELSE IF (str_cmp(block_name, 'stencil')) THEN
@@ -230,6 +238,8 @@ CONTAINS
       CALL io_global_block_end
     ELSE IF (str_cmp(block_name, 'laser')) THEN
       CALL laser_block_end
+    ELSE IF (str_cmp(block_name, 'hy_laser')) THEN
+      CALL hy_laser_block_end
     ELSE IF (str_cmp(block_name, 'injector')) THEN
       CALL injector_block_end
     ELSE IF (str_cmp(block_name, 'stencil')) THEN
@@ -313,6 +323,9 @@ CONTAINS
     ELSE IF (str_cmp(block_name, 'laser')) THEN
       handle_block = laser_block_handle_element(block_element, block_value)
       RETURN
+    ELSE IF (str_cmp(block_name, 'hy_laser')) THEN
+      handle_block = hy_laser_block_handle_element(block_element, block_value)
+      RETURN
     ELSE IF (str_cmp(block_name, 'injector')) THEN
       handle_block = injector_block_handle_element(block_element, block_value)
       RETURN
@@ -385,6 +398,9 @@ CONTAINS
     errcode_deck = IOR(errcode_deck, boundary_block_check())
     IF (use_hybrid) THEN
       errcode_deck = IOR(errcode_deck, hybrid_block_check())
+#ifdef HYBRID
+      errcode_deck = IOR(errcode_deck, check_ionisation_loss_variables())
+#endif
     END IF
     IF (use_qed) THEN
 #ifdef PHOTONS
@@ -405,6 +421,7 @@ CONTAINS
     errcode_deck = IOR(errcode_deck, io_block_check())
     errcode_deck = IOR(errcode_deck, io_global_block_check())
     errcode_deck = IOR(errcode_deck, laser_block_check())
+    errcode_deck = IOR(errcode_deck, hy_laser_block_check())
     errcode_deck = IOR(errcode_deck, injector_block_check())
     errcode_deck = IOR(errcode_deck, stencil_block_check())
     errcode_deck = IOR(errcode_deck, subset_block_check())

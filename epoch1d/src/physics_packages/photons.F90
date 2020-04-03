@@ -618,7 +618,7 @@ CONTAINS
         log_hsokolov(:,2))
 
     delta_optical_depth = dt * eta * alpha_f * SQRT(3.0_num) * hsokolov &
-        / (2.0_num * pi * tau_c * gamma_rel)
+        / (2.0_num * pi * tau_c * gamma_rel) / qed_weight
 
   END FUNCTION delta_optical_depth
 
@@ -881,7 +881,7 @@ CONTAINS
 
     IF (use_radiation_reaction) THEN
       ! Calculate electron recoil
-      mag_p = mag_p - photon_energy / c
+      mag_p = mag_p - photon_energy * qed_weight / c
 
       generating_electron%part_p(1) = dir_x * mag_p
       generating_electron%part_p(2) = dir_y * mag_p
@@ -903,7 +903,7 @@ CONTAINS
 
       new_photon%optical_depth = reset_optical_depth()
       new_photon%particle_energy = photon_energy
-      new_photon%weight = generating_electron%weight
+      new_photon%weight = generating_electron%weight * qed_weight
 
       CALL add_particle_to_partlist(species_list(iphoton)%attached_list, &
           new_photon)

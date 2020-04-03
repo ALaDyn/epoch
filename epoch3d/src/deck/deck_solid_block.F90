@@ -141,6 +141,13 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'radiation_length') &
+        .OR. str_cmp(element, 'rad_len' ) &
+        .OR. str_cmp(element, 'X0')) THEN
+      solid_array(solid_index)%rad_len = as_real_print(value, element, errcode)
+      RETURN
+    END IF
+
     IF (str_cmp(element, 'resistivity') &
         .OR. str_cmp(element, 'resistivity_model' ) &
         .OR. str_cmp(element, 'material')) THEN
