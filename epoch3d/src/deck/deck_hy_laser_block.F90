@@ -81,6 +81,11 @@ CONTAINS
 #ifdef HYBRID
     IF (deck_state == c_ds_first) RETURN
 
+    ! If we have user defined energy and user defined weight, then the laser
+    ! parameters intensity, omega and eficiency will be unused.
+    IF (working_laser%e_dist == e_dist_mono_weight .AND. &
+        working_laser%mean == c_mean_E_val) working_laser%ignore_las = .TRUE.
+
     CALL attach_hy_laser(working_laser)
     hy_boundary_set = .FALSE.
 #endif
@@ -235,6 +240,8 @@ CONTAINS
         working_laser%mean = c_mean_a0
       ELSE IF (str_cmp(value, 'Wilks') .OR. str_cmp(value, 'wilks')) THEN
         working_laser%mean = c_mean_wilks
+      ELSE IF (str_cmp(value, 'E_val') .OR. str_cmp(value, 'e_val')) THEN
+        working_laser%mean = c_mean_E_val
       ELSE
         extended_error_string = 'Unrecognised mean energy model'
         errcode = c_err_bad_value
@@ -251,6 +258,8 @@ CONTAINS
         working_laser%e_dist = e_dist_tophat
       ELSE IF (str_cmp(value, 'exp_weight')) THEN
         working_laser%e_dist = e_dist_exp_weight
+      ELSE IF (str_cmp(value, 'mono_weight')) THEN
+        working_laser%e_dist = e_dist_mono_weight
       ELSE
         extended_error_string = 'Unrecognised energy distribution model'
         errcode = c_err_bad_value
@@ -269,6 +278,21 @@ CONTAINS
         extended_error_string = 'Unrecognised angular distribution model'
         errcode = c_err_bad_value
       END IF
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'mono_weight')) THEN
+      working_laser%user_weight = as_real_print(value, element, errcode)
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'mean_E')) THEN
+      working_laser%user_mean_KE = as_real_print(value, element, errcode) - mc2
+      RETURN
+    END IF
+
+    IF (str_cmp(element, 'mean_KE')) THEN
+      working_laser%user_mean_KE = as_real_print(value, element, errcode)
       RETURN
     END IF
 
@@ -336,129 +360,155 @@ CONTAINS
     error = 0
     current => hy_laser_x_min
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
-      IF (current%intensity < 0.0_num) error = IOR(error, 2)
-      IF (current%ppc < 0) error = IOR(error, 4)
-      IF (current%species < 0) error = IOR(error, 8)
-      IF (current%efficiency < 0.0_num) error = IOR(error, 16)
-      IF (current%mean < 0) error = IOR(error, 32)
-      IF (current%e_dist < 0) error = IOR(error, 64)
-      IF (current%ang_dist < 0) error = IOR(error, 128)
-      IF (current%efficiency > 1.0_num) error = IOR(error, 256)
-      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 512)
-      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 1024)
-      IF (current%mean_mult < 0.0_num) error = IOR(error, 2048)
+      IF (current%ppc < 0) error = IOR(error, 2**0)
+      IF (current%species < 0) error = IOR(error, 2**1)
+      IF (current%mean < 0) error = IOR(error, 2**2)
+      IF (current%e_dist < 0) error = IOR(error, 2**3)
+      IF (current%ang_dist < 0) error = IOR(error, 2**4)
+      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 2**5)
+      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 2**6)
+      IF (current%mean_mult < 0.0_num) error = IOR(error, 2**7)
+      IF (current%mean == c_mean_E_val) THEN
+        IF (current%user_mean_KE < 0.0_num) error = IOR(error, 2**8)
+      END IF
+      IF (current%e_dist == e_dist_mono_weight) THEN
+        IF (current%user_weight < 0.0_num) error = IOR(error, 2**9)
+      END IF
+      IF (.NOT. current%ignore_las) THEN
+        IF (current%omega < 0.0_num) error = IOR(error, 2**10)
+        IF (current%intensity < 0.0_num) error = IOR(error, 2**11)
+        IF (current%efficiency < 0.0_num) error = IOR(error, 2**12)
+        IF (current%efficiency > 1.0_num) error = IOR(error, 2**13)
+      END IF
       current => current%next
     END DO
 
     current => hy_laser_x_max
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
-      IF (current%intensity < 0.0_num) error = IOR(error, 2)
-      IF (current%ppc < 0) error = IOR(error, 4)
-      IF (current%species < 0) error = IOR(error, 8)
-      IF (current%efficiency < 0.0_num) error = IOR(error, 16)
-      IF (current%mean < 0) error = IOR(error, 32)
-      IF (current%e_dist < 0) error = IOR(error, 64)
-      IF (current%ang_dist < 0) error = IOR(error, 128)
-      IF (current%efficiency > 1.0_num) error = IOR(error, 256)
-      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 512)
-      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 1024)
-      IF (current%mean_mult < 0.0_num) error = IOR(error, 2048)
+      IF (current%ppc < 0) error = IOR(error, 2**0)
+      IF (current%species < 0) error = IOR(error, 2**1)
+      IF (current%mean < 0) error = IOR(error, 2**2)
+      IF (current%e_dist < 0) error = IOR(error, 2**3)
+      IF (current%ang_dist < 0) error = IOR(error, 2**4)
+      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 2**5)
+      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 2**6)
+      IF (current%mean_mult < 0.0_num) error = IOR(error, 2**7)
+      IF (current%mean == c_mean_E_val) THEN
+        IF (current%user_mean_KE < 0.0_num) error = IOR(error, 2**8)
+      END IF
+      IF (current%e_dist == e_dist_mono_weight) THEN
+        IF (current%user_weight < 0.0_num) error = IOR(error, 2**9)
+      END IF
+      IF (.NOT. current%ignore_las) THEN
+        IF (current%omega < 0.0_num) error = IOR(error, 2**10)
+        IF (current%intensity < 0.0_num) error = IOR(error, 2**11)
+        IF (current%efficiency < 0.0_num) error = IOR(error, 2**12)
+        IF (current%efficiency > 1.0_num) error = IOR(error, 2**13)
+      END IF
       current => current%next
     END DO
 
     current => hy_laser_y_min
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
-      IF (current%intensity < 0.0_num) error = IOR(error, 2)
-      IF (current%ppc < 0) error = IOR(error, 4)
-      IF (current%species < 0) error = IOR(error, 8)
-      IF (current%efficiency < 0.0_num) error = IOR(error, 16)
-      IF (current%mean < 0) error = IOR(error, 32)
-      IF (current%e_dist < 0) error = IOR(error, 64)
-      IF (current%ang_dist < 0) error = IOR(error, 128)
-      IF (current%efficiency > 1.0_num) error = IOR(error, 256)
-      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 512)
-      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 1024)
-      IF (current%mean_mult < 0.0_num) error = IOR(error, 2048)
+      IF (current%ppc < 0) error = IOR(error, 2**0)
+      IF (current%species < 0) error = IOR(error, 2**1)
+      IF (current%mean < 0) error = IOR(error, 2**2)
+      IF (current%e_dist < 0) error = IOR(error, 2**3)
+      IF (current%ang_dist < 0) error = IOR(error, 2**4)
+      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 2**5)
+      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 2**6)
+      IF (current%mean_mult < 0.0_num) error = IOR(error, 2**7)
+      IF (current%mean == c_mean_E_val) THEN
+        IF (current%user_mean_KE < 0.0_num) error = IOR(error, 2**8)
+      END IF
+      IF (current%e_dist == e_dist_mono_weight) THEN
+        IF (current%user_weight < 0.0_num) error = IOR(error, 2**9)
+      END IF
+      IF (.NOT. current%ignore_las) THEN
+        IF (current%omega < 0.0_num) error = IOR(error, 2**10)
+        IF (current%intensity < 0.0_num) error = IOR(error, 2**11)
+        IF (current%efficiency < 0.0_num) error = IOR(error, 2**12)
+        IF (current%efficiency > 1.0_num) error = IOR(error, 2**13)
+      END IF
       current => current%next
     END DO
 
     current => hy_laser_y_max
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
-      IF (current%intensity < 0.0_num) error = IOR(error, 2)
-      IF (current%ppc < 0) error = IOR(error, 4)
-      IF (current%species < 0) error = IOR(error, 8)
-      IF (current%efficiency < 0.0_num) error = IOR(error, 16)
-      IF (current%mean < 0) error = IOR(error, 32)
-      IF (current%e_dist < 0) error = IOR(error, 64)
-      IF (current%ang_dist < 0) error = IOR(error, 128)
-      IF (current%efficiency > 1.0_num) error = IOR(error, 256)
-      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 512)
-      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 1024)
-      IF (current%mean_mult < 0.0_num) error = IOR(error, 2048)
+      IF (current%ppc < 0) error = IOR(error, 2**0)
+      IF (current%species < 0) error = IOR(error, 2**1)
+      IF (current%mean < 0) error = IOR(error, 2**2)
+      IF (current%e_dist < 0) error = IOR(error, 2**3)
+      IF (current%ang_dist < 0) error = IOR(error, 2**4)
+      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 2**5)
+      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 2**6)
+      IF (current%mean_mult < 0.0_num) error = IOR(error, 2**7)
+      IF (current%mean == c_mean_E_val) THEN
+        IF (current%user_mean_KE < 0.0_num) error = IOR(error, 2**8)
+      END IF
+      IF (current%e_dist == e_dist_mono_weight) THEN
+        IF (current%user_weight < 0.0_num) error = IOR(error, 2**9)
+      END IF
+      IF (.NOT. current%ignore_las) THEN
+        IF (current%omega < 0.0_num) error = IOR(error, 2**10)
+        IF (current%intensity < 0.0_num) error = IOR(error, 2**11)
+        IF (current%efficiency < 0.0_num) error = IOR(error, 2**12)
+        IF (current%efficiency > 1.0_num) error = IOR(error, 2**13)
+      END IF
       current => current%next
     END DO
 
     current => hy_laser_z_min
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
-      IF (current%intensity < 0.0_num) error = IOR(error, 2)
-      IF (current%ppc < 0) error = IOR(error, 4)
-      IF (current%species < 0) error = IOR(error, 8)
-      IF (current%efficiency < 0.0_num) error = IOR(error, 16)
-      IF (current%mean < 0) error = IOR(error, 32)
-      IF (current%e_dist < 0) error = IOR(error, 64)
-      IF (current%ang_dist < 0) error = IOR(error, 128)
-      IF (current%efficiency > 1.0_num) error = IOR(error, 256)
-      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 512)
-      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 1024)
-      IF (current%mean_mult < 0.0_num) error = IOR(error, 2048)
+      IF (current%ppc < 0) error = IOR(error, 2**0)
+      IF (current%species < 0) error = IOR(error, 2**1)
+      IF (current%mean < 0) error = IOR(error, 2**2)
+      IF (current%e_dist < 0) error = IOR(error, 2**3)
+      IF (current%ang_dist < 0) error = IOR(error, 2**4)
+      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 2**5)
+      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 2**6)
+      IF (current%mean_mult < 0.0_num) error = IOR(error, 2**7)
+      IF (current%mean == c_mean_E_val) THEN
+        IF (current%user_mean_KE < 0.0_num) error = IOR(error, 2**8)
+      END IF
+      IF (current%e_dist == e_dist_mono_weight) THEN
+        IF (current%user_weight < 0.0_num) error = IOR(error, 2**9)
+      END IF
+      IF (.NOT. current%ignore_las) THEN
+        IF (current%omega < 0.0_num) error = IOR(error, 2**10)
+        IF (current%intensity < 0.0_num) error = IOR(error, 2**11)
+        IF (current%efficiency < 0.0_num) error = IOR(error, 2**12)
+        IF (current%efficiency > 1.0_num) error = IOR(error, 2**13)
+      END IF
       current => current%next
     END DO
 
     current => hy_laser_z_max
     DO WHILE(ASSOCIATED(current))
-      IF (current%omega < 0.0_num) error = IOR(error, 1)
-      IF (current%intensity < 0.0_num) error = IOR(error, 2)
-      IF (current%ppc < 0) error = IOR(error, 4)
-      IF (current%species < 0) error = IOR(error, 8)
-      IF (current%efficiency < 0.0_num) error = IOR(error, 16)
-      IF (current%mean < 0) error = IOR(error, 32)
-      IF (current%e_dist < 0) error = IOR(error, 64)
-      IF (current%ang_dist < 0) error = IOR(error, 128)
-      IF (current%efficiency > 1.0_num) error = IOR(error, 256)
-      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 512)
-      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 1024)
-      IF (current%mean_mult < 0.0_num) error = IOR(error, 2048)
+      IF (current%ppc < 0) error = IOR(error, 2**0)
+      IF (current%species < 0) error = IOR(error, 2**1)
+      IF (current%mean < 0) error = IOR(error, 2**2)
+      IF (current%e_dist < 0) error = IOR(error, 2**3)
+      IF (current%ang_dist < 0) error = IOR(error, 2**4)
+      IF (ABS(current%top_hat_L-0.5_num) >= 0.5_num) error = IOR(error, 2**5)
+      IF (ABS(current%sheng_angle) > 0.5_num*pi) error = IOR(error, 2**6)
+      IF (current%mean_mult < 0.0_num) error = IOR(error, 2**7)
+      IF (current%mean == c_mean_E_val) THEN
+        IF (current%user_mean_KE < 0.0_num) error = IOR(error, 2**8)
+      END IF
+      IF (current%e_dist == e_dist_mono_weight) THEN
+        IF (current%user_weight < 0.0_num) error = IOR(error, 2**9)
+      END IF
+      IF (.NOT. current%ignore_las) THEN
+        IF (current%omega < 0.0_num) error = IOR(error, 2**10)
+        IF (current%intensity < 0.0_num) error = IOR(error, 2**11)
+        IF (current%efficiency < 0.0_num) error = IOR(error, 2**12)
+        IF (current%efficiency > 1.0_num) error = IOR(error, 2**13)
+      END IF
       current => current%next
     END DO
 
-    IF (IAND(error, 1) /= 0) THEN
-      IF (rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'Must define a "lambda" or "omega" for every hy_laser.'
-        END DO
-      END IF
-      errcode = c_err_missing_elements
-    END IF
-
-    IF (IAND(error, 2) /= 0) THEN
-      IF (rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'Must define an "intensity" for every hy_laser.'
-        END DO
-      END IF
-      errcode = c_err_missing_elements
-    END IF
-
-    IF (IAND(error, 4) /= 0) THEN
+    IF (IAND(error, 2**0) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
@@ -469,7 +519,7 @@ CONTAINS
       errcode = c_err_missing_elements
     END IF
 
-    IF (IAND(error, 8) /= 0) THEN
+    IF (IAND(error, 2**1) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
@@ -480,20 +530,7 @@ CONTAINS
       errcode = c_err_missing_elements
     END IF
 
-    IF (IAND(error, 16) /= 0) THEN
-      IF (rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'Must define an "efficiency" (laser energy to electron', &
-              ' energy) for every'
-          WRITE(io,*)'hy_laser.'
-        END DO
-      END IF
-      errcode = c_err_missing_elements
-    END IF
-
-    IF (IAND(error, 32) /= 0) THEN
+    IF (IAND(error, 2**2) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
@@ -506,7 +543,7 @@ CONTAINS
       errcode = c_err_missing_elements
     END IF
 
-    IF (IAND(error, 64) /= 0) THEN
+    IF (IAND(error, 2**3) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
@@ -519,7 +556,7 @@ CONTAINS
       errcode = c_err_missing_elements
     END IF
 
-    IF (IAND(error, 128) /= 0) THEN
+    IF (IAND(error, 2**4) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
@@ -532,19 +569,7 @@ CONTAINS
       errcode = c_err_missing_elements
     END IF
 
-    IF (IAND(error, 256) /= 0) THEN
-      IF (rank == 0) THEN
-        DO iu = 1, nio_units ! Print to stdout and to file
-          io = io_units(iu)
-          WRITE(io,*) '*** ERROR ***'
-          WRITE(io,*) 'Efficiency cannot exceed 1.0 (100% conversion from', &
-              ' laser energy to e- energy).'
-        END DO
-      END IF
-      errcode = c_err_bad_value
-    END IF
-
-    IF (IAND(error, 512) /= 0) THEN
+    IF (IAND(error, 2**5) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
@@ -555,7 +580,7 @@ CONTAINS
       errcode = c_err_bad_value
     END IF
 
-    IF (IAND(error, 1024) /= 0) THEN
+    IF (IAND(error, 2**6) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
@@ -566,12 +591,81 @@ CONTAINS
       errcode = c_err_bad_value
     END IF
 
-    IF (IAND(error, 2048) /= 0) THEN
+    IF (IAND(error, 2**7) /= 0) THEN
       IF (rank == 0) THEN
         DO iu = 1, nio_units ! Print to stdout and to file
           io = io_units(iu)
           WRITE(io,*) '*** ERROR ***'
           WRITE(io,*) 'mean_mult must be greater than zero.'
+        END DO
+      END IF
+      errcode = c_err_bad_value
+    END IF
+
+    IF (IAND(error, 2**8) /= 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Electron kinetic energy must be greater than zero.'
+        END DO
+      END IF
+      errcode = c_err_bad_value
+    END IF
+
+    IF (IAND(error, 2**9) /= 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Electron weight must be greater than zero.'
+        END DO
+      END IF
+      errcode = c_err_bad_value
+    END IF
+
+    IF (IAND(error, 2**10) /= 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Must define a "lambda" or "omega" for every hy_laser.'
+        END DO
+      END IF
+      errcode = c_err_missing_elements
+    END IF
+
+    IF (IAND(error, 2**11) /= 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Must define an "intensity" for every hy_laser.'
+        END DO
+      END IF
+      errcode = c_err_missing_elements
+    END IF
+
+    IF (IAND(error, 2**12) /= 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Must define an "efficiency" (laser energy to electron', &
+              ' energy) for every'
+          WRITE(io,*)'hy_laser.'
+        END DO
+      END IF
+      errcode = c_err_missing_elements
+    END IF
+
+    IF (IAND(error, 2**13) /= 0) THEN
+      IF (rank == 0) THEN
+        DO iu = 1, nio_units ! Print to stdout and to file
+          io = io_units(iu)
+          WRITE(io,*) '*** ERROR ***'
+          WRITE(io,*) 'Efficiency cannot exceed 1.0 (100% conversion from', &
+              ' laser energy to e- energy).'
         END DO
       END IF
       errcode = c_err_bad_value

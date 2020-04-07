@@ -1397,6 +1397,10 @@ MODULE shared_data
 
     INTEGER :: mean, e_dist, ang_dist
 
+    ! User specified energy/weight values
+    REAL(num) :: user_mean_KE, user_weight
+    LOGICAL :: ignore_las
+
     ! Angular distribution variables
     REAL(num) :: user_theta_max, cos_n_power, top_hat_L, sheng_angle, mean_mult
     REAL(num) :: theta_mean, phi_mean
@@ -1412,11 +1416,13 @@ MODULE shared_data
 
   INTEGER, PARAMETER :: c_mean_wilks = 1
   INTEGER, PARAMETER :: c_mean_a0 = 2
+  INTEGER, PARAMETER :: c_mean_E_val = 3
 
   INTEGER, PARAMETER :: e_dist_exp = 1
   INTEGER, PARAMETER :: e_dist_mono = 2
   INTEGER, PARAMETER :: e_dist_tophat = 3
   INTEGER, PARAMETER :: e_dist_exp_weight = 4
+  INTEGER, PARAMETER :: e_dist_mono_weight = 5
 
   INTEGER, PARAMETER :: c_ang_uniform = 1
   INTEGER, PARAMETER :: c_ang_cos = 2

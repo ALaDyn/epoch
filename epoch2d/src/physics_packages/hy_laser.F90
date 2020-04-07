@@ -56,6 +56,11 @@ CONTAINS
     hy_laser%e_dist = -1
     hy_laser%ang_dist = -1
 
+    ! User defined energies and weights (if both are set, ignore I, omega, eff)
+    hy_laser%user_mean_KE = -1.0_num
+    hy_laser%user_weight = -1.0_num
+    hy_laser%ignore_las = .FALSE.
+
     ! Angular distribution variables
     hy_laser%user_theta_max = pi
     hy_laser%cos_n_power = 0.0_num
@@ -473,7 +478,7 @@ CONTAINS
     END IF
 
     ! Evaluate functions for the current time
-    CALL hy_laser_update_omega(laser)
+    IF (.NOT. laser%ignore_las) CALL hy_laser_update_omega(laser)
     CALL hy_laser_update_profile(laser)
     time_frac = MAX(hy_laser_time_profile(laser), 0.0_num)
     IF (time_frac < c_tiny) RETURN
@@ -483,12 +488,9 @@ CONTAINS
     ! Loop over each boundary cell
     DO icell = 1, n_perp_cell(1)
 
-      ! Evaluate intensity in cell
+      ! Don't inject low weight particles
       parameters%use_grid_position = .TRUE.
       space_frac = MAX(laser%profile(icell), 0.0_num)
-      intens_cell = laser%intensity * space_frac * time_frac
-
-      ! Don't inject low weight particles
       IF (space_frac < laser%profile_min) CYCLE
 
       ! Add perpendicular displacements of current cell to cur_cell
@@ -499,17 +501,27 @@ CONTAINS
       END DO
 
       ! Mean electron energy for each cell
-      mean_energy = get_mean_energy(intens_cell, laser%omega, laser%mean)
+      IF (laser%mean == c_mean_E_val) THEN
+        mean_energy = laser%user_mean_KE
+      ELSE
+        intens_cell = laser%intensity * space_frac * time_frac
+        mean_energy = get_mean_energy(intens_cell, laser%omega, laser%mean)
+      END IF
 
       ! Corresponding number of real particles
-      energy_cell = intens_cell * dt * area
-      el_number = energy_cell * laser%efficiency / mean_energy
-      IF (laser%e_dist == e_dist_exp_weight) THEN
-        ! Track total weight for special weight treatment
-        sum_weight = 0.0_num
+      IF (laser%e_dist == e_dist_mono_weight) THEN
+        ! User defined weight, ignore laser parameters
+        el_weight = laser%user_weight * space_frac * time_frac
       ELSE
-        ! All other distributions have constant particle weight
-        el_weight = el_number/REAL(laser%ppc, num)
+        energy_cell = intens_cell * dt * area
+        el_number = energy_cell * laser%efficiency / mean_energy
+        IF (laser%e_dist == e_dist_exp_weight) THEN
+          ! Track total weight for special weight treatment
+          sum_weight = 0.0_num
+        ELSE
+          ! All other distributions have constant particle weight
+          el_weight = el_number/REAL(laser%ppc, num)
+        END IF
       END IF
 
       ! Create particles
@@ -628,7 +640,8 @@ CONTAINS
     TYPE(hy_laser_block), POINTER, INTENT(IN) :: laser
     REAL(num) :: sample_p_mag, sample_KE
 
-    IF (laser%e_dist == e_dist_mono) THEN
+    IF (laser%e_dist == e_dist_mono .OR. laser%e_dist == e_dist_mono_weight) &
+        THEN
       ! Mono-energetic distribution, return momentum corresponding to KE_mean
       sample_KE = KE_mean
 
