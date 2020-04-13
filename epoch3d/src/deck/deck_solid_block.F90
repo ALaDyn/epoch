@@ -170,6 +170,14 @@ CONTAINS
       RETURN
     END IF
 
+    IF (str_cmp(element, 'compound_id') &
+        .OR. str_cmp(element, 'compound_ID') &
+        .OR. str_cmp(element, 'ID')) THEN
+      solid_array(solid_index)%compound_id = &
+          as_integer_print(value, element, errcode)
+      RETURN
+    END IF
+
     errcode = c_err_unknown_element
 #endif
 

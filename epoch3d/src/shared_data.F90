@@ -1152,6 +1152,7 @@ MODULE shared_data
     REAL(num) :: rad_len = -1.0_num
     INTEGER :: hybrid_Z = -1
     INTEGER :: material = 1
+    INTEGER :: compound_id = -1
     REAL(num), ALLOCATABLE :: ion_density(:,:,:), el_density(:,:,:)
     ! Derived variables
     REAL(num) :: hybrid_ne, hybrid_D, hybrid_ln_s, hybrid_const_ZeV, theta_fac
@@ -1202,6 +1203,9 @@ MODULE shared_data
   INTEGER, PARAMETER :: c_resist_conductor = 2
   INTEGER, PARAMETER :: c_resist_insulator = 3
   INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: resistivity_model
+
+  ! This allows for compound materials
+  INTEGER, ALLOCATABLE, DIMENSION(:,:,:) :: comp_id
 
   ! Arrays for ionisation routines
   REAL(num), ALLOCATABLE, DIMENSION(:,:,:) :: ion_charge, ion_density, ion_temp

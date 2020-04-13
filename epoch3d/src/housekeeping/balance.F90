@@ -457,6 +457,11 @@ CONTAINS
           1-ng:nz_new+ng))
       resistivity_model = temp_int
 
+      CALL remap_field_int(comp_id, temp_int)
+      DEALLOCATE(comp_id)
+      ALLOCATE(comp_id(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))
+      comp_id = temp_int
+
       CALL remap_field(hybrid_Tb, temp)
       DEALLOCATE(hybrid_Tb)
       ALLOCATE(hybrid_Tb(1-ng:nx_new+ng, 1-ng:ny_new+ng, 1-ng:nz_new+ng))

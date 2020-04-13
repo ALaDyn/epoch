@@ -389,7 +389,12 @@ CONTAINS
     delta_Tb = dE * part_C * part_heat_const
 
     ! Write temperature change to the grid (ignores particle shape)
-    ix = MAX(1,CEILING(part_x*hybrid_idx))
+    ! Write temperature change to the grid (to current cell only, ignores shape)
+#ifdef PARTICLE_SHAPE_TOPHAT
+    ix = FLOOR(part_x * hybrid_idx) + 1
+#else
+    ix = FLOOR(part_x * hybrid_idx + 0.5_num) + 1
+#endif
     hybrid_Tb(ix) = hybrid_Tb(ix) + delta_Tb
 
   END SUBROUTINE calculate_heating

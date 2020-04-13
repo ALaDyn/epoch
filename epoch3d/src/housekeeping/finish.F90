@@ -64,7 +64,7 @@ CONTAINS
 #ifdef HYBRID
     ! Deallocate extra arrays used when running in hybrid mode
     IF (use_hybrid) THEN
-      DEALLOCATE(resistivity, resistivity_model, hybrid_Tb)
+      DEALLOCATE(resistivity, resistivity_model, comp_id, hybrid_Tb)
       DEALLOCATE(ion_charge, ion_density, ion_temp)
       DEALLOCATE(hybrid_const_heat, hybrid_const_sum_ne)
 

@@ -168,6 +168,7 @@ CONTAINS
 
     REAL(num) :: resistivity_init, max_ne
     INTEGER :: ix, iy, i_sol
+    INTEGER :: max_id
     INTEGER :: io, iu
 
     IF (use_hybrid) THEN
@@ -226,23 +227,53 @@ CONTAINS
       ! load-balance)
       ALLOCATE(resistivity(1-ng:nx+ng,1-ng:ny+ng))
       ALLOCATE(resistivity_model(1-ng:nx+ng,1-ng:ny+ng))
+      ALLOCATE(comp_id(1-ng:nx+ng,1-ng:ny+ng))
       ALLOCATE(hybrid_Tb(1-ng:nx+ng,1-ng:ny+ng))
       ALLOCATE(ion_charge(1-ng:nx+ng,1-ng:ny+ng))
       ALLOCATE(ion_density(1-ng:nx+ng,1-ng:ny+ng))
       ALLOCATE(ion_temp(1-ng:nx+ng,1-ng:ny+ng))
 
+      ! Cycle through all solids and ensure they have a compound ID
+      ! First check how many compounds already have IDs
+      max_id = 0
+      DO i_sol = 1,solid_count
+        IF (solid_array(i_sol)%compound_id > max_id) THEN
+          max_id = solid_array(i_sol)%compound_id
+        END IF
+      END DO
+      ! Assign compound IDs to the remaining solids, assuming they are all
+      ! separate
+      DO i_sol = 1,solid_count
+        IF (solid_array(i_sol)%compound_id < 0) THEN
+          max_id = max_id + 1
+          solid_array(i_sol)%compound_id = max_id
+          IF (rank == 0) THEN
+            DO iu = 1, nio_units ! Print to stdout and to file
+              io = io_units(iu)
+              WRITE(io,*)
+              WRITE(io,*) '*** WARNING ***'
+              WRITE(io,*) 'A solid has not been given a compound_id value.'
+              WRITE(io,*) 'Code will assume it has no other elements present.'
+              WRITE(io,*)
+            END DO
+          END IF
+        END IF
+      END DO
+
       ! Assign a resistivity model to each cell based on present solids
-      ! (default to vacuum)
+      ! (default to vacuum). Also write the compound_id to the comp_id grid
       resistivity_model = c_resist_vacuum
+      comp_id = 0
       DO iy = 1-ng, ny+ng
         DO ix = 1-ng, nx+ng
           max_ne = 0.0_num
           DO i_sol = 1, solid_count
-            ! Use the same resistivity model as the solid with the highest
-            ! local electron number density
+            ! Use the same resistivity model and comp_id as the solid with the
+            ! highest local electron number density
             IF (solid_array(i_sol)%el_density(ix,iy) > max_ne) THEN
               max_ne = solid_array(i_sol)%el_density(ix,iy)
               resistivity_model(ix,iy) = solid_array(i_sol)%material
+              comp_id(ix,iy) = solid_array(i_sol)%compound_id
             END IF
           END DO
         END DO
@@ -420,21 +451,38 @@ CONTAINS
     !
     ! We calculate into 1 ghost cell to allow non-zero curls across simulation
     ! boundaries
+    !
+    ! If two different compounds occur over a boundary, then their resistivities
+    ! will be discontinuous, as will their corresponding fields. To prevent
+    ! these discontinuities from causing the fields to change non-physically, we
+    ! will ignore the gradients over these boundaries (like we do over the
+    ! simulation edge)
 
     INTEGER :: ix, iy
+    REAL(num) :: dt_dey_dx, dt_dez_dx, dt_dex_dy, dt_dez_dy
 
     ! Update B by half a timestep
     DO iy = 0, ny+1
       DO ix = 0, nx+1
-        bx(ix, iy) = bx(ix, iy) &
-            - hybrid_const_dt_by_dy * (ez(ix  , iy+1) - ez(ix  , iy  ))
 
-        by(ix, iy) = by(ix, iy) &
-            + hybrid_const_dt_by_dx * (ez(ix+1, iy  ) - ez(ix  , iy  ))
+        ! Calculate derivatives across cells of the same compound
+        dt_dey_dx = 0.0_num
+        dt_dez_dx = 0.0_num
+        dt_dex_dy = 0.0_num
+        dt_dez_dy = 0.0_num
+        IF (comp_id(ix,iy) == comp_id(ix+1, iy)) THEN
+          dt_dey_dx = (ey(ix+1,iy) - ey(ix,iy)) * hybrid_const_dt_by_dx
+          dt_dez_dx = (ez(ix+1,iy) - ez(ix,iy)) * hybrid_const_dt_by_dx
+        END IF
+        IF (comp_id(ix,iy) == comp_id(ix, iy+1)) THEN
+          dt_dex_dy = (ex(ix,iy+1) - ex(ix,iy)) * hybrid_const_dt_by_dy
+          dt_dez_dy = (ez(ix,iy+1) - ez(ix,iy)) * hybrid_const_dt_by_dy
+        END IF
 
-        bz(ix, iy) = bz(ix, iy) &
-            - hybrid_const_dt_by_dx * (ey(ix+1, iy  ) - ey(ix  , iy  )) &
-            + hybrid_const_dt_by_dy * (ex(ix  , iy+1) - ex(ix  , iy  ))
+        ! Update fields
+        bx(ix, iy) = bx(ix, iy) - dt_dez_dy
+        by(ix, iy) = by(ix, iy) + dt_dez_dx
+        bz(ix, iy) = bz(ix, iy) - dt_dey_dx + dt_dex_dy
       END DO
     END DO
 
@@ -475,29 +523,53 @@ CONTAINS
     !
     ! We have precalculated hybrid_const_dx = 1/(mu_0*dx)
 
+    ! If two different compounds occur over a boundary, then their resistivities
+    ! will be discontinuous, as will their corresponding fields. To prevent
+    ! these discontinuities from causing the fields to change non-physically, we
+    ! will ignore the gradients over these boundaries (like we do over the
+    ! simulation edge)
+
     ! Note that B is staggered from E, whereas J is evaulated at the same point
     ! as E. Resistivity is a cell centred variable. We calculate into 1 ghost
     ! cell to allow non-zero curls across simulation boundaries
 
     INTEGER :: ix, iy
+    REAL(num) :: dby_dx, dbz_dx, dbx_dy, dbz_dy
+    REAL(num) :: res_x, res_y, res_z
 
     DO iy = 0, ny+1
       DO ix = 0, nx+1
-        ex(ix,iy) = &
-            + 0.5_num * (resistivity(ix+1,iy) + resistivity(ix,iy)) &
-            * (+ hybrid_const_dy * (bz(ix,iy) - bz(ix,iy-1)) &
-               - jx(ix,iy))
 
-        ey(ix,iy) = &
-            + 0.5_num * (resistivity(ix,iy+1) + resistivity(ix,iy)) &
-            * (- hybrid_const_dx * (bz(ix,iy) - bz(ix-1,iy)) &
-               - jy(ix,iy))
+        ! Calculate derivatives across cells of the same compound
+        dby_dx = 0.0_num
+        dbz_dx = 0.0_num
+        dbx_dy = 0.0_num
+        dbz_dy = 0.0_num
+        IF (comp_id(ix,iy) == comp_id(ix-1, iy)) THEN
+          dby_dx = (by(ix,iy) - by(ix-1,iy)) * hybrid_const_dx
+          dbz_dx = (bz(ix,iy) - bz(ix-1,iy)) * hybrid_const_dx
+        END IF
+        IF (comp_id(ix,iy) == comp_id(ix, iy-1)) THEN
+          dbx_dy = (bx(ix,iy) - bx(ix,iy-1)) * hybrid_const_dy
+          dbz_dy = (bz(ix,iy) - bz(ix,iy-1)) * hybrid_const_dy
+        END IF
 
-        ez(ix,iy) = &
-            + resistivity(ix,iy) &
-            * (+ hybrid_const_dx * (by(ix,iy) - by(ix-1,iy)) &
-               - hybrid_const_dy * (bx(ix,iy) - bx(ix,iy-1)) &
-               - jz(ix,iy))
+        ! Calculate average resistivity at the electric field position (do not
+        ! average over two different compounds)
+        res_x = resistivity(ix,iy)
+        res_y = res_x
+        res_z = res_x
+        IF (comp_id(ix,iy) == comp_id(ix+1,iy)) THEN
+          res_x = 0.5_num * (resistivity(ix+1,iy) + res_x)
+        END IF
+        IF (comp_id(ix,iy) == comp_id(ix,iy+1)) THEN
+          res_y = 0.5_num * (resistivity(ix,iy+1) + res_y)
+        END IF
+
+        ! Update fields
+        ex(ix,iy) = res_x * (+ dbz_dy - jx(ix,iy))
+        ey(ix,iy) = res_y * (- dbz_dx - jy(ix,iy))
+        ez(ix,iy) = res_z * (+ dby_dx - dbx_dy - jz(ix,iy))
       END DO
     END DO
 
@@ -742,8 +814,8 @@ CONTAINS
     ! Obtain the effective heat capacity: sum(ne/C)
     eff_heat_capacity = 0.0_num
     DO i_sol = 1, solid_count
-      DO iy = 1, ny
-        DO ix = 1, nx
+      DO iy = 1-ng, ny+ng
+        DO ix = 1-ng, nx+ng
           eff_heat_capacity(ix,iy) = eff_heat_capacity(ix,iy) &
               + solid_array(i_sol)%el_density(ix,iy) &
               / solid_array(i_sol)%heat_capacity(ix,iy)
@@ -752,18 +824,30 @@ CONTAINS
     END DO
 
     ! Loop over all grid points to find temperature change
-    DO iy = 1, ny
-      DO ix = 1, nx
+    DO iy = 1-ng, ny+ng
+      DO ix = 1-ng, nx+ng
 #ifdef PIC_HYBRID
         ! No Ohmic heating in PIC region
         IF (use_pic_hybrid) THEN
           IF (.NOT. is_hybrid(ix,iy)) CYCLE
         END IF
 #endif
-        ! Tb is a cell-centred variable, but E has stagger - need to average
-        E2 = (0.5_num*(ex(ix,iy) + ex(ix-1,iy)))**2 &
-            +(0.5_num*(ey(ix,iy) + ey(ix,iy-1)))**2 &
-            + ez(ix,iy)**2
+
+        ! Sum contributions from squares of electric fields
+        E2 = 0.0_num
+        IF (comp_id(ix,iy) == comp_id(ix-1,iy)) THEN
+          ! Tb is a cell-centred variable, but E has stagger - need to average
+          E2 = E2 + (0.5_num*(ex(ix,iy) + ex(ix-1,iy)))**2
+        ELSE
+          ! Don't average electric fields in different regimes
+          E2 = E2 + ex(ix,iy)**2
+        END IF
+        IF (comp_id(ix,iy) == comp_id(ix,iy-1)) THEN
+          E2 = E2 + (0.5_num*(ey(ix,iy) + ey(ix,iy-1)))**2
+        ELSE
+          E2 = E2 + ey(ix,iy)**2
+        END IF
+        E2 = E2 + ez(ix,iy)**2
 
         ! Calculate Ohmic heating, avoiding the 0/0 NaN. Cap temp at 1.0e30
         IF (resistivity(ix,iy) > 0.0_num .AND. &
@@ -843,8 +927,8 @@ CONTAINS
         field(-i,:) = field(0,:)
       END DO
     ELSE IF (boundary == c_bd_x_max .AND. x_max_boundary) THEN
-      DO i = 1, ng-1
-        field(nx+1+i,:) = field(nx+1,:)
+      DO i = 1, ng
+        field(nx+i,:) = field(nx,:)
       END DO
 
     ELSE IF (boundary == c_bd_y_min .AND. y_min_boundary) THEN
@@ -852,8 +936,8 @@ CONTAINS
         field(:,-i) = field(:,0)
       END DO
     ELSE IF (boundary == c_bd_y_max .AND. y_max_boundary) THEN
-      DO i = 1, ng-1
-        field(:,ny+1+i) = field(:,ny+1)
+      DO i = 1, ng
+        field(:,ny+i) = field(:,ny)
       END DO
     END IF
 
