@@ -980,7 +980,7 @@ CONTAINS
     REAL(num), INTENT(IN) :: user_factor
     REAL(num), INTENT(IN) :: dens, log_lambda
     TYPE(particle), POINTER :: current, impact
-    REAL(num) :: factor, np
+    REAL(num) :: factor
     INTEGER(i8) :: icount, k, pcount
     REAL(num) :: ran1, ran2, s12, cosp, sinp, s_fac, v_rel
     REAL(num) :: sinp_cos, sinp_sin, s_prime, s_fac_prime
@@ -1000,7 +1000,6 @@ CONTAINS
     REAL(num) :: w1, w2, wr, e1, e5, e2, e6
 #endif
     factor = 0.0_num
-    np = 0.0_num
 
     ! Intra-species collisions
     icount = p_list%count
@@ -1012,7 +1011,6 @@ CONTAINS
     pcount = icount / 2 + MOD(icount, 2_i8)
 
 #ifdef PER_SPECIES_WEIGHT
-    np = icount * weight
     ! Factor of 2 due to intra species collisions
     ! See Section 4.1 of Nanbu
     factor = user_factor / (pcount * weight * 2.0_num)
@@ -1023,7 +1021,6 @@ CONTAINS
     current => p_list%head
     impact => current%next
     DO k = 1, pcount
-      np = np + current%weight + impact%weight
       factor = factor + MIN(current%weight, impact%weight)
       current => impact%next
       impact => current%next
@@ -1466,7 +1463,7 @@ CONTAINS
     REAL(num), INTENT(IN) :: log_lambda
     REAL(num), INTENT(IN) :: user_factor
     TYPE(particle), POINTER :: current, impact
-    REAL(num) :: factor, np
+    REAL(num) :: factor
     INTEGER(i8) :: icount, jcount, pcount, k
     REAL(num) :: m1, m2, q1, q2, w1, w2
     REAL(num) :: ran1, ran2, s12, cosp, sinp, s_fac, v_rel
@@ -1485,7 +1482,6 @@ CONTAINS
                                 (4.0_num * pi / 3.0_num)**(1.0_num / 3.0_num)
 
     factor = 0.0_num
-    np = 0.0_num
 
     ! Inter-species collisions
     icount = p_list1%count
@@ -1498,23 +1494,10 @@ CONTAINS
       p_list2%tail%next => p_list2%head
 
 #ifdef PER_SPECIES_WEIGHT
-      np = icount * weight1
       factor = pcount * MIN(weight1, weight2)
 #else
       current => p_list1%head
       impact => p_list2%head
-
-      IF (icount >= jcount) THEN
-        DO k = 1, icount
-          np = np + current%weight
-          current => current%next
-        END DO
-      ELSE
-        DO k = 1, jcount
-          np = np + impact%weight
-          impact => impact%next
-        END DO
-      END IF
 
       current => p_list1%head
       impact => p_list2%head
